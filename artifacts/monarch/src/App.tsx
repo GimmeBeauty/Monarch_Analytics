@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { DateRangeProvider } from "@/context/DateRangeContext";
+import { ProfileProvider } from "@/context/ProfileContext";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/overview";
 import Traffic from "@/pages/traffic";
@@ -14,6 +15,8 @@ import Forecast from "@/pages/forecast";
 import KnowledgeHub from "@/pages/knowledge-hub";
 import Settings from "@/pages/settings";
 import Integrations from "@/pages/integrations";
+import ProfileSettings from "@/pages/settings/profile";
+import AppearanceSettings from "@/pages/settings/appearance";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +41,8 @@ function Router() {
       <Route path="/forecast" component={Forecast} />
       <Route path="/knowledge-hub" component={KnowledgeHub} />
       <Route path="/settings" component={Settings} />
+      <Route path="/settings/profile" component={ProfileSettings} />
+      <Route path="/settings/appearance" component={AppearanceSettings} />
       <Route path="/settings/:section" component={Settings} />
       <Route path="/integrations" component={Integrations} />
       <Route component={NotFound} />
@@ -48,16 +53,18 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <DateRangeProvider>
-          <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-            <Toaster />
-          </TooltipProvider>
-        </DateRangeProvider>
-      </ThemeProvider>
+      <ProfileProvider>
+        <ThemeProvider>
+          <DateRangeProvider>
+            <TooltipProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+              <Toaster />
+            </TooltipProvider>
+          </DateRangeProvider>
+        </ThemeProvider>
+      </ProfileProvider>
     </QueryClientProvider>
   );
 }

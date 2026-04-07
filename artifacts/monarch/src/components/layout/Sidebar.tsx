@@ -20,10 +20,9 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
-  Sun,
-  Moon,
+  UserCircle,
 } from "lucide-react";
-import { useTheme } from "@/context/ThemeContext";
+import { useProfile } from "@/context/ProfileContext";
 
 const topNavItems = [
   { path: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -35,6 +34,7 @@ const topNavItems = [
 ];
 
 const settingsSubItems = [
+  { path: "/settings/profile", label: "Profile", icon: UserCircle },
   { path: "/settings/team", label: "Team", icon: Users },
   { path: "/settings/financial", label: "Financial Settings", icon: CreditCard },
   { path: "/settings/forecast", label: "Forecast Settings", icon: CalendarClock },
@@ -42,24 +42,28 @@ const settingsSubItems = [
   { path: "/settings/appearance", label: "Appearance", icon: Palette },
   { path: "/settings/notifications", label: "Notifications", icon: Bell },
   { path: "/settings/exports", label: "Exports", icon: Download },
+  { path: "/integrations", label: "Integrations", icon: Plug },
 ];
 
 export default function Sidebar() {
   const [location] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { theme, toggleTheme } = useTheme();
+  const { profile } = useProfile();
 
   const isActive = (path: string) => location === path || location.startsWith(path + "/");
+  const isSettingsActive = settingsSubItems.some((item) => isActive(item.path));
+
+  const initials = profile.name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <aside
       data-testid="sidebar"
-      className="
-        flex flex-col h-screen w-64 shrink-0
-        bg-[#FFF9F2] dark:bg-[#1a1208]
-        border-r border-transparent
-        relative
-      "
+      className="flex flex-col h-screen w-64 shrink-0 bg-[#FFF9F2] dark:bg-[#1a1208] relative"
       style={{
         borderRight: "1px solid transparent",
         backgroundImage: "linear-gradient(#FFF9F2, #FFF9F2), linear-gradient(135deg, #FFBC80, #FFE29A)",
@@ -74,7 +78,7 @@ export default function Sidebar() {
       `}</style>
 
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20">
+      <div className="px-6 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
             <span className="text-[#3A3A3A] font-black text-sm">M</span>
@@ -110,12 +114,17 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom navigation */}
-      <div className="px-3 pb-3 space-y-0.5 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20 pt-3">
+      <div className="px-3 pb-3 space-y-0.5 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20 pt-3 shrink-0">
         {/* Settings with sub-items */}
         <button
           data-testid="nav-settings"
           onClick={() => setSettingsOpen((v) => !v)}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10 transition-all duration-150"
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+            isSettingsActive && !settingsOpen
+              ? "text-[#3A3A3A] dark:text-[#1a1208]"
+              : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+          }`}
+          style={isSettingsActive && !settingsOpen ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
         >
           <Settings size={16} />
           <span className="flex-1 text-left">Settings</span>
@@ -126,11 +135,17 @@ export default function Sidebar() {
           <div className="pl-4 space-y-0.5">
             {settingsSubItems.map((item) => {
               const Icon = item.icon;
+              const active = isActive(item.path);
               return (
                 <Link key={item.path} href={item.path} asChild>
                   <button
                     data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
+                      active
+                        ? "text-[#3A3A3A] dark:text-[#1a1208]"
+                        : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+                    }`}
+                    style={active ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
                   >
                     <Icon size={14} />
                     {item.label}
@@ -151,46 +166,36 @@ export default function Sidebar() {
           </button>
         </Link>
 
-        <Link href="/integrations" asChild>
-          <button
-            data-testid="nav-integrations"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
-          >
-            <Plug size={16} />
-            Integrations
-          </button>
-        </Link>
-
-        {/* Theme toggle */}
-        <button
-          data-testid="theme-toggle"
-          onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10 transition-all duration-150"
-        >
-          {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
-          {theme === "light" ? "Dark Mode" : "Light Mode"}
-        </button>
-
         {/* User section */}
         <div className="mt-2 pt-3 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20">
-          <div
-            data-testid="user-section"
-            className="px-3 py-2 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-1"
-          >
+          <div className="px-3 py-1 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
             Signed in as
           </div>
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-[#3A3A3A] shrink-0"
-              style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+          <Link href="/settings/profile" asChild>
+            <button
+              data-testid="user-section"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
             >
-              AM
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">Alex Morgan</div>
-              <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">Growth Analyst</div>
-            </div>
-          </div>
+              {profile.picture ? (
+                <img
+                  src={profile.picture}
+                  alt={profile.name}
+                  className="w-8 h-8 rounded-full object-cover shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-[#3A3A3A] shrink-0"
+                  style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                >
+                  {initials}
+                </div>
+              )}
+              <div className="min-w-0 text-left">
+                <div className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{profile.name}</div>
+                <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">{profile.title}</div>
+              </div>
+            </button>
+          </Link>
           <button
             data-testid="sign-out-button"
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 mt-0.5"
