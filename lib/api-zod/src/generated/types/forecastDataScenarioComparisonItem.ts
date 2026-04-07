@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type ForecastDataScenarioComparisonItem = {
+  scenario: string;
+  revenue: number;
+  spend: number;
+  roas: number;
+};

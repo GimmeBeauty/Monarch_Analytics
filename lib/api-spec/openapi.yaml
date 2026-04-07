@@ -3,20 +3,31 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: MONARCH Analytics Dashboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: analytics
+    description: Analytics data
+  - name: traffic
+    description: Traffic analytics
+  - name: spend
+    description: Spend optimizer data
+  - name: attribution
+    description: Ad attribution data
+  - name: performance
+    description: Performance trends
+  - name: forecast
+    description: Forecast data
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +35,129 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /analytics/overview:
+    get:
+      operationId: getOverviewSummary
+      tags: [analytics]
+      summary: Overview summary metrics
+      responses:
+        "200":
+          description: Overview summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewSummary"
+
+  /analytics/traffic:
+    get:
+      operationId: getTrafficData
+      tags: [traffic]
+      summary: Traffic analytics data
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+        - name: compareStart
+          in: query
+          schema:
+            type: string
+        - name: compareEnd
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Traffic data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficData"
+
+  /analytics/spend:
+    get:
+      operationId: getSpendData
+      tags: [spend]
+      summary: Spend optimizer data
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Spend optimizer data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendData"
+
+  /analytics/attribution:
+    get:
+      operationId: getAttributionData
+      tags: [attribution]
+      summary: Ad attribution data
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attribution data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttributionData"
+
+  /analytics/performance:
+    get:
+      operationId: getPerformanceTrends
+      tags: [performance]
+      summary: Performance trends data
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Performance trends
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PerformanceData"
+
+  /analytics/forecast:
+    get:
+      operationId: getForecastData
+      tags: [forecast]
+      summary: Forecast projections
+      responses:
+        "200":
+          description: Forecast data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastData"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +168,303 @@ components:
       required:
         - status
 
+    MetricCard:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        change:
+          type: number
+        changeLabel:
+          type: string
+        trend:
+          type: string
+          enum: [up, down, neutral]
+      required:
+        - label
+        - value
+        - change
+        - changeLabel
+        - trend
+
+    TimeSeriesPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        value:
+          type: number
+        compareValue:
+          type: number
+      required:
+        - date
+        - value
+
+    OverviewSummary:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricCard"
+        revenueTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        conversionTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        topChannels:
+          type: array
+          items:
+            type: object
+            properties:
+              channel:
+                type: string
+              revenue:
+                type: number
+              share:
+                type: number
+            required:
+              - channel
+              - revenue
+              - share
+      required:
+        - metrics
+        - revenueTimeSeries
+        - conversionTimeSeries
+        - topChannels
+
+    TrafficData:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricCard"
+        sessionTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        pageviewTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        sourceBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              sessions:
+                type: number
+              share:
+                type: number
+            required:
+              - source
+              - sessions
+              - share
+        topPages:
+          type: array
+          items:
+            type: object
+            properties:
+              page:
+                type: string
+              views:
+                type: number
+              avgTime:
+                type: string
+            required:
+              - page
+              - views
+              - avgTime
+      required:
+        - metrics
+        - sessionTimeSeries
+        - pageviewTimeSeries
+        - sourceBreakdown
+        - topPages
+
+    SpendData:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricCard"
+        spendByChannel:
+          type: array
+          items:
+            type: object
+            properties:
+              channel:
+                type: string
+              spend:
+                type: number
+              roas:
+                type: number
+              cpa:
+                type: number
+              recommended:
+                type: number
+            required:
+              - channel
+              - spend
+              - roas
+              - cpa
+              - recommended
+        spendTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+      required:
+        - metrics
+        - spendByChannel
+        - spendTimeSeries
+
+    AttributionData:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricCard"
+        touchpointBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              touchpoint:
+                type: string
+              conversions:
+                type: number
+              revenue:
+                type: number
+              model:
+                type: string
+            required:
+              - touchpoint
+              - conversions
+              - revenue
+              - model
+        conversionPaths:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              count:
+                type: number
+              conversionRate:
+                type: number
+            required:
+              - path
+              - count
+              - conversionRate
+      required:
+        - metrics
+        - touchpointBreakdown
+        - conversionPaths
+
+    PerformanceData:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricCard"
+        kpiTimeSeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        channelPerformance:
+          type: array
+          items:
+            type: object
+            properties:
+              channel:
+                type: string
+              impressions:
+                type: number
+              clicks:
+                type: number
+              ctr:
+                type: number
+              conversions:
+                type: number
+              cpc:
+                type: number
+            required:
+              - channel
+              - impressions
+              - clicks
+              - ctr
+              - conversions
+              - cpc
+      required:
+        - metrics
+        - kpiTimeSeries
+        - channelPerformance
+
+    ForecastData:
+      type: object
+      properties:
+        projectedRevenue:
+          type: number
+        projectedSpend:
+          type: number
+        projectedROAS:
+          type: number
+        confidence:
+          type: number
+        forecastTimeSeries:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              projected:
+                type: number
+              lower:
+                type: number
+              upper:
+                type: number
+              actual:
+                type: number
+            required:
+              - date
+              - projected
+              - lower
+              - upper
+        scenarioComparison:
+          type: array
+          items:
+            type: object
+            properties:
+              scenario:
+                type: string
+              revenue:
+                type: number
+              spend:
+                type: number
+              roas:
+                type: number
+            required:
+              - scenario
+              - revenue
+              - spend
+              - roas
+      required:
+        - projectedRevenue
+        - projectedSpend
+        - projectedROAS
+        - confidence
+        - forecastTimeSeries
+        - scenarioComparison

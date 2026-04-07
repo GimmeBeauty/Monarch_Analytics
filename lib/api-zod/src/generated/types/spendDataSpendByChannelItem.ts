@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type SpendDataSpendByChannelItem = {
+  channel: string;
+  spend: number;
+  roas: number;
+  cpa: number;
+  recommended: number;
+};
