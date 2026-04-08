@@ -1,5 +1,4 @@
 import { Link, useLocation } from "wouter";
-import { useState } from "react";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -8,19 +7,8 @@ import {
   BarChart2,
   Telescope,
   Settings,
-  Users,
-  CreditCard,
-  CalendarClock,
-  KeyRound,
-  Palette,
-  Bell,
-  Download,
   BookOpen,
-  Plug,
   LogOut,
-  ChevronDown,
-  ChevronRight,
-  UserCircle,
 } from "lucide-react";
 import { useProfile } from "@/context/ProfileContext";
 
@@ -33,25 +21,11 @@ const topNavItems = [
   { path: "/forecast", label: "Forecast", icon: Telescope },
 ];
 
-const settingsSubItems = [
-  { path: "/settings/profile", label: "Profile", icon: UserCircle },
-  { path: "/settings/team", label: "Team", icon: Users },
-  { path: "/settings/financial", label: "Financial Settings", icon: CreditCard },
-  { path: "/settings/forecast", label: "Forecast Settings", icon: CalendarClock },
-  { path: "/settings/api-keys", label: "API Keys", icon: KeyRound },
-  { path: "/settings/appearance", label: "Appearance", icon: Palette },
-  { path: "/settings/notifications", label: "Notifications", icon: Bell },
-  { path: "/settings/exports", label: "Exports", icon: Download },
-  { path: "/integrations", label: "Integrations", icon: Plug },
-];
-
 export default function Sidebar() {
   const [location] = useLocation();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const { profile } = useProfile();
 
   const isActive = (path: string) => location === path || location.startsWith(path + "/");
-  const isSettingsActive = settingsSubItems.some((item) => isActive(item.path));
 
   const initials = profile.name
     .split(" ")
@@ -63,7 +37,7 @@ export default function Sidebar() {
   return (
     <aside
       data-testid="sidebar"
-      className="flex flex-col h-screen w-64 shrink-0 bg-[#FFF9F2] dark:bg-[#1a1208] relative"
+      className="flex flex-col h-screen w-56 shrink-0 bg-[#FFF9F2] dark:bg-[#1a1208] relative"
       style={{
         borderRight: "1px solid transparent",
         backgroundImage: "linear-gradient(#FFF9F2, #FFF9F2), linear-gradient(135deg, #FFBC80, #FFE29A)",
@@ -78,7 +52,7 @@ export default function Sidebar() {
       `}</style>
 
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 shrink-0">
+      <div className="px-5 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
             <span className="text-[#3A3A3A] font-black text-sm">M</span>
@@ -88,7 +62,7 @@ export default function Sidebar() {
       </div>
 
       {/* Top navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
+      <nav className="flex-1 px-2 py-4 overflow-y-auto space-y-0.5">
         {topNavItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -96,16 +70,14 @@ export default function Sidebar() {
             <Link key={item.path} href={item.path} asChild>
               <button
                 data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer
-                  ${active
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
+                  active
                     ? "text-[#3A3A3A] dark:text-[#1a1208]"
                     : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
-                  }
-                `}
+                }`}
                 style={active ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
               >
-                <Icon size={16} strokeWidth={active ? 2.5 : 2} />
+                <Icon size={15} strokeWidth={active ? 2.5 : 2} />
                 {item.label}
               </button>
             </Link>
@@ -114,93 +86,68 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom navigation */}
-      <div className="px-3 pb-3 space-y-0.5 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20 pt-3 shrink-0">
-        {/* Settings with sub-items */}
-        <button
-          data-testid="nav-settings"
-          onClick={() => setSettingsOpen((v) => !v)}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-            isSettingsActive && !settingsOpen
-              ? "text-[#3A3A3A] dark:text-[#1a1208]"
-              : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
-          }`}
-          style={isSettingsActive && !settingsOpen ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
-        >
-          <Settings size={16} />
-          <span className="flex-1 text-left">Settings</span>
-          {settingsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
-
-        {settingsOpen && (
-          <div className="pl-4 space-y-0.5">
-            {settingsSubItems.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.path);
-              return (
-                <Link key={item.path} href={item.path} asChild>
-                  <button
-                    data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
-                      active
-                        ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                        : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
-                    }`}
-                    style={active ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
-                  >
-                    <Icon size={14} />
-                    {item.label}
-                  </button>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-
+      <div className="px-2 pb-3 space-y-0.5 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20 pt-3 shrink-0">
         <Link href="/knowledge-hub" asChild>
           <button
             data-testid="nav-knowledge-hub"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
+              isActive("/knowledge-hub")
+                ? "text-[#3A3A3A] dark:text-[#1a1208]"
+                : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+            }`}
+            style={isActive("/knowledge-hub") ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
           >
-            <BookOpen size={16} />
+            <BookOpen size={15} />
             Knowledge Hub
+          </button>
+        </Link>
+
+        <Link href="/settings/profile" asChild>
+          <button
+            data-testid="nav-settings"
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
+              isActive("/settings") || isActive("/integrations")
+                ? "text-[#3A3A3A] dark:text-[#1a1208]"
+                : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+            }`}
+            style={isActive("/settings") || isActive("/integrations") ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+          >
+            <Settings size={15} />
+            Settings
           </button>
         </Link>
 
         {/* User section */}
         <div className="mt-2 pt-3 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20">
-          <div className="px-3 py-1 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+          <div className="px-3 py-1 text-[10px] font-medium text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider">
             Signed in as
           </div>
           <Link href="/settings/profile" asChild>
             <button
               data-testid="user-section"
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
             >
               {profile.picture ? (
-                <img
-                  src={profile.picture}
-                  alt={profile.name}
-                  className="w-8 h-8 rounded-full object-cover shrink-0"
-                />
+                <img src={profile.picture} alt={profile.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
               ) : (
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-[#3A3A3A] shrink-0"
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-[#3A3A3A] shrink-0"
                   style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
                 >
                   {initials}
                 </div>
               )}
               <div className="min-w-0 text-left">
-                <div className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{profile.name}</div>
-                <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">{profile.title}</div>
+                <div className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{profile.name}</div>
+                <div className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">{profile.title}</div>
               </div>
             </button>
           </Link>
           <button
             data-testid="sign-out-button"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 mt-0.5"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 mt-0.5"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
             Sign Out
           </button>
         </div>
