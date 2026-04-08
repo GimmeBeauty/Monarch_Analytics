@@ -1,0 +1,87 @@
+You are a senior backend/frontend engineer. Build a modular Forecast Management System for a multi-store tracking platform.
+
+----------------------------------
+SYSTEM REQUIREMENTS
+----------------------------------
+1. Forecasts are **per store**:
+   - Stores: Shopify, Amazon, Target, Walmart, Ulta, Kroger
+   - System must allow **adding new stores dynamically** from backend
+
+2. Forecasts are **per year**:
+   - Support multiple years
+   - Allow adding new years (e.g., 2027 after 2026)
+   - Previous years must remain viewable
+
+3. Forecasts are **per month**:
+   - 12 months (Jan → Dec)
+   - Input fields for each month
+   - Should allow updates / edits anytime
+
+4. Forecast types:
+   - Wholesale price per month (all stores except Shopify)
+   - Retail price per month (all stores)
+
+5. Database design:
+   - Table: `stores`
+     - id
+     - name
+     - type
+   - Table: `forecast_years`
+     - id
+     - year
+   - Table: `store_forecasts`
+     - id
+     - store_id (FK to stores)
+     - forecast_year_id (FK to forecast_years)
+     - month (1–12)
+     - wholesale_price (nullable for Shopify)
+     - retail_price
+     - created_at
+     - updated_at
+
+6. Backend API:
+   - `GET /forecasts?store_id=XX&year=YYYY` → return monthly forecasts
+   - `POST /forecasts` → create new forecast for store/year/month
+   - `PUT /forecasts/:id` → update forecast
+   - `GET /stores` → return list of stores
+   - `POST /stores` → add new store
+
+7. Frontend:
+   - Dashboard view:
+     - Select store
+     - Select year
+     - Display monthly input fields (Jan–Dec) for wholesale & retail
+     - Allow editing inline
+     - Save changes to backend
+   - Ability to **add new year** from frontend
+   - Ability to **add new store** from frontend (if user has admin permissions)
+
+8. Validation:
+   - Monthly forecasts must be numeric
+   - Wholesale price nullable for Shopify
+   - Retail price required for all stores
+
+9. Optional: 
+   - Color-code months based on comparison with actual sales (future feature)
+   - Show historical comparison across years
+
+----------------------------------
+TASK
+----------------------------------
+Write:
+- Backend code (Node.js/Express or Python/Flask) to implement API
+- Database schema (Postgres recommended)
+- Frontend code (React preferred) for interactive dashboard
+- Modular architecture so adding new stores or years is simple
+- Include comments explaining each piece
+
+Ensure code is production-ready and handles:
+- CRUD operations for forecasts
+- Dynamic store and year additions
+- Monthly breakdown per store
+- Wholesale exceptions for Shopify
+- Future extensibility
+
+----------------------------------
+END PROMPT
+----------------------------------

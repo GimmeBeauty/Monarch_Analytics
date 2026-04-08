@@ -8,6 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useProfile } from "@/context/ProfileContext";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
+import ForecastSettings from "./settings/ForecastSettings";
 
 const navItems = [
   { key: "profile", label: "Profile", icon: UserCircle },
@@ -218,6 +219,7 @@ const panelMeta: Record<string, string> = {
 function PanelContent({ section }: { section: string }) {
   if (section === "profile") return <ProfilePanel />;
   if (section === "appearance") return <AppearancePanel />;
+  if (section === "forecast") return <ForecastSettings />;
   return (
     <PlaceholderPanel
       label={navItems.find((n) => n.key === section)?.label ?? section}
