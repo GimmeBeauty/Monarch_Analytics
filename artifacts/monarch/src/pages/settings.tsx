@@ -1,11 +1,13 @@
 import { useState, useRef } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import {
   UserCircle, Users, CreditCard, CalendarClock, KeyRound, Palette,
   Bell, Download, Plug, Camera, Check, Sun, Moon, Settings as SettingsIcon,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useProfile } from "@/context/ProfileContext";
+import Sidebar from "@/components/layout/Sidebar";
+import TopBar from "@/components/layout/TopBar";
 
 const navItems = [
   { key: "profile", label: "Profile", icon: UserCircle },
@@ -140,7 +142,6 @@ function AppearancePanel() {
       <div className="p-5 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
         <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-4">Color Theme</p>
         <div className="grid grid-cols-2 gap-3">
-          {/* Light */}
           <button
             onClick={() => theme === "dark" && toggleTheme()}
             className="relative p-4 rounded-xl border-2 transition-all text-left"
@@ -151,9 +152,7 @@ function AppearancePanel() {
                 : "rgba(255,188,128,0.05)",
             }}
           >
-            {theme === "light" && (
-              <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#FFBC80]" />
-            )}
+            {theme === "light" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#FFBC80]" />}
             <div className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #FFF9F2, #FFE29A)" }}>
               <Sun size={16} className="text-[#3A3A3A]" />
@@ -165,7 +164,6 @@ function AppearancePanel() {
             </div>
           </button>
 
-          {/* Dark */}
           <button
             onClick={() => theme === "light" && toggleTheme()}
             className="relative p-4 rounded-xl border-2 transition-all text-left"
@@ -176,9 +174,7 @@ function AppearancePanel() {
                 : "rgba(255,188,128,0.05)",
             }}
           >
-            {theme === "dark" && (
-              <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#FFBC80]" />
-            )}
+            {theme === "dark" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#FFBC80]" />}
             <div className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center bg-[#1a1208]">
               <Moon size={16} className="text-[#FFBC80]" />
             </div>
@@ -201,17 +197,15 @@ function PlaceholderPanel({ label, desc }: { label: string; desc: string }) {
         <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{label}</h2>
         <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">{desc}</p>
       </div>
-      <div className="p-8 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30 flex flex-col items-center justify-center text-center gap-3">
+      <div className="p-10 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30 flex flex-col items-center justify-center gap-3">
         <SettingsIcon size={28} className="text-[#FFBC80]/50" />
-        <p className="text-sm text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
-          {label} configuration coming soon.
-        </p>
+        <p className="text-sm text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{label} configuration coming soon.</p>
       </div>
     </div>
   );
 }
 
-const panelDescriptions: Record<string, string> = {
+const panelMeta: Record<string, string> = {
   team: "Manage team members and permissions.",
   financial: "Configure billing, invoicing, and financial preferences.",
   forecast: "Tune forecast model parameters and seasonality.",
@@ -224,7 +218,12 @@ const panelDescriptions: Record<string, string> = {
 function PanelContent({ section }: { section: string }) {
   if (section === "profile") return <ProfilePanel />;
   if (section === "appearance") return <AppearancePanel />;
-  return <PlaceholderPanel label={navItems.find((n) => n.key === section)?.label ?? section} desc={panelDescriptions[section] ?? ""} />;
+  return (
+    <PlaceholderPanel
+      label={navItems.find((n) => n.key === section)?.label ?? section}
+      desc={panelMeta[section] ?? ""}
+    />
+  );
 }
 
 export default function Settings({ params }: { params?: { section?: string } }) {
@@ -232,11 +231,12 @@ export default function Settings({ params }: { params?: { section?: string } }) 
   const section = params?.section ?? "profile";
 
   return (
-    <div className="flex h-full min-h-screen bg-[#FFF9F2] dark:bg-[#120d06]">
-      {/* Settings left nav */}
-      <div
-        className="w-56 shrink-0 border-r border-[#FFBC80]/25 dark:border-[#FFBC80]/15 pt-6 pb-4 px-2 bg-[#FFF9F2] dark:bg-[#1a1208]"
-      >
+    <div className="flex h-screen overflow-hidden bg-[#FFF9F2] dark:bg-[#120d06]">
+      {/* Main sidebar */}
+      <Sidebar />
+
+      {/* Settings sub-nav */}
+      <div className="w-52 shrink-0 border-r border-[#FFBC80]/25 dark:border-[#FFBC80]/15 pt-6 pb-4 px-2 bg-[#FFF9F2] dark:bg-[#1a1208] overflow-y-auto">
         <p className="px-3 mb-2 text-[10px] font-bold tracking-widest text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase">Settings</p>
         <nav className="space-y-0.5">
           {navItems.map((item) => {
@@ -261,9 +261,12 @@ export default function Settings({ params }: { params?: { section?: string } }) 
         </nav>
       </div>
 
-      {/* Settings right content */}
-      <div className="flex-1 overflow-y-auto px-8 py-8 max-w-2xl">
-        <PanelContent section={section} />
+      {/* Settings content */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <TopBar title="Settings" description="Configure your MONARCH workspace, team, and integrations." />
+        <main className="flex-1 overflow-y-auto px-8 py-6 max-w-2xl">
+          <PanelContent section={section} />
+        </main>
       </div>
     </div>
   );
