@@ -9,6 +9,7 @@ import { useProfile } from "@/context/ProfileContext";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import ForecastSettings from "./settings/ForecastSettings";
+import FinancialSettings from "./settings/FinancialSettings";
 
 const navItems = [
   { key: "profile", label: "Profile", icon: UserCircle },
@@ -220,6 +221,7 @@ function PanelContent({ section }: { section: string }) {
   if (section === "profile") return <ProfilePanel />;
   if (section === "appearance") return <AppearancePanel />;
   if (section === "forecast") return <ForecastSettings />;
+  if (section === "financial") return <FinancialSettings />;
   return (
     <PlaceholderPanel
       label={navItems.find((n) => n.key === section)?.label ?? section}
