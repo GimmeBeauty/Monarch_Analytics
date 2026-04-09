@@ -45,7 +45,7 @@ function rowsToGrid(rows: ForecastRow[]): Grid {
   return g;
 }
 
-export default function ForecastSettings() {
+export default function ForecastSettings({ readOnly = false }: { readOnly?: boolean }) {
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [years, setYears] = useState<YearRow[]>([]);
   const [selectedStore, setSelectedStore] = useState<number | null>(null);
@@ -191,7 +191,7 @@ export default function ForecastSettings() {
   const labelCls = "block text-[10px] font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-0.5";
 
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${readOnly ? "pointer-events-none select-none opacity-75" : ""}`}>
       {/* Header */}
       <div>
         <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Forecast Settings</h2>

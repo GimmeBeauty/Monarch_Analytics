@@ -3,13 +3,16 @@ import { useLocation } from "wouter";
 import {
   UserCircle, Users, CreditCard, CalendarClock, KeyRound, Palette,
   Bell, Download, Plug, Camera, Check, Sun, Moon, Settings as SettingsIcon,
+  Lock,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useProfile } from "@/context/ProfileContext";
+import { useTeam } from "@/context/TeamContext";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import ForecastSettings from "./settings/ForecastSettings";
 import FinancialSettings from "./settings/FinancialSettings";
+import TeamSettings from "./settings/TeamSettings";
 
 const navItems = [
   { key: "profile", label: "Profile", icon: UserCircle },
@@ -217,11 +220,36 @@ const panelMeta: Record<string, string> = {
   integrations: "Connect ad platforms, analytics tools, and data sources.",
 };
 
+function ReadOnlyBanner() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FFBC80]/10 border border-[#FFBC80]/30 mb-5">
+      <Lock size={13} className="text-[#FFBC80] shrink-0" />
+      <p className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/45">
+        You have <span className="font-semibold">User</span> access — settings are view-only. Contact an Admin to make changes.
+      </p>
+    </div>
+  );
+}
+
 function PanelContent({ section }: { section: string }) {
+  const { currentUserRole } = useTeam();
+  const canEdit = currentUserRole === "owner" || currentUserRole === "admin";
+
   if (section === "profile") return <ProfilePanel />;
   if (section === "appearance") return <AppearancePanel />;
-  if (section === "forecast") return <ForecastSettings />;
-  if (section === "financial") return <FinancialSettings />;
+  if (section === "team") return <TeamSettings />;
+  if (section === "forecast") return (
+    <>
+      {!canEdit && <ReadOnlyBanner />}
+      <ForecastSettings readOnly={!canEdit} />
+    </>
+  );
+  if (section === "financial") return (
+    <>
+      {!canEdit && <ReadOnlyBanner />}
+      <FinancialSettings readOnly={!canEdit} />
+    </>
+  );
   return (
     <PlaceholderPanel
       label={navItems.find((n) => n.key === section)?.label ?? section}

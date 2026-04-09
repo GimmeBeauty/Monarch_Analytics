@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { DateRangeProvider } from "@/context/DateRangeContext";
 import { ProfileProvider } from "@/context/ProfileContext";
+import { TeamProvider } from "@/context/TeamContext";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/overview";
 import Traffic from "@/pages/traffic";
@@ -50,6 +51,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ProfileProvider>
+        <TeamProvider>
         <ThemeProvider>
           <DateRangeProvider>
             <TooltipProvider>
@@ -60,6 +62,7 @@ function App() {
             </TooltipProvider>
           </DateRangeProvider>
         </ThemeProvider>
+        </TeamProvider>
       </ProfileProvider>
     </QueryClientProvider>
   );

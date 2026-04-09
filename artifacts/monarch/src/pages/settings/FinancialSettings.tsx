@@ -143,7 +143,7 @@ function parseCsv(text: string): SkuRow[] {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function FinancialSettings() {
+export default function FinancialSettings({ readOnly = false }: { readOnly?: boolean }) {
   const [cfg, setCfg] = useState<FinancialConfig>(loadConfig);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -181,7 +181,7 @@ export default function FinancialSettings() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${readOnly ? "pointer-events-none select-none opacity-75" : ""}`}>
       <div>
         <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Financial Settings</h2>
         <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
@@ -337,8 +337,8 @@ export default function FinancialSettings() {
         <div className="ml-[38px]">
           <button
             onClick={handleSaveRecalculate}
-            disabled={status === "saving"}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-60"
+            disabled={status === "saving" || readOnly}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
           >
             {status === "saving" && (
