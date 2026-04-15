@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useGetForecastData } from "@workspace/api-client-react";
+import { useStoreFilter } from "@/context/StoreFilterContext";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -18,6 +20,34 @@ function formatDate(dateStr: string) {
 
 export default function Forecast() {
   const { data, isLoading } = useGetForecastData();
+  const { storeWeight: sw } = useStoreFilter();
+
+  const scaledData = useMemo(() => {
+    if (!data || sw === 1) return data;
+    return {
+      ...data,
+      projectedRevenue: data.projectedRevenue * sw,
+      projectedSpend:   data.projectedSpend   * sw,
+      // projectedROAS, confidence: unchanged
+      forecastTimeSeries: data.forecastTimeSeries.map(
+        (d: { actual?: number | null; projected?: number | null; upper?: number | null; lower?: number | null }) => ({
+          ...d,
+          actual:    d.actual    != null ? d.actual    * sw : d.actual,
+          projected: d.projected != null ? d.projected * sw : d.projected,
+          upper:     d.upper     != null ? d.upper     * sw : d.upper,
+          lower:     d.lower     != null ? d.lower     * sw : d.lower,
+        }),
+      ),
+      scenarioComparison: data.scenarioComparison.map(
+        (s: { revenue: number; spend: number }) => ({
+          ...s,
+          revenue: s.revenue * sw,
+          spend:   s.spend   * sw,
+          // roas: unchanged
+        }),
+      ),
+    };
+  }, [data, sw]);
 
   const cardStyle = {
     border: "1px solid transparent",
@@ -35,15 +65,15 @@ export default function Forecast() {
         <div className="animate-pulse space-y-6">
           <div className="grid grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <div key={i} className="h-28 rounded-xl bg-[#FFBC80]/10" />)}</div>
         </div>
-      ) : data ? (
+      ) : scaledData ? (
         <div className="space-y-6">
           {/* KPI summary */}
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: "Projected Revenue", value: `$${(data.projectedRevenue / 1000).toFixed(0)}k` },
-              { label: "Projected Spend", value: `$${(data.projectedSpend / 1000).toFixed(0)}k` },
-              { label: "Projected ROAS", value: `${data.projectedROAS}x` },
-              { label: "Confidence", value: `${data.confidence}%` },
+              { label: "Projected Revenue", value: `$${(scaledData.projectedRevenue / 1000).toFixed(0)}k` },
+              { label: "Projected Spend",   value: `$${(scaledData.projectedSpend   / 1000).toFixed(0)}k` },
+              { label: "Projected ROAS",    value: `${scaledData.projectedROAS}x` },
+              { label: "Confidence",        value: `${scaledData.confidence}%` },
             ].map((kpi) => (
               <div key={kpi.label} className="rounded-xl p-5 bg-white dark:bg-[#231a0e] relative overflow-hidden" style={cardStyle}>
                 <div className="absolute top-0 right-0 w-20 h-20 opacity-10 rounded-bl-full" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
@@ -58,7 +88,7 @@ export default function Forecast() {
             <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">Revenue Forecast with Confidence Interval</h2>
             <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mb-4">Shaded area represents the upper and lower confidence bounds</p>
             <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={data.forecastTimeSeries} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <ComposedChart data={scaledData.forecastTimeSeries} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradBand" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#FFE29A" stopOpacity={0.4} />
@@ -88,7 +118,7 @@ export default function Forecast() {
           <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={cardStyle}>
             <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-4">Scenario Comparison</h2>
             <div className="grid grid-cols-3 gap-4">
-              {data.scenarioComparison.map((s, i) => (
+              {scaledData.scenarioComparison.map((s: any, i: number) => (
                 <div
                   key={s.scenario}
                   className="rounded-lg p-4"

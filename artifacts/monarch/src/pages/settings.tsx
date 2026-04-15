@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   UserCircle, Users, CreditCard, CalendarClock, KeyRound, Palette,
   Bell, Download, Plug, Camera, Check, Sun, Moon, Settings as SettingsIcon,
-  Lock,
+  Lock, Copy, Trash2, Eye, EyeOff, ShieldAlert, Plus, Tag,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useProfile } from "@/context/ProfileContext";
@@ -13,11 +13,16 @@ import TopBar from "@/components/layout/TopBar";
 import ForecastSettings from "./settings/ForecastSettings";
 import FinancialSettings from "./settings/FinancialSettings";
 import TeamSettings from "./settings/TeamSettings";
+import NotificationsPanel from "./settings/NotificationsPanel";
+import IntegrationsPanel from "./settings/IntegrationsPanel";
+import ExportsPanel from "./settings/ExportsPanel";
+import PricingSettings from "./settings/PricingSettings";
 
 const navItems = [
   { key: "profile", label: "Profile", icon: UserCircle },
   { key: "team", label: "Team", icon: Users },
   { key: "financial", label: "Financial Settings", icon: CreditCard },
+  { key: "pricing", label: "Pricing & Valuation", icon: Tag },
   { key: "forecast", label: "Forecast Settings", icon: CalendarClock },
   { key: "api-keys", label: "API Keys", icon: KeyRound },
   { key: "appearance", label: "Appearance", icon: Palette },
@@ -195,6 +200,155 @@ function AppearancePanel() {
   );
 }
 
+type ApiKey = {
+  id: string;
+  label: string;
+  key: string;
+  createdAt: string;
+  isNew?: boolean;
+};
+
+function generateApiKey(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "mk_live_";
+  for (let i = 0; i < 32; i++) result += chars[Math.floor(Math.random() * chars.length)];
+  return result;
+}
+
+function ApiKeysPanel() {
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [label, setLabel] = useState("");
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const handleGenerate = () => {
+    if (!label.trim()) return;
+    const newKey: ApiKey = {
+      id: crypto.randomUUID(),
+      label: label.trim(),
+      key: generateApiKey(),
+      createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      isNew: true,
+    };
+    setKeys((prev) => [newKey, ...prev]);
+    setRevealed((prev) => ({ ...prev, [newKey.id]: true }));
+    setLabel("");
+  };
+
+  const handleRevoke = (id: string) => {
+    setKeys((prev) => prev.filter((k) => k.id !== id));
+    setRevealed((prev) => { const n = { ...prev }; delete n[id]; return n; });
+  };
+
+  const handleCopy = (id: string, key: string) => {
+    navigator.clipboard.writeText(key).catch(() => {});
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const maskKey = (key: string) => key.slice(0, 12) + "••••••••••••••••••••" + key.slice(-4);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">API Keys</h2>
+        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">Generate and manage API keys for programmatic access to your organization's data.</p>
+      </div>
+
+      {/* Generate Key */}
+      <div className="p-5 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
+        <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-4">Generate New Key</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
+            placeholder="Key label (e.g. Production App)"
+            className="flex-1 px-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#FFF9F2]/25"
+          />
+          <button
+            onClick={handleGenerate}
+            disabled={!label.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+          >
+            <Plus size={14} />
+            Generate Key
+          </button>
+        </div>
+      </div>
+
+      {/* Active Keys */}
+      <div className="p-5 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
+        <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-4">Active Keys</p>
+        {keys.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <KeyRound size={24} className="text-[#FFBC80]/40" />
+            <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">No API keys yet. Generate one above.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {keys.map((k) => (
+              <div key={k.id} className="rounded-lg border border-[#FFBC80]/20 bg-[#FFF9F2] dark:bg-[#1a1208] p-3.5">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{k.label}</span>
+                    {k.isNew && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold text-[#3A3A3A]"
+                        style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
+                        NEW
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">Created {k.createdAt}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono text-[#3A3A3A]/70 dark:text-[#FFF9F2]/55 truncate">
+                    {revealed[k.id] ? k.key : maskKey(k.key)}
+                  </code>
+                  <button
+                    onClick={() => setRevealed((prev) => ({ ...prev, [k.id]: !prev[k.id] }))}
+                    className="p-1.5 rounded-md text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-[#FFBC80] hover:bg-[#FFBC80]/10 transition-colors"
+                    title={revealed[k.id] ? "Hide key" : "Reveal key"}
+                  >
+                    {revealed[k.id] ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                  <button
+                    onClick={() => handleCopy(k.id, k.key)}
+                    className="p-1.5 rounded-md text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-[#FFBC80] hover:bg-[#FFBC80]/10 transition-colors"
+                    title="Copy key"
+                  >
+                    {copied === k.id ? <Check size={13} className="text-[#FFBC80]" /> : <Copy size={13} />}
+                  </button>
+                  <button
+                    onClick={() => handleRevoke(k.id)}
+                    className="p-1.5 rounded-md text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                    title="Revoke key"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Security Guide */}
+      <div className="p-5 rounded-xl border border-[#FFBC80]/40 bg-[#FFBC80]/5 dark:bg-[#FFBC80]/8">
+        <div className="flex items-center gap-2 mb-2.5">
+          <ShieldAlert size={15} className="text-[#FFBC80] shrink-0" />
+          <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2] uppercase tracking-wider">API Key Security</p>
+        </div>
+        <p className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 leading-relaxed">
+          API keys grant full read access to your organization's marketing data. Keep them secret and never share them publicly. If a key is compromised, revoke it immediately and create a new one.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function PlaceholderPanel({ label, desc }: { label: string; desc: string }) {
   return (
     <div className="space-y-5">
@@ -213,6 +367,7 @@ function PlaceholderPanel({ label, desc }: { label: string; desc: string }) {
 const panelMeta: Record<string, string> = {
   team: "Manage team members and permissions.",
   financial: "Configure billing, invoicing, and financial preferences.",
+  pricing: "Set MSRP or wholesale pricing mode and manage NetSuite mappings.",
   forecast: "Tune forecast model parameters and seasonality.",
   "api-keys": "Generate and manage API access keys.",
   notifications: "Set up alerts and notification preferences.",
@@ -237,6 +392,20 @@ function PanelContent({ section }: { section: string }) {
 
   if (section === "profile") return <ProfilePanel />;
   if (section === "appearance") return <AppearancePanel />;
+  if (section === "api-keys") return <ApiKeysPanel />;
+  if (section === "notifications") return <NotificationsPanel />;
+  if (section === "exports") return (
+    <>
+      {!canEdit && <ReadOnlyBanner />}
+      <ExportsPanel readOnly={!canEdit} />
+    </>
+  );
+  if (section === "integrations") return (
+    <>
+      {!canEdit && <ReadOnlyBanner />}
+      <IntegrationsPanel readOnly={!canEdit} />
+    </>
+  );
   if (section === "team") return <TeamSettings />;
   if (section === "forecast") return (
     <>
@@ -250,6 +419,7 @@ function PanelContent({ section }: { section: string }) {
       <FinancialSettings readOnly={!canEdit} />
     </>
   );
+  if (section === "pricing") return <PricingSettings />;
   return (
     <PlaceholderPanel
       label={navItems.find((n) => n.key === section)?.label ?? section}

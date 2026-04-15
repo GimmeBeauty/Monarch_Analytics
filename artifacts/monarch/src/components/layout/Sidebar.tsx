@@ -11,6 +11,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useProfile } from "@/context/ProfileContext";
+import { useAuth } from "@/context/AuthContext";
 
 const topNavItems = [
   { path: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -24,12 +25,17 @@ const topNavItems = [
 export default function Sidebar() {
   const [location] = useLocation();
   const { profile } = useProfile();
+  const { user, logout } = useAuth();
 
   const isActive = (path: string) => location === path || location.startsWith(path + "/");
 
-  const initials = profile.name
+  // Prefer real auth user name, fall back to profile
+  const displayName = user?.name ?? profile.name;
+  const displaySub  = user?.email ?? profile.title;
+
+  const initials = displayName
     .split(" ")
-    .map((w) => w[0])
+    .map((w: string) => w[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
@@ -54,9 +60,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
-            <span className="text-[#3A3A3A] font-black text-sm">M</span>
-          </div>
+          <img src="/Monarch-Icon-500x.jpg" alt="Monarch" className="w-7 h-7 rounded-md object-cover" />
           <span className="font-black text-xl tracking-widest text-[#3A3A3A] dark:text-[#FFF9F2]">MONARCH</span>
         </div>
       </div>
@@ -138,13 +142,14 @@ export default function Sidebar() {
                 </div>
               )}
               <div className="min-w-0 text-left">
-                <div className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{profile.name}</div>
-                <div className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">{profile.title}</div>
+                <div className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{displayName}</div>
+                <div className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">{displaySub}</div>
               </div>
             </button>
           </Link>
           <button
             data-testid="sign-out-button"
+            onClick={logout}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 mt-0.5"
           >
             <LogOut size={15} />

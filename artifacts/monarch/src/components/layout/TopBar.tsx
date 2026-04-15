@@ -1,5 +1,8 @@
 import { useDateRange, fmtLabel } from "@/context/DateRangeContext";
 import { DateRangeButton } from "@/components/ui/DateRangePicker";
+import StoreFilter from "@/components/layout/StoreFilter";
+import { usePricingMode } from "@/context/PricingModeContext";
+import { Tag } from "lucide-react";
 
 interface TopBarProps {
   title: string;
@@ -8,6 +11,7 @@ interface TopBarProps {
 
 export default function TopBar({ title, description }: TopBarProps) {
   const { dateRange } = useDateRange();
+  const { isWholesale } = usePricingMode();
 
   const compareStart = dateRange.compareStart ? new Date(dateRange.compareStart) : null;
   const compareEnd = dateRange.compareEnd ? new Date(dateRange.compareEnd) : null;
@@ -30,6 +34,16 @@ export default function TopBar({ title, description }: TopBarProps) {
 
       {/* Right controls */}
       <div className="flex items-center gap-3">
+        {/* Wholesale pricing badge */}
+        {isWholesale && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-400/50 bg-amber-400/10">
+            <Tag size={12} className="text-amber-600 dark:text-amber-400" />
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              Wholesale Pricing
+            </span>
+          </div>
+        )}
+
         {/* Comparison badge — shown when compare is active */}
         {dateRange.compareEnabled && compareStart && compareEnd && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FFBC80]/40 bg-[#FFBC80]/10">
@@ -39,6 +53,9 @@ export default function TopBar({ title, description }: TopBarProps) {
             </span>
           </div>
         )}
+
+        {/* Store filter */}
+        <StoreFilter />
 
         {/* Date range selector */}
         <DateRangeButton />

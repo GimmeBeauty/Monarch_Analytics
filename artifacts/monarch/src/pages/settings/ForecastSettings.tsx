@@ -1,35 +1,38 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Save, Check, ChevronDown, Store, Calendar, AlertCircle } from "lucide-react";
+import { Plus, Save, Check, ChevronDown, Store, Calendar, AlertCircle, Trash2 } from "lucide-react";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+const STORAGE_KEY = "monarch-forecast-settings";
+
 interface StoreRow { id: number; name: string; type: string; }
 interface YearRow { id: number; year: number; }
-interface ForecastRow {
-  id: number;
-  storeId: number;
-  forecastYearId: number;
-  month: number;
-  wholesalePrice: string | null;
-  retailPrice: string;
-}
 
 type MonthData = { retail: string; wholesale: string; };
 type Grid = Record<number, MonthData>; // month 1–12
 
-const API = "/api/forecast";
-
-async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+interface ForecastStore {
+  stores: StoreRow[];
+  years: YearRow[];
+  forecasts: Record<string, Grid>; // key: `${storeId}-${year}`
 }
+
+const DEFAULT_STORES: StoreRow[] = [
+  { id: 1, name: "Amazon", type: "retail" },
+  { id: 2, name: "CVS", type: "retail" },
+  { id: 3, name: "Kroger", type: "retail" },
+  { id: 4, name: "Publix", type: "retail" },
+  { id: 5, name: "Shopify", type: "shopify" },
+  { id: 6, name: "Target", type: "retail" },
+  { id: 7, name: "Ulta Beauty", type: "retail" },
+  { id: 8, name: "Walgreens", type: "retail" },
+  { id: 9, name: "Walmart", type: "retail" },
+];
+
+const DEFAULT_YEARS: YearRow[] = [
+  { id: 1, year: 2025 },
+  { id: 2, year: 2026 },
+];
 
 function emptyGrid(): Grid {
   const g: Grid = {};
@@ -37,21 +40,23 @@ function emptyGrid(): Grid {
   return g;
 }
 
-function rowsToGrid(rows: ForecastRow[]): Grid {
-  const g = emptyGrid();
-  for (const r of rows) {
-    g[r.month] = { retail: r.retailPrice ?? "", wholesale: r.wholesalePrice ?? "" };
-  }
-  return g;
+function loadData(): ForecastStore {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { stores: DEFAULT_STORES, years: DEFAULT_YEARS, forecasts: {} };
+}
+
+function saveData(data: ForecastStore) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 export default function ForecastSettings({ readOnly = false }: { readOnly?: boolean }) {
-  const [stores, setStores] = useState<StoreRow[]>([]);
-  const [years, setYears] = useState<YearRow[]>([]);
+  const [data, setData] = useState<ForecastStore>(() => loadData());
   const [selectedStore, setSelectedStore] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [grid, setGrid] = useState<Grid>(emptyGrid());
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,56 +65,35 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
   const [showAddStore, setShowAddStore] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
   const [newStoreType, setNewStoreType] = useState("retail");
-  const [addingStore, setAddingStore] = useState(false);
 
   // Add year state
   const [showAddYear, setShowAddYear] = useState(false);
   const [newYear, setNewYear] = useState("");
-  const [addingYear, setAddingYear] = useState(false);
 
-  // Load stores + years on mount
+  // Init selection
   useEffect(() => {
-    Promise.all([apiFetch("/stores"), apiFetch("/years")])
-      .then(([s, y]) => {
-        setStores(s);
-        setYears(y);
-        if (s.length) setSelectedStore(s[0].id);
-        if (y.length) setSelectedYear(y[y.length - 1].year);
-      })
-      .catch((e) => setError(e.message));
-  }, []);
+    if (!selectedStore && data.stores.length) setSelectedStore(data.stores[0].id);
+    if (!selectedYear && data.years.length) setSelectedYear(data.years[data.years.length - 1].year);
+  }, [data.stores, data.years]);
 
-  // Load forecast when store or year changes
-  const loadForecast = useCallback(async () => {
+  // Load grid when store or year changes
+  const loadGrid = useCallback(() => {
     if (!selectedStore || !selectedYear) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const rows: ForecastRow[] = await apiFetch(
-        `/forecasts?store_id=${selectedStore}&year=${selectedYear}`,
-      );
-      setGrid(rowsToGrid(rows));
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedStore, selectedYear]);
+    const key = `${selectedStore}-${selectedYear}`;
+    setGrid(data.forecasts[key] ? { ...data.forecasts[key] } : emptyGrid());
+  }, [selectedStore, selectedYear, data.forecasts]);
 
-  useEffect(() => { loadForecast(); }, [loadForecast]);
+  useEffect(() => { loadGrid(); }, [loadGrid]);
 
-  const isShopify = stores.find((s) => s.id === selectedStore)?.type === "shopify";
+  const isShopify = data.stores.find((s) => s.id === selectedStore)?.type === "shopify";
 
-  // Update a single cell
   const setCell = (month: number, field: "retail" | "wholesale", value: string) => {
     setGrid((g) => ({ ...g, [month]: { ...g[month], [field]: value } }));
   };
 
-  // Bulk save via upsert
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!selectedStore || !selectedYear) return;
 
-    // Validate retail prices
     for (let m = 1; m <= 12; m++) {
       if (!grid[m].retail.trim()) {
         setError(`Retail price for ${MONTHS[m - 1]} is required.`);
@@ -127,64 +111,58 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
     setError(null);
     setSaving(true);
-    try {
-      const months = Array.from({ length: 12 }, (_, i) => ({
-        month: i + 1,
-        retail_price: grid[i + 1].retail,
-        wholesale_price: isShopify ? null : grid[i + 1].wholesale || null,
-      }));
-      await apiFetch("/forecasts/upsert", {
-        method: "PATCH",
-        body: JSON.stringify({ store_id: selectedStore, year: selectedYear, months }),
-      });
-      setSavedOk(true);
-      setTimeout(() => setSavedOk(false), 2500);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+    const key = `${selectedStore}-${selectedYear}`;
+    const savedGrid: Grid = {};
+    for (let m = 1; m <= 12; m++) {
+      savedGrid[m] = {
+        retail: grid[m].retail,
+        wholesale: isShopify ? "" : grid[m].wholesale,
+      };
     }
+    const updated = { ...data, forecasts: { ...data.forecasts, [key]: savedGrid } };
+    setData(updated);
+    saveData(updated);
+    setSaving(false);
+    setSavedOk(true);
+    setTimeout(() => setSavedOk(false), 2500);
   };
 
-  // Add store
-  const handleAddStore = async () => {
+  const handleAddStore = () => {
     if (!newStoreName.trim()) return;
-    setAddingStore(true);
-    try {
-      const s: StoreRow = await apiFetch("/stores", {
-        method: "POST",
-        body: JSON.stringify({ name: newStoreName.trim(), type: newStoreType }),
-      });
-      setStores((prev) => [...prev, s]);
-      setSelectedStore(s.id);
-      setNewStoreName("");
-      setShowAddStore(false);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setAddingStore(false);
+    const nextId = data.stores.length ? Math.max(...data.stores.map((s) => s.id)) + 1 : 1;
+    const s: StoreRow = { id: nextId, name: newStoreName.trim(), type: newStoreType };
+    const updated = { ...data, stores: [...data.stores, s] };
+    setData(updated);
+    saveData(updated);
+    setSelectedStore(s.id);
+    setNewStoreName("");
+    setShowAddStore(false);
+  };
+
+  const handleDeleteStore = (id: number) => {
+    const updated = { ...data, stores: data.stores.filter((s) => s.id !== id) };
+    setData(updated);
+    saveData(updated);
+    if (selectedStore === id) {
+      setSelectedStore(updated.stores.length ? updated.stores[0].id : null);
     }
   };
 
-  // Add year
-  const handleAddYear = async () => {
+  const handleAddYear = () => {
     const y = parseInt(newYear, 10);
     if (!y) return;
-    setAddingYear(true);
-    try {
-      const yr: YearRow = await apiFetch("/years", {
-        method: "POST",
-        body: JSON.stringify({ year: y }),
-      });
-      setYears((prev) => [...prev, yr].sort((a, b) => a.year - b.year));
-      setSelectedYear(yr.year);
-      setNewYear("");
-      setShowAddYear(false);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setAddingYear(false);
+    if (data.years.some((yr) => yr.year === y)) {
+      setError(`Year ${y} already exists.`);
+      return;
     }
+    const nextId = data.years.length ? Math.max(...data.years.map((yr) => yr.id)) + 1 : 1;
+    const yr: YearRow = { id: nextId, year: y };
+    const updated = { ...data, years: [...data.years, yr].sort((a, b) => a.year - b.year) };
+    setData(updated);
+    saveData(updated);
+    setSelectedYear(yr.year);
+    setNewYear("");
+    setShowAddYear(false);
   };
 
   const inputCls = "w-full px-2 py-1.5 rounded-lg text-xs bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none transition-colors text-right";
@@ -222,7 +200,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
               onChange={(e) => setSelectedStore(Number(e.target.value))}
               className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#231a0e] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none cursor-pointer"
             >
-              {stores.map((s) => (
+              {data.stores.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
@@ -241,7 +219,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
               onChange={(e) => setSelectedYear(Number(e.target.value))}
               className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#231a0e] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none cursor-pointer"
             >
-              {years.map((y) => (
+              {data.years.map((y) => (
                 <option key={y.id} value={y.year}>{y.year}</option>
               ))}
             </select>
@@ -261,10 +239,10 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 className="w-20 px-2 py-2 rounded-lg text-sm border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none bg-white dark:bg-[#231a0e] text-[#3A3A3A] dark:text-[#FFF9F2]"
                 onKeyDown={(e) => e.key === "Enter" && handleAddYear()}
               />
-              <button onClick={handleAddYear} disabled={addingYear}
+              <button onClick={handleAddYear}
                 className="px-3 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
                 style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
-                {addingYear ? "…" : "Add"}
+                Add
               </button>
               <button onClick={() => setShowAddYear(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#FFF9F2]/40 px-1">✕</button>
             </div>
@@ -309,13 +287,40 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 <option value="shopify">Shopify (DTC)</option>
               </select>
             </div>
-            <button onClick={handleAddStore} disabled={addingStore || !newStoreName.trim()}
+            <button onClick={handleAddStore} disabled={!newStoreName.trim()}
               className="px-4 py-1.5 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity disabled:opacity-40"
               style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
-              {addingStore ? "Adding…" : "Add Store"}
+              Add Store
             </button>
             <button onClick={() => setShowAddStore(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#FFF9F2]/40 px-1">✕</button>
           </div>
+        </div>
+      )}
+
+      {/* Store list with delete */}
+      {data.stores.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {data.stores.map((s) => (
+            <div
+              key={s.id}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-all cursor-pointer ${
+                s.id === selectedStore
+                  ? "border-[#FFBC80] bg-[#FFBC80]/15 text-[#3A3A3A] dark:text-[#FFF9F2] font-semibold"
+                  : "border-[#FFBC80]/30 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-[#FFBC80]/60"
+              }`}
+              onClick={() => setSelectedStore(s.id)}
+            >
+              <Store size={10} />
+              {s.name}
+              <span className="text-[9px] opacity-60 ml-0.5">{s.type === "shopify" ? "DTC" : "Retail"}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteStore(s.id); }}
+                className="ml-1 opacity-40 hover:opacity-80 transition-opacity"
+              >
+                <Trash2 size={9} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -330,9 +335,9 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
           {!isShopify && <span className="text-right">Wholesale Price</span>}
         </div>
 
-        {loading ? (
-          <div className="py-10 text-center text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 animate-pulse">
-            Loading forecast data…
+        {data.stores.length === 0 ? (
+          <div className="py-10 text-center text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+            Add a store to get started.
           </div>
         ) : (
           MONTHS.map((label, idx) => {
@@ -345,7 +350,6 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
               >
                 <span className="text-xs font-semibold text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{label}</span>
 
-                {/* Retail price — required for all stores */}
                 <div>
                   <div className="relative">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
@@ -361,7 +365,6 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                   </div>
                 </div>
 
-                {/* Wholesale price — hidden for Shopify */}
                 {!isShopify && (
                   <div>
                     <div className="relative">
@@ -391,7 +394,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
         </p>
         <button
           onClick={handleSave}
-          disabled={saving || loading}
+          disabled={saving || data.stores.length === 0}
           className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-50"
           style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
         >

@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm --filter @workspace/monarch run build",
+  "outputDirectory": "artifacts/monarch/dist/public",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "framework": null
+}

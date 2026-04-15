@@ -24,7 +24,7 @@ router.post("/stores", async (req, res) => {
   try {
     const { name, type = "retail" } = req.body;
     if (!name?.trim()) {
-      return res.status(400).json({ error: "Store name is required" });
+      res.status(400).json({ error: "Store name is required" });
     }
     const [store] = await db
       .insert(storesTable)
@@ -33,7 +33,7 @@ router.post("/stores", async (req, res) => {
     res.status(201).json(store);
   } catch (err: any) {
     if (err?.code === "23505") {
-      return res.status(409).json({ error: "A store with that name already exists" });
+      res.status(409).json({ error: "A store with that name already exists" });
     }
     res.status(500).json({ error: "Failed to create store" });
   }
@@ -60,7 +60,7 @@ router.post("/years", async (req, res) => {
     const { year } = req.body;
     const yearNum = parseInt(year, 10);
     if (!yearNum || yearNum < 2020 || yearNum > 2100) {
-      return res.status(400).json({ error: "A valid year is required (2020–2100)" });
+      res.status(400).json({ error: "A valid year is required (2020–2100)" });
     }
     const [created] = await db
       .insert(forecastYearsTable)
@@ -69,7 +69,7 @@ router.post("/years", async (req, res) => {
     res.status(201).json(created);
   } catch (err: any) {
     if (err?.code === "23505") {
-      return res.status(409).json({ error: "That year already exists" });
+      res.status(409).json({ error: "That year already exists" });
     }
     res.status(500).json({ error: "Failed to create year" });
   }
@@ -85,7 +85,7 @@ router.get("/forecasts", async (req, res) => {
     const year = parseInt(req.query.year as string, 10);
 
     if (!storeId || !year) {
-      return res.status(400).json({ error: "store_id and year are required" });
+      res.status(400).json({ error: "store_id and year are required" });
     }
 
     // Look up the forecast_year row
@@ -95,7 +95,7 @@ router.get("/forecasts", async (req, res) => {
       .where(eq(forecastYearsTable.year, year));
 
     if (!yearRow) {
-      return res.json([]); // no data yet for this year
+      res.json([]); // no data yet for this year
     }
 
     const rows = await db
@@ -121,10 +121,10 @@ router.post("/forecasts", async (req, res) => {
     const { store_id, year, month, wholesale_price, retail_price } = req.body;
 
     if (!store_id || !year || !month) {
-      return res.status(400).json({ error: "store_id, year, and month are required" });
+      res.status(400).json({ error: "store_id, year, and month are required" });
     }
     if (retail_price === undefined || retail_price === null || retail_price === "") {
-      return res.status(400).json({ error: "retail_price is required" });
+      res.status(400).json({ error: "retail_price is required" });
     }
 
     // Upsert the forecast_years row
@@ -148,7 +148,7 @@ router.post("/forecasts", async (req, res) => {
     res.status(201).json(row);
   } catch (err: any) {
     if (err?.code === "23505") {
-      return res.status(409).json({ error: "Forecast for this store/year/month already exists. Use PUT to update." });
+      res.status(409).json({ error: "Forecast for this store/year/month already exists. Use PUT to update." });
     }
     res.status(500).json({ error: "Failed to create forecast" });
   }
@@ -161,7 +161,7 @@ router.put("/forecasts/:id", async (req, res) => {
     const { wholesale_price, retail_price } = req.body;
 
     if (retail_price === undefined || retail_price === null || retail_price === "") {
-      return res.status(400).json({ error: "retail_price is required" });
+      res.status(400).json({ error: "retail_price is required" });
     }
 
     const [updated] = await db
@@ -174,7 +174,7 @@ router.put("/forecasts/:id", async (req, res) => {
       .returning();
 
     if (!updated) {
-      return res.status(404).json({ error: "Forecast row not found" });
+      res.status(404).json({ error: "Forecast row not found" });
     }
 
     res.json(updated);
@@ -190,7 +190,7 @@ router.patch("/forecasts/upsert", async (req, res) => {
     // months: Array<{ month: number; wholesale_price?: string; retail_price: string }>
 
     if (!store_id || !year || !Array.isArray(months)) {
-      return res.status(400).json({ error: "store_id, year, and months[] are required" });
+      res.status(400).json({ error: "store_id, year, and months[] are required" });
     }
 
     // Ensure the year row exists
