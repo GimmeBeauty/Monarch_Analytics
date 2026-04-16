@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Crown, Shield, User, Mail, Check, Clock, UserPlus, Loader2, RefreshCw,
+  Crown, Shield, User, Mail, Check, Clock, UserPlus, Loader2, RefreshCw, X, AlertTriangle,
 } from "lucide-react";
 import { useTeam, Role, TeamMember } from "@/context/TeamContext";
 import { API_BASE } from "@/lib/apiBase";
@@ -86,33 +86,106 @@ function StatusPill({ status }: { status: string }) {
 function MemberRow({
   member,
   isCurrentUser,
+  canManage,
 }: {
   member: TeamMember;
   isCurrentUser: boolean;
+  canManage: boolean;
 }) {
+  const { removeMember } = useTeam();
   const display = member.name ?? member.email.split("@")[0];
-  return (
-    <div className="flex items-center gap-3 py-3 px-4 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/20">
-      <MemberAvatar name={member.name} email={member.email} avatarUrl={member.avatarUrl} />
+  const [confirming, setConfirming] = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
+  const [error,      setError]      = useState("");
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">
-            {display}
-          </span>
-          {isCurrentUser && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBC80]/20 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/40 font-medium">
-              You
+  const isDeletable = canManage && !isCurrentUser && member.role !== "owner";
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError("");
+    try {
+      await removeMember(member.id);
+    } catch {
+      setError("Failed to remove member.");
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/20 overflow-hidden">
+      {/* Main row */}
+      <div className="flex items-center gap-3 py-3 px-4">
+        <MemberAvatar name={member.name} email={member.email} avatarUrl={member.avatarUrl} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">
+              {display}
             </span>
-          )}
-          <StatusPill status={member.status} />
+            {isCurrentUser && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBC80]/20 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/40 font-medium">
+                You
+              </span>
+            )}
+            <StatusPill status={member.status} />
+          </div>
+          <span className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 truncate block mt-0.5">
+            {member.email}
+          </span>
         </div>
-        <span className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 truncate block mt-0.5">
-          {member.email}
-        </span>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <RoleBadge role={member.role} />
+
+          {isDeletable && !confirming && (
+            <button
+              onClick={() => setConfirming(true)}
+              title="Remove member"
+              className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      <RoleBadge role={member.role} />
+      {/* Confirmation drawer */}
+      {confirming && (
+        <div className="px-4 py-3 border-t border-red-100 dark:border-red-900/30 bg-red-50/60 dark:bg-red-900/10">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                Remove {display}?
+              </p>
+              <p className="text-[11px] text-red-500/80 dark:text-red-400/70 mt-0.5">
+                This permanently deletes their account. This cannot be undone.
+              </p>
+              {error && (
+                <p className="text-[11px] text-red-600 mt-1 font-medium">{error}</p>
+              )}
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-60 transition-colors"
+              >
+                {deleting ? <Loader2 size={11} className="animate-spin" /> : null}
+                {deleting ? "Removing…" : "Yes, remove"}
+              </button>
+              <button
+                onClick={() => { setConfirming(false); setError(""); }}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:bg-red-100/60 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+              >
+                No, cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -316,6 +389,7 @@ export default function TeamSettings() {
                 key={m.id}
                 member={m}
                 isCurrentUser={m.id === currentUserId}
+                canManage={canInvite}
               />
             ))}
           </div>
@@ -334,6 +408,7 @@ export default function TeamSettings() {
                 key={m.id}
                 member={m}
                 isCurrentUser={m.id === currentUserId}
+                canManage={canInvite}
               />
             ))}
           </div>

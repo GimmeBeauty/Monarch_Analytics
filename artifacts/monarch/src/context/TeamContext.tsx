@@ -29,6 +29,7 @@ interface TeamContextValue {
   currentUserRole: Role;
   refetch: () => Promise<void>;
   inviteMember: (email: string, role: "admin" | "user") => void;
+  removeMember: (id: string) => Promise<void>;
 }
 
 const TeamContext = createContext<TeamContextValue>({
@@ -38,6 +39,7 @@ const TeamContext = createContext<TeamContextValue>({
   currentUserRole: "user",
   refetch: async () => {},
   inviteMember: () => {},
+  removeMember: async () => {},
 });
 
 export function TeamProvider({ children }: { children: ReactNode }) {
@@ -91,6 +93,14 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const removeMember = useCallback(async (id: string) => {
+    await fetch(`${API_BASE}/api/auth/users/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    setMembers((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
   const currentUserId   = user?.id   ?? "";
   const currentUserRole = (user?.role ?? "user") as Role;
 
@@ -103,6 +113,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         currentUserRole,
         refetch: fetchMembers,
         inviteMember,
+        removeMember,
       }}
     >
       {children}

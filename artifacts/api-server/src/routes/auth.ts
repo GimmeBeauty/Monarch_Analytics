@@ -482,4 +482,38 @@ router.post("/reset-password", async (req: Request, res: Response) => {
   res.json({ ok: true, message: "Password updated successfully" });
 });
 
+// ─── DELETE /auth/users/:id ────────────────────────────────────────────────────
+// Permanently removes a user. Only owners and admins can do this.
+// Cannot remove yourself or the owner account.
+
+router.delete("/users/:id", authenticate, requireRole("owner", "admin"), async (req: Request, res: Response) => {
+  const targetId = req.params.id;
+  const requesterId = req.auth!.userId;
+
+  if (targetId === requesterId) {
+    res.status(400).json({ error: "You cannot remove your own account." });
+    return;
+  }
+
+  const [target] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, targetId))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  if (target.role === "owner") {
+    res.status(403).json({ error: "The owner account cannot be removed." });
+    return;
+  }
+
+  await db.delete(usersTable).where(eq(usersTable.id, targetId));
+
+  res.json({ ok: true });
+});
+
 export default router;
