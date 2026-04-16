@@ -131,6 +131,26 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
   });
 });
 
+// ─── GET /auth/users ──────────────────────────────────────────────────────────
+// Returns all team members. Available to all authenticated users so everyone
+// can see who is on the team and their status.
+
+router.get("/users", authenticate, async (_req: Request, res: Response) => {
+  const users = await db
+    .select({
+      id:        usersTable.id,
+      name:      usersTable.name,
+      email:     usersTable.email,
+      role:      usersTable.role,
+      status:    usersTable.status,
+      joinedAt:  usersTable.createdAt,
+    })
+    .from(usersTable)
+    .orderBy(usersTable.createdAt);
+
+  res.json({ users });
+});
+
 // ─── POST /auth/invite ────────────────────────────────────────────────────────
 
 router.post("/invite", authenticate, requireRole("owner", "admin"), emailLimiter, async (req: Request, res: Response) => {
