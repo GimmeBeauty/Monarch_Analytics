@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 
 // ─── Shared Layout ────────────────────────────────────────────────────────────
 
@@ -130,6 +131,7 @@ export { AuthShell, Field, ErrorBanner, SubmitButton };
 
 export default function Login() {
   const { login } = useAuth();
+  const { resetTheme } = useTheme();
   const [, setLocation] = useLocation();
 
   const [email,    setEmail]    = useState("");
@@ -145,6 +147,7 @@ export default function Login() {
 
     try {
       await login(email, password);
+      resetTheme();
       setLocation("/overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

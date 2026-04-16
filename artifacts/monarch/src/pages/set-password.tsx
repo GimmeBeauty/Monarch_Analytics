@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { useLocation, useSearch } from "wouter";
 import { CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { AuthShell, Field, ErrorBanner, SubmitButton } from "./login";
 import { API_BASE } from "@/lib/apiBase";
 
@@ -14,6 +15,7 @@ export default function SetPassword() {
   const token  = params.get("token") ?? "";
 
   const { refetch } = useAuth();
+  const { resetTheme } = useTheme();
 
   const [stage,       setStage]       = useState<Stage>("loading");
   const [email,       setEmail]       = useState("");
@@ -68,6 +70,7 @@ export default function SetPassword() {
       if (!res.ok) throw new Error(data.error ?? "Failed to set password");
 
       await refetch();
+      resetTheme();
       setStage("success");
       setTimeout(() => setLocation("/overview"), 1500);
     } catch (err) {
