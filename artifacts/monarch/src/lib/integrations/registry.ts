@@ -9,6 +9,9 @@
  *   "setup"          — user fills in before initiating auth
  *   "oauth_callback" — populated automatically after OAuth redirect
  *   (none)           — always shown
+ *
+ * OAuth redirect URI (register this in each platform's developer console):
+ *   {your_app_origin}/oauth/callback
  */
 
 import type { IntegrationDef } from "./types";
@@ -36,6 +39,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#0082FB",
     iconBg: "#E8F4FF",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://www.facebook.com/dialog/oauth",
+      scopes: ["ads_management", "ads_read", "business_management"],
+      clientIdField: "app_id",
+      extraParams: { response_type: "code" },
+    },
   },
 
   {
@@ -58,6 +67,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#4285F4",
     iconBg: "#E8F0FE",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+      scopes: ["https://www.googleapis.com/auth/adwords"],
+      clientIdField: "client_id",
+      extraParams: { response_type: "code", access_type: "offline", prompt: "consent" },
+    },
   },
 
   {
@@ -77,6 +92,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#010101",
     iconBg: "#F0F0F0",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://business-api.tiktok.com/portal/auth",
+      scopes: [],
+      clientIdField: "app_id",
+      extraParams: { response_type: "code" },
+    },
   },
 
   {
@@ -97,6 +118,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#E60023",
     iconBg: "#FFEEF0",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://www.pinterest.com/oauth/",
+      scopes: ["ads:read", "ads:write"],
+      clientIdField: "client_id",
+      extraParams: { response_type: "code" },
+    },
   },
 
   {
@@ -151,6 +178,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#FF9900",
     iconBg: "#FFF8EC",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://www.amazon.com/ap/oa",
+      scopes: ["advertising::campaign_management"],
+      clientIdField: "client_id",
+      extraParams: { response_type: "code" },
+    },
   },
 
   {
@@ -218,15 +251,22 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     authType: "oauth",
     oauthButtonLabel: "Connect with Shopify",
     credentials: [
-      { key: "store_domain", label: "Store Domain", type: "text", placeholder: "yourstore.myshopify.com", required: true, group: "setup" },
-      { key: "api_key", label: "Admin API Key", type: "text", placeholder: "For private apps (optional)", required: false, group: "setup", hint: "Leave blank to use OAuth for public app authorization." },
-      { key: "api_secret_key", label: "Admin API Secret", type: "password", placeholder: "••••••••", required: false, group: "setup", sensitive: true },
+      { key: "store_domain", label: "Store Domain", type: "text", placeholder: "yourstore.myshopify.com", required: true, group: "setup", hint: "Your Shopify store subdomain (do not include https://)." },
+      { key: "api_key", label: "Client ID (API Key)", type: "text", placeholder: "your_shopify_client_id", required: true, group: "setup", hint: "From your Shopify Partners dashboard → App → Client credentials. Used as client_id in OAuth." },
+      { key: "api_secret_key", label: "Client Secret (API Secret)", type: "password", placeholder: "••••••••", required: true, group: "setup", sensitive: true, hint: "From your Shopify Partners dashboard → App → Client credentials." },
       { key: "access_token", label: "Access Token", type: "password", placeholder: "shpat_xxxxxxxxxxxxxxx", required: false, group: "oauth_callback", sensitive: true },
     ],
     dataCapabilities: ["revenue", "orders", "products", "inventory", "conversions"],
     iconColor: "#96BF48",
     iconBg: "#F0F8E8",
     defaultSyncSchedule: "hourly",
+    oauthConfig: {
+      authorizationUrl: "https://{store_domain}/admin/oauth/authorize",
+      scopes: ["read_orders", "write_orders", "read_products", "read_analytics", "read_inventory"],
+      clientIdField: "api_key",
+      dynamicUrlField: "store_domain",
+      scopeSeparator: ",",
+    },
   },
 
   {
@@ -248,6 +288,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#FF9900",
     iconBg: "#FFF8EC",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://sellercentral.amazon.com/apps/authorize/consent",
+      scopes: [],
+      clientIdField: "client_id",
+      extraParams: { response_type: "code", version: "beta" },
+    },
   },
 
   {
@@ -285,6 +331,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#010101",
     iconBg: "#F0F0F0",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://auth.tiktok-shops.com/oauth/authorize",
+      scopes: ["seller.read.order", "seller.read.product", "seller.read.shop"],
+      clientIdField: "app_key",
+      extraParams: { response_type: "code" },
+    },
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -310,6 +362,12 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
     iconColor: "#E37400",
     iconBg: "#FFF5E8",
     defaultSyncSchedule: "daily",
+    oauthConfig: {
+      authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+      scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+      clientIdField: "client_id",
+      extraParams: { response_type: "code", access_type: "offline", prompt: "consent" },
+    },
   },
 
   {

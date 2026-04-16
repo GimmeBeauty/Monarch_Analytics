@@ -7,7 +7,6 @@ import { DateRangeProvider } from "@/context/DateRangeContext";
 import { ProfileProvider } from "@/context/ProfileContext";
 import { TeamProvider } from "@/context/TeamContext";
 import { AlertsProvider } from "@/context/AlertsContext";
-import { IntegrationsProvider } from "@/context/IntegrationsContext";
 import { ExportsProvider } from "@/context/ExportsContext";
 import { StoreFilterProvider } from "@/context/StoreFilterContext";
 import { PricingModeProvider } from "@/context/PricingModeContext";
@@ -21,6 +20,7 @@ import Performance from "@/pages/performance";
 import Forecast from "@/pages/forecast";
 import KnowledgeHub from "@/pages/knowledge-hub";
 import Settings from "@/pages/settings";
+import OAuthCallback from "@/pages/oauth-callback";
 import Login from "@/pages/login";
 import SetPassword from "@/pages/set-password";
 import ForgotPassword from "@/pages/forgot-password";
@@ -69,6 +69,11 @@ function AuthLoadingScreen() {
 function Router() {
   return (
     <Switch>
+      {/* OAuth callback — public, no auth required */}
+      <Route path="/oauth/callback">
+        {() => <OAuthCallback />}
+      </Route>
+
       {/* Public auth routes */}
       <Route path="/login">
         {() => <PublicRoute component={Login} />}
@@ -129,7 +134,6 @@ function App() {
         <ProfileProvider>
           <TeamProvider>
           <AlertsProvider>
-          <IntegrationsProvider>
           <ExportsProvider>
           <StoreFilterProvider>
           <PricingModeProvider>
@@ -146,7 +150,6 @@ function App() {
           </PricingModeProvider>
           </StoreFilterProvider>
           </ExportsProvider>
-          </IntegrationsProvider>
           </AlertsProvider>
           </TeamProvider>
         </ProfileProvider>

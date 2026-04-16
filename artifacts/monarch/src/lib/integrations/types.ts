@@ -58,6 +58,22 @@ export interface CredentialField {
   sensitive?: boolean;
 }
 
+/** OAuth 2.0 flow configuration — present on every integration where authType === "oauth" */
+export interface OAuthConfig {
+  /** Authorization endpoint URL. May contain {fieldKey} placeholders (e.g. Shopify store domain). */
+  authorizationUrl: string;
+  /** OAuth scopes to request */
+  scopes: string[];
+  /** Which credential field holds the client_id / app_id sent to the provider */
+  clientIdField: string;
+  /** Scope list separator — defaults to " " (space), some providers use "," */
+  scopeSeparator?: string;
+  /** Credential field to interpolate into authorizationUrl (e.g. "store_domain" for Shopify) */
+  dynamicUrlField?: string;
+  /** Extra fixed query params added to the authorization URL (e.g. access_type, prompt) */
+  extraParams?: Record<string, string>;
+}
+
 /** The static configuration object for an integration — lives in registry.ts */
 export interface IntegrationDef {
   id: string;
@@ -72,6 +88,7 @@ export interface IntegrationDef {
   iconBg: string;             // light background color
   defaultSyncSchedule: SyncSchedule;
   oauthButtonLabel?: string;  // e.g. "Connect with Google"
+  oauthConfig?: OAuthConfig;  // required when authType === "oauth"
   badge?: string;             // e.g. "Beta", "New"
   docsUrl?: string;
 }
