@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Crown, Shield, User, Mail, ChevronDown, X, Check, Clock, UserPlus } from "lucide-react";
+import { Crown, Shield, User, Mail, ChevronDown, X, Check, Clock, UserPlus, Loader2 } from "lucide-react";
 import { useTeam, Role, TeamMember } from "@/context/TeamContext";
+import { API_BASE } from "@/lib/apiBase";
 
 const ROLE_META: Record<Role, { label: string; icon: React.ElementType; color: string; bg: string; desc: string }> = {
   owner: {
@@ -188,12 +189,13 @@ export default function TeamSettings() {
   const { members, currentUserId, currentUserRole, inviteMember } = useTeam();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "user">("user");
+  const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
 
   const canManage = currentUserRole === "owner" || currentUserRole === "admin";
 
-  const handleInvite = () => {
+  const handleInvite = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       setError("Please enter a valid email address.");
@@ -204,11 +206,35 @@ export default function TeamSettings() {
       setError("This email is already on the team.");
       return;
     }
-    inviteMember(trimmed, role);
-    setEmail("");
+
+    setSending(true);
     setError("");
-    setSent(true);
-    setTimeout(() => setSent(false), 2500);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/invite`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, role }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError((data as { error?: string }).error ?? "Failed to send invitation. Please try again.");
+        return;
+      }
+
+      // Update local team state so the member appears immediately
+      inviteMember(trimmed, role);
+      setEmail("");
+      setSent(true);
+      setTimeout(() => setSent(false), 3000);
+    } catch {
+      setError("Network error — please check your connection and try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const activeMembers = members.filter((m) => m.status === "active");
@@ -289,11 +315,12 @@ export default function TeamSettings() {
 
             <button
               onClick={handleInvite}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all shrink-0"
+              disabled={sending}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
             >
-              {sent ? <Check size={14} /> : <UserPlus size={14} />}
-              {sent ? "Invited!" : "Send Invite"}
+              {sending ? <Loader2 size={14} className="animate-spin" /> : sent ? <Check size={14} /> : <UserPlus size={14} />}
+              {sending ? "Sending…" : sent ? "Invited!" : "Send Invite"}
             </button>
           </div>
           {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
