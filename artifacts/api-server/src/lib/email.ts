@@ -1,9 +1,16 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const FROM = process.env.EMAIL_FROM ?? "Monarch <noreply@monarchdash.com>";
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+
+// Lazy-initialize so the server can start without a Resend key.
+// Sending will still fail if the key is absent, but startup won't crash.
+function getResend(): Resend {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not set. Configure it to enable email sending.");
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
@@ -20,24 +27,21 @@ function baseHtml(title: string, body: string): string {
     <tr>
       <td align="center">
         <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;border:1px solid #FFDE99;overflow:hidden;">
-          <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#FFBC80 0%,#FFE29A 100%);padding:28px 40px;">
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#3A3A3A;letter-spacing:-0.5px;">MONARCH</h1>
               <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;opacity:0.6;">Analytics Platform</p>
             </td>
           </tr>
-          <!-- Body -->
           <tr>
             <td style="padding:36px 40px 40px;">
               ${body}
             </td>
           </tr>
-          <!-- Footer -->
           <tr>
             <td style="padding:20px 40px;border-top:1px solid #FFF0D9;background:#FFFCF5;">
               <p style="margin:0;font-size:11px;color:#3A3A3A;opacity:0.4;text-align:center;">
-                © ${new Date().getFullYear()} Monarch Analytics Platform · This email was sent to you because an action was taken on your account.
+                © ${new Date().getFullYear()} Monarch Analytics Platform · This email was sent because an action was taken on your account.
               </p>
             </td>
           </tr>
@@ -73,7 +77,7 @@ export async function sendInviteEmail(to: string, token: string, inviterName?: s
     </p>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: "You've been invited to Monarch",
@@ -100,7 +104,7 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
     </p>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: "Reset your Monarch password",

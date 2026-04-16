@@ -25,3 +25,20 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## MONARCH App
+
+**Artifacts:**
+- `artifacts/monarch` — React + Vite frontend (port from $PORT)
+- `artifacts/api-server` — Express API server (port 8080)
+
+**Authentication:**
+- Owner login: `nick@gimmebeauty.com` / `Monarch2024!`
+- JWT session cookie (`monarch_session`, 7 day expiry)
+- Roles: `owner` (master), `admin` (can edit settings), `user` (read-only)
+
+**Key DB tables:** `users`, `auth_tokens`, `stores`, `forecast_years`, `store_forecasts`
+
+**Env vars required:** `JWT_SECRET`, `SESSION_SECRET`, `DATABASE_URL`
+
+**Email (optional):** Set `RESEND_API_KEY` + `EMAIL_FROM` + `APP_URL` to enable invite/reset emails. Server starts fine without it.

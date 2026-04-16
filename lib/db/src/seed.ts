@@ -12,7 +12,7 @@ import { db, usersTable } from "./index.js";
 const OWNER: typeof usersTable.$inferInsert = {
   email:        "nick@gimmebeauty.com",
   // bcrypt hash of the initial password (salt rounds: 12)
-  passwordHash: "$2b$12$PjlgVIiv2MfS8bij3yDmOe/esmO9s27gTtVZNGYJm8GgbsEulyo8m",
+  passwordHash: "$2b$12$bIR06EGQHq99Jkmrn9CTNuTRBAcTqfrh9.vFqum9g4i1dWz.LBKga", // Monarch2024!
   name:         "Nick Christensen",
   role:         "owner",
   status:       "active",
