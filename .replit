@@ -31,3 +31,5 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+APP_URL = "https://48f1ef5a-9220-4ca2-b3db-46ba50c932ea-00-2h4ixm2n5o4n6.spock.replit.dev"
+EMAIL_FROM = "Monarch <onboarding@resend.dev>"
