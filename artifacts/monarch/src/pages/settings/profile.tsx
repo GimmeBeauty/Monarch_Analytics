@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Camera, Check, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useProfile } from "@/context/ProfileContext";
 import { useAuth } from "@/context/AuthContext";
@@ -68,24 +68,16 @@ export default function ProfileSettings() {
     }
   };
 
-  const cardStyle = {
-    border: "1px solid transparent",
-    backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-    backgroundOrigin: "border-box",
-    backgroundClip: "padding-box, border-box",
-  };
-
-  const cardStyleDark = "dark:bg-[#231a0e]";
 
   return (
     <DashboardLayout title="Profile" description="Update your personal details, title, and profile picture.">
       <div className="max-w-lg space-y-6">
 
         {/* Avatar */}
-        <div className={`rounded-xl p-6 bg-white ${cardStyleDark}`} style={cardStyle}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-5">Profile Picture</h2>
           <div className="flex items-center gap-6">
-            <div className="relative group">
+            <div>
               {profile.picture ? (
                 <img
                   src={profile.picture}
@@ -100,14 +92,6 @@ export default function ProfileSettings() {
                   {initials}
                 </div>
               )}
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                {uploading
-                  ? <Loader2 size={20} className="text-white animate-spin" />
-                  : <Camera size={20} className="text-white" />}
-              </button>
             </div>
 
             <div>
@@ -144,7 +128,7 @@ export default function ProfileSettings() {
         </div>
 
         {/* Name & title */}
-        <div className={`rounded-xl p-6 bg-white ${cardStyleDark}`} style={cardStyle}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-5">Personal Details</h2>
           <div className="space-y-4">
             <div>
@@ -200,7 +184,7 @@ export default function ProfileSettings() {
         </div>
 
         {/* Preview */}
-        <div className={`rounded-xl p-6 bg-white ${cardStyleDark}`} style={cardStyle}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-4">Sidebar Preview</h2>
           <div className="flex items-center gap-3 p-3 rounded-lg bg-[#FFBC80]/8">
             {profile.picture ? (

@@ -11,12 +11,6 @@ function fmtCurrency(v: number): string {
   return `$${Math.round(v)}`;
 }
 
-const CARD = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-} as const;
 
 interface MetricProps {
   icon: React.FC<{ className?: string }>;
@@ -28,7 +22,7 @@ interface MetricProps {
 
 function Metric({ icon: Icon, label, value, sub, subColor }: MetricProps) {
   return (
-    <div className="rounded-2xl p-4 bg-white dark:bg-[#1a1208]" style={CARD}>
+    <div className="rounded-2xl p-4 monarch-card">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider">
           {label}

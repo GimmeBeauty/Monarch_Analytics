@@ -262,12 +262,6 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
 
 // ─── Table Container ──────────────────────────────────────────────────────────
 
-const CARD = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-} as const;
 
 interface ChannelDeepDiveProps {
   channels: ChannelMMM[];
@@ -309,7 +303,7 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
   }
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-[#1a1208]" style={CARD}>
+    <div className="rounded-2xl monarch-card">
       <div className="px-5 pt-5 pb-3">
         <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Channel Deep Dive</h3>
         <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">

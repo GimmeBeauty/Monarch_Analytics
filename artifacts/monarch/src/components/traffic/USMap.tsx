@@ -28,12 +28,6 @@ function fmtNum(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-const cardStyle = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 interface Props {
@@ -72,7 +66,7 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1208]" style={cardStyle}>
+      <div className="rounded-2xl overflow-hidden monarch-card">
 
         {/* ── Header ── */}
         <div className="px-5 pt-5 pb-3">
@@ -213,7 +207,7 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
 
       {/* ── State drill-down table ── */}
       {selectedState && selectedStateData && (
-        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1208]" style={cardStyle}>
+        <div className="rounded-2xl overflow-hidden monarch-card">
           <div className="px-5 pt-4 pb-3 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] flex items-center gap-2">

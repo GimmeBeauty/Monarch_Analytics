@@ -33,19 +33,13 @@ function ContribBar({ value, color }: { value: number; color: string }) {
   );
 }
 
-const CARD_STYLE = {
-  border: "1px solid transparent",
-  backgroundImage:
-    "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-} as const;
+const CARD_STYLE = "monarch-card";
 
 // ─── Top Stores ───────────────────────────────────────────────────────────────
 
 function TopStores({ stores }: { stores: StoreBreakdown[] }) {
   return (
-    <div className="rounded-2xl p-5 bg-white dark:bg-[#1a1208]" style={CARD_STYLE}>
+    <div className={`rounded-2xl p-5 ${CARD_STYLE}`}>
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Top Stores</h3>
         <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">Revenue by store</p>
@@ -119,7 +113,7 @@ function TopChannels({ channels }: { channels: ChannelBreakdown[] }) {
   };
 
   return (
-    <div className="rounded-2xl p-5 bg-white dark:bg-[#1a1208]" style={CARD_STYLE}>
+    <div className={`rounded-2xl p-5 ${CARD_STYLE}`}>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Top Channels</h3>
@@ -193,7 +187,7 @@ function ContributionBreakdown({
   const slices = view === "store" ? byStore : byChannel;
 
   return (
-    <div className="rounded-2xl p-5 bg-white dark:bg-[#1a1208]" style={CARD_STYLE}>
+    <div className={`rounded-2xl p-5 ${CARD_STYLE}`}>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Contribution</h3>

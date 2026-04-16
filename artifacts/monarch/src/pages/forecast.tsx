@@ -49,12 +49,6 @@ export default function Forecast() {
     };
   }, [data, sw]);
 
-  const cardStyle = {
-    border: "1px solid transparent",
-    backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-    backgroundOrigin: "border-box",
-    backgroundClip: "padding-box, border-box",
-  };
 
   return (
     <DashboardLayout
@@ -75,7 +69,7 @@ export default function Forecast() {
               { label: "Projected ROAS",    value: `${scaledData.projectedROAS}x` },
               { label: "Confidence",        value: `${scaledData.confidence}%` },
             ].map((kpi) => (
-              <div key={kpi.label} className="rounded-xl p-5 bg-white dark:bg-[#231a0e] relative overflow-hidden" style={cardStyle}>
+              <div key={kpi.label} className="rounded-xl p-5 monarch-card-settings relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-20 h-20 opacity-10 rounded-bl-full" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
                 <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-2">{kpi.label}</p>
                 <p className="text-2xl font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{kpi.value}</p>
@@ -84,7 +78,7 @@ export default function Forecast() {
           </div>
 
           {/* Forecast chart */}
-          <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={cardStyle}>
+          <div className="rounded-xl p-6 monarch-card-settings">
             <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">Revenue Forecast with Confidence Interval</h2>
             <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mb-4">Shaded area represents the upper and lower confidence bounds</p>
             <ResponsiveContainer width="100%" height={280}>
@@ -115,7 +109,7 @@ export default function Forecast() {
           </div>
 
           {/* Scenario comparison */}
-          <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={cardStyle}>
+          <div className="rounded-xl p-6 monarch-card-settings">
             <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-4">Scenario Comparison</h2>
             <div className="grid grid-cols-3 gap-4">
               {scaledData.scenarioComparison.map((s: any, i: number) => (

@@ -172,16 +172,7 @@ export default function ActivityFeed({ events }: ActivityFeedProps) {
   const alertCount = events.filter((e) => e.category === "alert" && e.severity !== "info").length;
 
   return (
-    <div
-      className="rounded-2xl bg-white dark:bg-[#1a1208]"
-      style={{
-        border: "1px solid transparent",
-        backgroundImage:
-          "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-        backgroundOrigin: "border-box",
-        backgroundClip: "padding-box, border-box",
-      }}
-    >
+    <div className="rounded-2xl monarch-card">
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
         <div className="flex items-center justify-between mb-3">

@@ -34,19 +34,7 @@ function fmtNumber(v: number): string {
 
 // ─── Card Style Helpers ───────────────────────────────────────────────────────
 
-const CARD_CLASS = "attr-card rounded-xl bg-white dark:bg-[#231a0e]";
-const cardStyle = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-} as const;
-
-const DARK_CARD_STYLE = `
-  .dark .attr-card {
-    background-image: linear-gradient(#231a0e, #231a0e), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%) !important;
-  }
-`;
+const CARD_CLASS = "monarch-card-settings rounded-xl";
 
 // ─── Channel Selector ─────────────────────────────────────────────────────────
 
@@ -87,7 +75,7 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
   }, [allChannels]);
 
   return (
-    <div className={`${CARD_CLASS}`} style={cardStyle}>
+    <div className={`${CARD_CLASS}`}>
       {/* ── Trigger row ── */}
       <button
         onClick={() => setOpen(v => !v)}
@@ -210,7 +198,7 @@ function BlendedMetricCard({ m }: { m: BlendedMetric }) {
     : "text-red-500 dark:text-red-400";
 
   return (
-    <div className={`${CARD_CLASS} p-4 relative overflow-hidden`} style={cardStyle} title={m.description}>
+    <div className={`${CARD_CLASS} p-4 relative overflow-hidden`} title={m.description}>
       <div className="absolute top-0 right-0 w-16 h-16 opacity-8 rounded-bl-full"
         style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
       <p className="text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
@@ -290,7 +278,7 @@ function EfficiencyTable({ rows }: { rows: AdChannelRow[] }) {
   const thRCls = thCls + " text-right";
 
   return (
-    <div className={`${CARD_CLASS} overflow-hidden`} style={cardStyle}>
+    <div className={`${CARD_CLASS} overflow-hidden`}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-[#FFBC80]/15">
         <div>
@@ -576,7 +564,7 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
   };
 
   return (
-    <div className={`${CARD_CLASS} overflow-hidden`} style={cardStyle}>
+    <div className={`${CARD_CLASS} overflow-hidden`}>
       <div className="px-5 py-4 border-b border-[#FFBC80]/15">
         <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Advanced Intelligence</h2>
         <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
@@ -723,7 +711,7 @@ export default function Attribution() {
       title="Ad Attribution"
       description="Paid media performance command center — efficiency, signals, and channel intelligence."
     >
-      <style>{DARK_CARD_STYLE}</style>
+      
 
       {allChannels.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -747,7 +735,7 @@ export default function Attribution() {
           </section>
 
           {!hasData ? (
-            <div className={`${CARD_CLASS} p-10 text-center`} style={cardStyle}>
+            <div className={`${CARD_CLASS} p-10 text-center`}>
               <p className="text-sm text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
                 No data for the selected channels. Select at least one channel above.
               </p>
@@ -788,7 +776,7 @@ export default function Attribution() {
                   )}
                 </div>
                 {data.signals.length === 0 ? (
-                  <div className={`${CARD_CLASS} p-8 text-center`} style={cardStyle}>
+                  <div className={`${CARD_CLASS} p-8 text-center`}>
                     <p className="text-sm text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
                       No performance issues detected for this period.
                     </p>
@@ -807,7 +795,7 @@ export default function Attribution() {
                   <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">Impressions → Clicks → Conversions</span>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4">
-                  <div className={`${CARD_CLASS} p-4`} style={cardStyle}>
+                  <div className={`${CARD_CLASS} p-4`}>
                     <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider mb-2">
                       Select Channel
                     </p>
@@ -832,7 +820,7 @@ export default function Attribution() {
                     </div>
                   </div>
 
-                  <div className={`${CARD_CLASS} p-5`} style={cardStyle}>
+                  <div className={`${CARD_CLASS} p-5`}>
                     {selectedFunnel ? (
                       <>
                         <div className="flex items-center gap-2 mb-4">
@@ -851,7 +839,7 @@ export default function Attribution() {
 
               {/* ── 5. Daily ROAS Trend (Line Chart) ─────────────────────── */}
               <section>
-                <div className={`${CARD_CLASS} p-5`} style={cardStyle}>
+                <div className={`${CARD_CLASS} p-5`}>
                   <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
                     <div>
                       <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Daily ROAS Trend</h2>

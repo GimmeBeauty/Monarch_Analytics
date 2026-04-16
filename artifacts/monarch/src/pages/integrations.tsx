@@ -17,13 +17,7 @@ export default function Integrations() {
         {integrations.map(({ Icon, name, desc, connected, color }) => (
           <div
             key={name}
-            className="flex items-center gap-4 p-5 rounded-xl bg-white dark:bg-[#231a0e]"
-            style={{
-              border: "1px solid transparent",
-              backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-              backgroundOrigin: "border-box",
-              backgroundClip: "padding-box, border-box",
-            }}
+            className="flex items-center gap-4 p-5 rounded-xl monarch-card-settings"
           >
             <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#2e2010]">
               <Icon size={20} color={color} />

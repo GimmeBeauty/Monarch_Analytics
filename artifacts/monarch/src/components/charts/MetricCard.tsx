@@ -15,19 +15,8 @@ export default function MetricCard({ label, value, change, changeLabel, trend }:
   return (
     <div
       data-testid={`metric-card-${label.toLowerCase().replace(/\s+/g, "-")}`}
-      className="relative rounded-xl p-5 bg-white dark:bg-[#231a0e] overflow-hidden"
-      style={{
-        border: "1px solid transparent",
-        backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-        backgroundOrigin: "border-box",
-        backgroundClip: "padding-box, border-box",
-      }}
+      className="relative rounded-xl p-5 monarch-card overflow-hidden"
     >
-      <style>{`
-        .dark [data-testid^="metric-card"] {
-          background-image: linear-gradient(#231a0e, #231a0e), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%) !important;
-        }
-      `}</style>
 
       {/* Subtle gradient accent in corner */}
       <div

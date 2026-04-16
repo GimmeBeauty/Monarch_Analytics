@@ -133,15 +133,8 @@ function MetricPanel({
     format === "ratio" ? fmtRoas(v) :
     v.toFixed(2);
 
-  const CARD_INNER = {
-    border: "1px solid transparent",
-    backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-    backgroundOrigin: "border-box",
-    backgroundClip: "padding-box, border-box",
-  } as const;
-
   return (
-    <div className="rounded-xl p-3.5 bg-white dark:bg-[#1a1208]" style={CARD_INNER}>
+    <div className="rounded-xl p-3.5 monarch-card">
       <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-1.5">{label}</p>
       <p className="text-xl font-black text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums leading-none mb-1">
         {fmt(projected)}
@@ -243,18 +236,11 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
 
   const scenario = useMemo(() => simulate(multipliers), [multipliers, simulate]);
 
-  const CARD = {
-    border: "1px solid transparent",
-    backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-    backgroundOrigin: "border-box",
-    backgroundClip: "padding-box, border-box",
-  } as const;
-
   const currentRevenue = summary.totalAttributedRevenue + totalBaseRevenue;
   const currentMer = summary.totalSpend > 0 ? currentRevenue / summary.totalSpend : 0;
 
   return (
-    <div className="rounded-2xl p-5 bg-white dark:bg-[#1a1208]" style={CARD}>
+    <div className="rounded-2xl p-5 monarch-card">
       {/* Header */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>

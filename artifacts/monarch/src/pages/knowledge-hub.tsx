@@ -89,13 +89,7 @@ export default function KnowledgeHub() {
                 {cat.items.map((article) => (
                   <button
                     key={article.title}
-                    className="w-full text-left p-4 rounded-xl bg-white dark:bg-[#231a0e] group transition-all hover:shadow-sm"
-                    style={{
-                      border: "1px solid transparent",
-                      backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-                      backgroundOrigin: "border-box",
-                      backgroundClip: "padding-box, border-box",
-                    }}
+                    className="w-full text-left p-4 rounded-xl monarch-card-settings group transition-all hover:shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-4">
                       <div>

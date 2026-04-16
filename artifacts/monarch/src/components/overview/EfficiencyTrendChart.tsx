@@ -46,16 +46,7 @@ export default function EfficiencyTrendChart({ data }: EfficiencyTrendChartProps
   const showRoas = view === "both" || view === "roas";
 
   return (
-    <div
-      className="rounded-2xl p-5 bg-white dark:bg-[#1a1208]"
-      style={{
-        border: "1px solid transparent",
-        backgroundImage:
-          "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-        backgroundOrigin: "border-box",
-        backgroundClip: "padding-box, border-box",
-      }}
-    >
+    <div className="rounded-2xl p-5 monarch-card">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>

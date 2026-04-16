@@ -10,18 +10,6 @@ const KPI_ICONS: Record<string, React.FC<{ className?: string }>> = {
   mer:       BarChart2,
 };
 
-const cardStyle = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-};
-const cardStyleDark = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#1a1208, #1a1208), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-};
 
 function ChangeBadge({ change, positive }: { change: number; positive: boolean }) {
   const isUp   = change > 0;
@@ -49,10 +37,8 @@ function KPICard({ kpi }: { kpi: TrafficKPI }) {
   return (
     <div
       title={kpi.description}
-      className="relative rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1a1208] overflow-hidden group hover:shadow-md transition-shadow duration-200 cursor-default"
-      style={cardStyle}
+      className="relative rounded-2xl p-4 sm:p-5 monarch-card overflow-hidden group hover:shadow-md transition-shadow duration-200 cursor-default"
     >
-      <style>{`.dark .traffic-kpi-card { background-image: linear-gradient(#1a1208, #1a1208), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%) !important; }`}</style>
 
       {/* Corner accent */}
       <div className="absolute top-0 right-0 w-24 h-24 opacity-10 rounded-bl-full"

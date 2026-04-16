@@ -22,12 +22,6 @@ const defaultFilters: Filters = {
   search:"", storeId:"", minSales:"", maxSales:"", minUnits:"", maxUnits:"", growthMin:"",
 };
 
-const cardStyle = {
-  border: "1px solid transparent",
-  backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip: "padding-box, border-box",
-};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -141,7 +135,7 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1208]" style={cardStyle}>
+    <div className="rounded-2xl overflow-hidden monarch-card">
       {/* Header */}
       <div className="px-5 pt-5 pb-4 flex flex-wrap items-center gap-3">
         <div>

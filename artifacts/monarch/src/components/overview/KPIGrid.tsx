@@ -46,14 +46,7 @@ function KPICard({ kpi }: { kpi: KPIMetric }) {
   return (
     <div
       title={kpi.description}
-      className="relative rounded-2xl p-4 sm:p-5 bg-white dark:bg-[#1a1208] overflow-hidden group hover:shadow-md transition-shadow duration-200 cursor-default"
-      style={{
-        border: "1px solid transparent",
-        backgroundImage:
-          "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-        backgroundOrigin: "border-box",
-        backgroundClip: "padding-box, border-box",
-      }}
+      className="relative rounded-2xl p-4 sm:p-5 monarch-card overflow-hidden group hover:shadow-md transition-shadow duration-200 cursor-default"
     >
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">

@@ -200,6 +200,36 @@
   }
 }
 
+/* ─── Monarch cards: gradient border, dark-mode-aware fill ─────────────────── */
+/* Standard analytics card (#1a1208 dark fill) */
+.monarch-card {
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(#ffffff, #ffffff),
+    linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+.dark .monarch-card {
+  background-image:
+    linear-gradient(#1a1208, #1a1208),
+    linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%);
+}
+/* Elevated settings card (#231a0e dark fill, slightly warmer) */
+.monarch-card-settings {
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(#ffffff, #ffffff),
+    linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+.dark .monarch-card-settings {
+  background-image:
+    linear-gradient(#231a0e, #231a0e),
+    linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%);
+}
+
 @layer utilities {
   .gradient-border {
     position: relative;

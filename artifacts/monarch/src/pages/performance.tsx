@@ -61,13 +61,6 @@ function fmtCompact(v: number): string {
 
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 
-const CARD_STYLE = {
-  border: "1px solid transparent",
-  backgroundImage:
-    "linear-gradient(#fff, #fff), linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)",
-  backgroundOrigin: "border-box",
-  backgroundClip:   "padding-box, border-box",
-};
 
 const TT_STYLE = {
   background:   "rgba(255,249,242,0.97)",
@@ -122,7 +115,7 @@ function ChannelSelectorAccordion({
   }, [allChannels]);
 
   return (
-    <div className="rounded-xl bg-white dark:bg-[#231a0e]" style={CARD_STYLE}>
+    <div className="rounded-xl monarch-card-settings">
       {/* ── Trigger row ── */}
       <button
         onClick={() => setOpen((v) => !v)}
@@ -478,7 +471,7 @@ export default function Performance() {
         />
 
         {/* ── Section 1: Daily Revenue vs Spend Composition ─────────────── */}
-        <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={CARD_STYLE}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
             Daily Revenue vs. Spend Composition
           </h2>
@@ -557,7 +550,7 @@ export default function Performance() {
         </div>
 
         {/* ── Section 2: Efficiency Trends ──────────────────────────────── */}
-        <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={CARD_STYLE}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
             <div>
@@ -756,7 +749,7 @@ export default function Performance() {
         </div>
 
         {/* ── Section 3: Day-of-Week Seasonality ───────────────────────── */}
-        <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={CARD_STYLE}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
             Day-of-Week Seasonality
           </h2>
@@ -811,7 +804,7 @@ export default function Performance() {
         </div>
 
         {/* ── Section 4: Signal Intelligence ───────────────────────────── */}
-        <div className="rounded-xl p-6 bg-white dark:bg-[#231a0e]" style={CARD_STYLE}>
+        <div className="rounded-xl p-6 monarch-card-settings">
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle size={14} className="text-[#FFBC80]" />
             <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
