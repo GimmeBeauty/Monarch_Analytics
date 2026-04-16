@@ -28,10 +28,15 @@ router.get("/", authenticate, async (_req, res) => {
 
     const integrations = ALL_PROVIDERS.map((provider) => {
       const row = rows.find((r) => r.provider === provider);
+      let clientId: string | null = null;
+      if (row?.metadata) {
+        try { clientId = (JSON.parse(row.metadata) as { clientId?: string }).clientId ?? null; } catch { /* ignore */ }
+      }
       return {
         provider,
         connected:  !!row,
         shopDomain: row?.shopDomain ?? null,
+        clientId,
         status:     row?.status    ?? null,
       };
     });
@@ -182,6 +187,72 @@ router.delete("/shopify", authenticate, async (_req, res) => {
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: "Failed to disconnect Shopify" });
+  }
+});
+
+// ─── POST /api/integrations/:provider/credentials ─────────────────────────────
+// Saves manual API key credentials (Client ID + Client Secret) for non-OAuth
+// providers such as Google Ads, Meta, TikTok, and Google Analytics.
+
+const MANUAL_PROVIDERS = ["google_ads", "google_analytics", "meta", "tiktok"] as const;
+type ManualProvider = (typeof MANUAL_PROVIDERS)[number];
+
+router.post("/:provider/credentials", authenticate, async (req, res) => {
+  const { provider } = req.params as { provider: string };
+
+  if (!MANUAL_PROVIDERS.includes(provider as ManualProvider)) {
+    res.status(400).json({ error: `Manual credentials not supported for provider: ${provider}` });
+    return;
+  }
+
+  const { clientId, clientSecret } = req.body as { clientId?: string; clientSecret?: string };
+
+  if (!clientId?.trim() || !clientSecret?.trim()) {
+    res.status(400).json({ error: "Both Client ID and Client Secret are required" });
+    return;
+  }
+
+  try {
+    await db
+      .insert(integrationsTable)
+      .values({
+        provider,
+        accessToken: clientSecret.trim(),
+        metadata:   JSON.stringify({ clientId: clientId.trim(), authType: "api_key" }),
+        status:     "connected",
+      })
+      .onConflictDoUpdate({
+        target: integrationsTable.provider,
+        set: {
+          accessToken: clientSecret.trim(),
+          metadata:   JSON.stringify({ clientId: clientId.trim(), authType: "api_key" }),
+          status:     "connected",
+          updatedAt:  new Date(),
+        },
+      });
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: "Failed to save credentials" });
+  }
+});
+
+// ─── DELETE /api/integrations/:provider ───────────────────────────────────────
+// Generic disconnect for any provider (manual or OAuth).
+
+router.delete("/:provider", authenticate, async (req, res) => {
+  const { provider } = req.params as { provider: string };
+
+  if (!ALL_PROVIDERS.includes(provider as (typeof ALL_PROVIDERS)[number])) {
+    res.status(400).json({ error: `Unknown provider: ${provider}` });
+    return;
+  }
+
+  try {
+    await db.delete(integrationsTable).where(eq(integrationsTable.provider, provider));
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: "Failed to disconnect" });
   }
 });
 
