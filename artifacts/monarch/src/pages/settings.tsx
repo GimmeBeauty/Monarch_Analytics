@@ -32,26 +32,38 @@ const navItems = [
 ];
 
 function ProfilePanel() {
-  const { profile, updateProfile } = useProfile();
-  const [name, setName] = useState(profile.name);
-  const [title, setTitle] = useState(profile.title);
-  const [saved, setSaved] = useState(false);
+  const { profile, saveProfile, saveAvatar } = useProfile();
+  const [name,      setName]      = useState(profile.name);
+  const [title,     setTitle]     = useState(profile.title);
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const initials = name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+  const initials = (name || profile.name || "?")
+    .split(/[\s@]/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
-  const handleSave = () => {
-    updateProfile({ name, title });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveProfile({ name, title });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploading(true);
     const reader = new FileReader();
-    reader.onload = (ev) => updateProfile({ picture: ev.target?.result as string });
+    reader.onload = async (ev) => {
+      try { await saveAvatar(ev.target?.result as string); } finally { setUploading(false); }
+    };
     reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   return (
@@ -78,14 +90,14 @@ function ProfilePanel() {
             </div>
           </div>
           <div>
-            <button onClick={() => fileRef.current?.click()}
-              className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
-              Upload Photo
+              {uploading ? "Saving…" : "Upload Photo"}
             </button>
             {profile.picture && (
-              <button onClick={() => updateProfile({ picture: "" })}
-                className="ml-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10 transition-colors">
+              <button onClick={() => saveAvatar(null)} disabled={uploading}
+                className="ml-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10 transition-colors disabled:opacity-50">
                 Remove
               </button>
             )}
@@ -111,11 +123,11 @@ function ProfilePanel() {
               className="w-full px-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none transition-colors" />
           </div>
         </div>
-        <button onClick={handleSave}
-          className="mt-4 flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all"
+        <button onClick={handleSave} disabled={saving}
+          className="mt-4 flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-50"
           style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
           {saved && <Check size={13} />}
-          {saved ? "Saved!" : "Save Changes"}
+          {saving ? "Saving…" : saved ? "Saved!" : "Save Changes"}
         </button>
       </div>
 

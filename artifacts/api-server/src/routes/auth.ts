@@ -122,13 +122,47 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
 
   res.json({
     user: {
-      id:     user.id,
-      email:  user.email,
-      name:   user.name,
-      role:   user.role,
-      status: user.status,
+      id:        user.id,
+      email:     user.email,
+      name:      user.name,
+      title:     user.title,
+      avatarUrl: user.avatarUrl,
+      role:      user.role,
+      status:    user.status,
     },
   });
+});
+
+// ─── PATCH /auth/profile ──────────────────────────────────────────────────────
+// Update the current user's name, title, and/or avatarUrl.
+
+router.patch("/profile", authenticate, async (req: Request, res: Response) => {
+  const { name, title, avatarUrl } = req.body as {
+    name?:      string;
+    title?:     string;
+    avatarUrl?: string | null;
+  };
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (name      !== undefined) updates.name      = name.trim() || null;
+  if (title     !== undefined) updates.title     = title.trim() || null;
+  if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl || null;
+
+  const [updated] = await db
+    .update(usersTable)
+    .set(updates)
+    .where(eq(usersTable.id, req.auth!.userId))
+    .returning({
+      id:        usersTable.id,
+      email:     usersTable.email,
+      name:      usersTable.name,
+      title:     usersTable.title,
+      avatarUrl: usersTable.avatarUrl,
+      role:      usersTable.role,
+      status:    usersTable.status,
+    });
+
+  res.json({ user: updated });
 });
 
 // ─── GET /auth/users ──────────────────────────────────────────────────────────
@@ -143,6 +177,7 @@ router.get("/users", authenticate, async (_req: Request, res: Response) => {
       email:     usersTable.email,
       role:      usersTable.role,
       status:    usersTable.status,
+      avatarUrl: usersTable.avatarUrl,
       joinedAt:  usersTable.createdAt,
     })
     .from(usersTable)

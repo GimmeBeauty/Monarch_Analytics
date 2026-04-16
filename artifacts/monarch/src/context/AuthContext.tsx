@@ -13,6 +13,8 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
+  title: string | null;
+  avatarUrl: string | null;
   role: "owner" | "admin" | "user";
   status: "invited" | "active" | "disabled";
 }

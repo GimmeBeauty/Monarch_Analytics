@@ -50,9 +50,19 @@ function RoleBadge({ role }: { role: Role }) {
   );
 }
 
-function InitialsAvatar({ name, email }: { name: string | null; email: string }) {
+function MemberAvatar({ name, email, avatarUrl }: { name: string | null; email: string; avatarUrl?: string | null }) {
   const display = name ?? email;
   const initials = display.split(/[\s@]/).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={display}
+        className="w-9 h-9 rounded-full object-cover shrink-0"
+      />
+    );
+  }
   return (
     <div
       className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[#3A3A3A] text-sm shrink-0"
@@ -83,7 +93,7 @@ function MemberRow({
   const display = member.name ?? member.email.split("@")[0];
   return (
     <div className="flex items-center gap-3 py-3 px-4 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/20">
-      <InitialsAvatar name={member.name} email={member.email} />
+      <MemberAvatar name={member.name} email={member.email} avatarUrl={member.avatarUrl} />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">

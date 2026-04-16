@@ -18,6 +18,7 @@ export interface TeamMember {
   email: string;
   role: Role;
   status: MemberStatus;
+  avatarUrl?: string | null;
   joinedAt: string;
 }
 

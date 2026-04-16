@@ -7,6 +7,8 @@ export const usersTable = pgTable("users", {
   email:        text("email").notNull().unique(),
   passwordHash: text("password_hash"),  // null until password is set
   name:         text("name"),
+  title:        text("title"),          // job title / role description
+  avatarUrl:    text("avatar_url"),     // base64 data URL or hosted URL
   role:         text("role").notNull().default("user"),    // 'owner' | 'admin' | 'user'
   status:       text("status").notNull().default("invited"), // 'invited' | 'active' | 'disabled'
   lastLoginAt:  timestamp("last_login_at"),
