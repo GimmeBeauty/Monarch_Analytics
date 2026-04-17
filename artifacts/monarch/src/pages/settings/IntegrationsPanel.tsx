@@ -5,28 +5,29 @@ import {
 } from "react-icons/si";
 import {
   CheckCircle2, XCircle, Loader2, Plug2, Trash2, Pencil, Eye, EyeOff,
-  Plus, ShoppingBag, Target, Zap, ChartBar, Link2, X, AlertCircle,
+  Plus, ShoppingBag, Target, Zap, ChartBar, Link2, X, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { API_BASE } from "@/lib/apiBase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface FieldDef {
-  key:         string;
-  label:       string;
+  key:          string;
+  label:        string;
   placeholder?: string;
-  secret?:     boolean;
+  secret?:      boolean;
 }
 
 interface ProviderDef {
-  id:       string;
-  name:     string;
-  desc:     string;
-  Icon:     React.ComponentType<{ size?: number; color?: string; className?: string }>;
-  color:    string;
-  section:  string;
-  authMode: "oauth_shopify" | "api_key";
-  fields?:  FieldDef[];
+  id:           string;
+  name:         string;
+  desc:         string;
+  Icon:         React.ComponentType<{ size?: number; color?: string; className?: string }>;
+  color:        string;
+  section:      string;
+  authMode:     "oauth_shopify" | "oauth" | "api_key";
+  oauthLabel?:  string;
+  fields?:      FieldDef[];
 }
 
 interface IntegrationStatus {
@@ -43,11 +44,13 @@ const PROVIDERS: ProviderDef[] = [
   // eCommerce
   {
     id: "shopify", name: "Shopify", desc: "Orders, revenue & attribution",
-    Icon: SiShopify, color: "#96BF48", section: "eCommerce", authMode: "oauth_shopify",
+    Icon: SiShopify, color: "#96BF48", section: "eCommerce",
+    authMode: "oauth_shopify", oauthLabel: "Connect Shopify",
   },
   {
     id: "tiktok_shop", name: "TikTok Shop", desc: "TikTok storefront sales data",
-    Icon: SiTiktok, color: "#010101", section: "eCommerce", authMode: "api_key",
+    Icon: SiTiktok, color: "#010101", section: "eCommerce",
+    authMode: "oauth", oauthLabel: "Connect TikTok Shop",
     fields: [
       { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
       { key: "shopId", label: "Shop ID", placeholder: "Enter shop ID" },
@@ -55,7 +58,8 @@ const PROVIDERS: ProviderDef[] = [
   },
   {
     id: "walmart", name: "Walmart Marketplace", desc: "Walmart seller performance",
-    Icon: SiWalmart, color: "#0071CE", section: "eCommerce", authMode: "api_key",
+    Icon: SiWalmart, color: "#0071CE", section: "eCommerce",
+    authMode: "oauth", oauthLabel: "Connect Walmart",
     fields: [
       { key: "clientId", label: "Client ID", placeholder: "Enter client ID" },
       { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "Enter client secret" },
@@ -63,7 +67,8 @@ const PROVIDERS: ProviderDef[] = [
   },
   {
     id: "target_roundel", name: "Target Roundel", desc: "Target media network data",
-    Icon: Target, color: "#CC0000", section: "eCommerce", authMode: "api_key",
+    Icon: Target, color: "#CC0000", section: "eCommerce",
+    authMode: "oauth", oauthLabel: "Connect Target Roundel",
     fields: [
       { key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" },
       { key: "advertiserId", label: "Advertiser ID", placeholder: "Enter advertiser ID" },
@@ -72,7 +77,8 @@ const PROVIDERS: ProviderDef[] = [
   // Advertising
   {
     id: "google_ads", name: "Google Ads", desc: "Search, display & shopping ads",
-    Icon: SiGoogleads, color: "#4285F4", section: "Advertising", authMode: "api_key",
+    Icon: SiGoogleads, color: "#4285F4", section: "Advertising",
+    authMode: "oauth", oauthLabel: "Connect Google Ads",
     fields: [
       { key: "developerToken", label: "Developer Token", secret: true, placeholder: "xxxx" },
       { key: "clientId", label: "Client ID", placeholder: "xxxx.apps.googleusercontent.com" },
@@ -83,7 +89,8 @@ const PROVIDERS: ProviderDef[] = [
   },
   {
     id: "meta", name: "Meta Ads", desc: "Facebook & Instagram advertising",
-    Icon: SiMeta, color: "#0082FB", section: "Advertising", authMode: "api_key",
+    Icon: SiMeta, color: "#0082FB", section: "Advertising",
+    authMode: "oauth", oauthLabel: "Connect Meta Ads",
     fields: [
       { key: "appId", label: "App ID", placeholder: "Enter App ID" },
       { key: "appSecret", label: "App Secret", secret: true, placeholder: "Enter App Secret" },
@@ -93,7 +100,8 @@ const PROVIDERS: ProviderDef[] = [
   },
   {
     id: "tiktok", name: "TikTok Ads", desc: "TikTok in-feed & spark ads",
-    Icon: SiTiktok, color: "#010101", section: "Advertising", authMode: "api_key",
+    Icon: SiTiktok, color: "#010101", section: "Advertising",
+    authMode: "oauth", oauthLabel: "Connect TikTok Ads",
     fields: [
       { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
       { key: "advertiserId", label: "Advertiser ID", placeholder: "Enter advertiser ID" },
@@ -101,7 +109,8 @@ const PROVIDERS: ProviderDef[] = [
   },
   {
     id: "pinterest", name: "Pinterest Ads", desc: "Pinterest campaign performance",
-    Icon: SiPinterest, color: "#E60023", section: "Advertising", authMode: "api_key",
+    Icon: SiPinterest, color: "#E60023", section: "Advertising",
+    authMode: "oauth", oauthLabel: "Connect Pinterest Ads",
     fields: [
       { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
       { key: "adAccountId", label: "Ad Account ID", placeholder: "Enter ad account ID" },
@@ -117,7 +126,8 @@ const PROVIDERS: ProviderDef[] = [
   },
   {
     id: "applovin", name: "Axon by AppLovin", desc: "Mobile & CTV advertising",
-    Icon: ChartBar, color: "#E8563A", section: "Advertising", authMode: "api_key",
+    Icon: ChartBar, color: "#E8563A", section: "Advertising",
+    authMode: "oauth", oauthLabel: "Connect Axon",
     fields: [
       { key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" },
     ],
@@ -125,7 +135,8 @@ const PROVIDERS: ProviderDef[] = [
   // Analytics
   {
     id: "google_analytics", name: "Google Analytics", desc: "Traffic, sessions & behavior",
-    Icon: SiGoogleanalytics, color: "#E37400", section: "Analytics", authMode: "api_key",
+    Icon: SiGoogleanalytics, color: "#E37400", section: "Analytics",
+    authMode: "oauth", oauthLabel: "Connect Google Analytics",
     fields: [
       { key: "clientId", label: "Client ID", placeholder: "xxxx.apps.googleusercontent.com" },
       { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "Enter client secret" },
@@ -141,7 +152,10 @@ const PROVIDERS: ProviderDef[] = [
   {
     id: "pattern_predict", name: "Pattern Predict", desc: "eCommerce intelligence & analytics",
     Icon: ChartBar, color: "#8B5CF6", section: "Attribution & Insights", authMode: "api_key",
-    fields: [{ key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" }],
+    fields: [
+      { key: "clientId", label: "Client ID", placeholder: "Enter client ID" },
+      { key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" },
+    ],
   },
   // Retention
   {
@@ -208,28 +222,41 @@ function ShopifyModal({ onClose }: { onClose: () => void }) {
 function IntegrationCard({
   provider, status, onSaved, onDisconnected,
 }: {
-  provider:      ProviderDef;
-  status?:       IntegrationStatus;
-  onSaved:       (p: string, fields: string[]) => void;
-  onDisconnected:(p: string) => void;
+  provider:       ProviderDef;
+  status?:        IntegrationStatus;
+  onSaved:        (p: string, fields: string[]) => void;
+  onDisconnected: (p: string) => void;
 }) {
   const connected = status?.connected ?? false;
-  const [editing,   setEditing]   = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [removing,  setRemoving]  = useState(false);
-  const [showShopify, setShowShopify] = useState(false);
-  const [confirm,   setConfirm]   = useState(false);
-  const [err,       setErr]       = useState("");
-  const [vals,      setVals]      = useState<Record<string, string>>({});
-  const [revealed,  setRevealed]  = useState<Record<string, boolean>>({});
+  const [editing,          setEditing]          = useState(false);
+  const [saving,           setSaving]           = useState(false);
+  const [removing,         setRemoving]         = useState(false);
+  const [showShopify,      setShowShopify]      = useState(false);
+  const [confirm,          setConfirm]          = useState(false);
+  const [err,              setErr]              = useState("");
+  const [vals,             setVals]             = useState<Record<string, string>>({});
+  const [revealed,         setRevealed]         = useState<Record<string, boolean>>({});
+  const [oauthRedirecting, setOauthRedirecting] = useState(false);
 
   const setVal = (k: string, v: string) => setVals(p => ({ ...p, [k]: v }));
   const toggleReveal = (k: string) => setRevealed(p => ({ ...p, [k]: !p[k] }));
 
+  const isOAuth  = provider.authMode === "oauth" || provider.authMode === "oauth_shopify";
+  const hasFields = Boolean(provider.fields?.length);
+
+  const handleOAuth = () => {
+    if (provider.authMode === "oauth_shopify") {
+      setShowShopify(true);
+    } else {
+      setOauthRedirecting(true);
+      window.location.href = `${API_BASE}/api/integrations/${provider.id}/connect`;
+    }
+  };
+
   const handleSave = async () => {
     const payload: Record<string, string> = {};
     (provider.fields ?? []).forEach(f => { if (vals[f.key]?.trim()) payload[f.key] = vals[f.key].trim(); });
-    if (Object.keys(payload).length === 0) { setErr("Enter at least one field."); return; }
+    if (!Object.keys(payload).length) { setErr("Enter at least one field."); return; }
     setSaving(true); setErr("");
     try {
       const res = await fetch(`${API_BASE}/api/integrations/${provider.id}/credentials`, {
@@ -240,8 +267,7 @@ function IntegrationCard({
       const data = await res.json();
       if (!res.ok) { setErr(data.error ?? "Save failed."); return; }
       onSaved(provider.id, Object.keys(payload));
-      setEditing(false);
-      setVals({});
+      setEditing(false); setVals({});
     } catch { setErr("Network error."); }
     finally { setSaving(false); }
   };
@@ -254,7 +280,8 @@ function IntegrationCard({
     } finally { setRemoving(false); setConfirm(false); }
   };
 
-  const showForm = (!connected && provider.authMode === "api_key") || editing;
+  // Show the credential form when: (not connected and has fields) OR (connected and editing)
+  const showForm = hasFields && (!connected || editing);
   const { Icon, color } = provider;
 
   return (
@@ -262,7 +289,8 @@ function IntegrationCard({
       {showShopify && <ShopifyModal onClose={() => setShowShopify(false)} />}
 
       <div className="rounded-xl p-4 monarch-card-settings flex flex-col gap-3">
-        {/* Header row */}
+
+        {/* ── Header ─────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#2e2010]">
@@ -273,7 +301,6 @@ function IntegrationCard({
               <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5 leading-snug">{provider.desc}</p>
             </div>
           </div>
-          {/* Status badge */}
           <div className="shrink-0">
             {connected ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-900/25 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
@@ -287,64 +314,111 @@ function IntegrationCard({
           </div>
         </div>
 
-        {/* Connected summary */}
+        {/* ── Connected Summary ───────────────────────────── */}
         {connected && !editing && (
           <div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-              {(provider.fields ?? []).map(f => {
-                const saved = status?.savedFields?.includes(f.key);
-                return (
-                  <div key={f.key} className="flex items-center gap-1">
-                    <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{f.label}</span>
-                    <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${saved ? "text-emerald-500" : "text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25"}`}>
-                      <CheckCircle2 size={9} />{saved ? "Saved" : "Not set"}
-                    </span>
+            {hasFields && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+                {(provider.fields ?? []).map(f => {
+                  const saved = status?.savedFields?.includes(f.key);
+                  return (
+                    <div key={f.key} className="flex items-center gap-1">
+                      <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{f.label}</span>
+                      <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${saved ? "text-emerald-500" : "text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25"}`}>
+                        <CheckCircle2 size={9} />{saved ? "Saved" : "Not set"}
+                      </span>
+                    </div>
+                  );
+                })}
+                {provider.authMode === "oauth_shopify" && status?.shopDomain && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Store</span>
+                    <span className="text-[10px] font-semibold text-emerald-500">{status.shopDomain}</span>
                   </div>
-                );
-              })}
-              {provider.authMode === "oauth_shopify" && status?.shopDomain && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Store</span>
-                  <span className="text-[10px] font-semibold text-emerald-500">{status.shopDomain}</span>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {provider.authMode === "api_key" && (
-                <button onClick={() => { setEditing(true); setErr(""); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-[#FFBC80]/50 transition-colors">
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {isOAuth ? (
+                <button
+                  onClick={handleOAuth}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
+                  style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+                >
+                  <RefreshCw size={11} />Reconnect
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setEditing(true); setErr(""); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-[#FFBC80]/50 transition-colors"
+                >
                   <Pencil size={11} />Edit
                 </button>
               )}
               {!confirm ? (
-                <button onClick={() => setConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-red-400/50 hover:text-red-500 transition-colors">
+                <button
+                  onClick={() => setConfirm(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-red-400/50 hover:text-red-500 transition-colors"
+                >
                   <Trash2 size={11} />Disconnect
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Are you sure?</span>
-                  <button onClick={handleRemove} disabled={removing} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-red-500 hover:bg-red-600 text-white disabled:opacity-60 transition-colors flex items-center gap-1">
+                  <button
+                    onClick={handleRemove}
+                    disabled={removing}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-red-500 hover:bg-red-600 text-white disabled:opacity-60 transition-colors flex items-center gap-1"
+                  >
                     {removing ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}Yes
                   </button>
-                  <button onClick={() => setConfirm(false)} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
+                  <button
+                    onClick={() => setConfirm(false)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Shopify OAuth button (not connected) */}
-        {!connected && provider.authMode === "oauth_shopify" && (
-          <button onClick={() => setShowShopify(true)} className="w-full py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity flex items-center justify-center gap-1.5" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>
-            <SiShopify size={13} />Connect Shopify
+        {/* ── Primary OAuth Button (not connected) ────────── */}
+        {!connected && isOAuth && (
+          <button
+            onClick={handleOAuth}
+            disabled={oauthRedirecting}
+            className="w-full py-2.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5"
+            style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+          >
+            {oauthRedirecting ? (
+              <><Loader2 size={13} className="animate-spin" />Redirecting…</>
+            ) : (
+              <><Icon size={13} color={color} />{provider.oauthLabel ?? `Connect ${provider.name}`}</>
+            )}
           </button>
         )}
 
-        {/* Manual credential form */}
-        {showForm && provider.fields && (
+        {/* ── Divider (OAuth providers with manual fallback) ── */}
+        {!connected && isOAuth && hasFields && (
+          <div className="flex items-center gap-3 py-0.5">
+            <div className="flex-1 h-px bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10" />
+            <span className="text-[9px] font-semibold text-[#3A3A3A]/35 dark:text-[#FFF9F2]/28 uppercase tracking-widest whitespace-nowrap">
+              or enter credentials manually
+            </span>
+            <div className="flex-1 h-px bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10" />
+          </div>
+        )}
+
+        {/* ── Credential Form ─────────────────────────────── */}
+        {showForm && (
           <div className="space-y-2.5">
-            {provider.fields.map(f => (
+            {(provider.fields ?? []).map(f => (
               <div key={f.key}>
-                <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">{f.label}</label>
+                <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">
+                  {f.label}
+                </label>
                 <div className="relative">
                   <input
                     type={f.secret && !revealed[f.key] ? "password" : "text"}
@@ -356,7 +430,11 @@ function IntegrationCard({
                     style={{ paddingRight: f.secret ? "2.25rem" : undefined }}
                   />
                   {f.secret && (
-                    <button type="button" onClick={() => toggleReveal(f.key)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 hover:text-[#3A3A3A]/60 dark:hover:text-[#FFF9F2]/55">
+                    <button
+                      type="button"
+                      onClick={() => toggleReveal(f.key)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 hover:text-[#3A3A3A]/60 dark:hover:text-[#FFF9F2]/55"
+                    >
                       {revealed[f.key] ? <EyeOff size={12} /> : <Eye size={12} />}
                     </button>
                   )}
@@ -364,16 +442,42 @@ function IntegrationCard({
               </div>
             ))}
 
-            {err && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
+            {err && (
+              <p className="text-[11px] text-red-500 flex items-center gap-1">
+                <AlertCircle size={11} />{err}
+              </p>
+            )}
 
             <div className="flex gap-2 pt-0.5">
               {editing && (
-                <button onClick={() => { setEditing(false); setVals({}); setErr(""); }} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
+                <button
+                  onClick={() => { setEditing(false); setVals({}); setErr(""); }}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors"
+                >
+                  Cancel
+                </button>
               )}
-              <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>
-                {saving ? <Loader2 size={12} className="animate-spin" /> : null}
-                {editing ? "Update Credentials" : "Save & Connect"}
-              </button>
+              {/* Primary gradient for manual-only; subdued outline for OAuth fallback */}
+              {(!isOAuth || editing) ? (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5"
+                  style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+                >
+                  {saving ? <Loader2 size={12} className="animate-spin" /> : null}
+                  {editing ? "Update Credentials" : "Save & Connect"}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 hover:bg-[#FFBC80]/10 hover:border-[#FFBC80]/40 disabled:opacity-60 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {saving ? <Loader2 size={12} className="animate-spin" /> : null}
+                  Save & Connect
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -387,14 +491,14 @@ function IntegrationCard({
 interface Sheet { id: string; name: string; url: string; tab?: string; }
 
 function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
-  const [sheets, setSheets]   = useState<Sheet[]>(initialSheets);
-  const [adding, setAdding]   = useState(false);
-  const [saving, setSaving]   = useState(false);
+  const [sheets,   setSheets]   = useState<Sheet[]>(initialSheets);
+  const [adding,   setAdding]   = useState(false);
+  const [saving,   setSaving]   = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
-  const [name, setName]       = useState("");
-  const [url,  setUrl]        = useState("");
-  const [tab,  setTab]        = useState("");
-  const [err,  setErr]        = useState("");
+  const [name,     setName]     = useState("");
+  const [url,      setUrl]      = useState("");
+  const [tab,      setTab]      = useState("");
+  const [err,      setErr]      = useState("");
 
   const handleAdd = async () => {
     if (!name.trim() || !url.trim()) { setErr("Sheet name and URL are required."); return; }
@@ -438,7 +542,6 @@ function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
         </button>
       </div>
 
-      {/* Sheet list */}
       <div className="space-y-2">
         {sheets.length === 0 && !adding && (
           <div className="rounded-xl p-5 monarch-card-settings text-center">
@@ -464,7 +567,6 @@ function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
           </div>
         ))}
 
-        {/* Add form */}
         {adding && (
           <div className="rounded-xl p-4 monarch-card-settings space-y-2.5">
             <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">New Google Sheet</p>
@@ -516,13 +618,16 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
 
   useEffect(() => { fetchStatuses(); }, [fetchStatuses]);
 
-  // Handle OAuth return params
   useEffect(() => {
     const params  = new URLSearchParams(window.location.search);
     const success = params.get("success");
     const error   = params.get("error");
     if (success === "shopify") {
       setBanner({ type: "success", msg: "Shopify connected successfully!" });
+      fetchStatuses();
+    } else if (success) {
+      const name = PROVIDERS.find(p => p.id === success)?.name ?? success;
+      setBanner({ type: "success", msg: `${name} connected successfully!` });
       fetchStatuses();
     } else if (error) {
       const msgs: Record<string, string> = {
@@ -532,6 +637,8 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
         shopify_token_failed:   "Failed to exchange authorization code.",
         shopify_network_error:  "Network error during Shopify authorization.",
         shopify_missing_params: "Missing parameters in Shopify callback.",
+        oauth_failed:           "OAuth authorization failed — please try again.",
+        oauth_invalid_state:    "OAuth state mismatch — please try again.",
       };
       setBanner({ type: "error", msg: msgs[error] ?? "OAuth error." });
     }
@@ -587,9 +694,7 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
         return (
           <div key={section}>
             <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{section}</h3>
-              </div>
+              <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{section}</h3>
               <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#FFBC80]/15 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
                 {connectedCount}/{sectionProviders.length} connected
               </span>
