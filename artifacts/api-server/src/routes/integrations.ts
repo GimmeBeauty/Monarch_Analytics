@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import { randomUUID } from "crypto";
 import { db, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authenticate } from "../middlewares/authenticate.js";
@@ -7,20 +8,21 @@ import jwt from "jsonwebtoken";
 
 const router = Router();
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const JWT_SECRET         = process.env.JWT_SECRET!;
-const SHOPIFY_CLIENT_ID  = process.env.SHOPIFY_CLIENT_ID;
+const JWT_SECRET            = process.env.JWT_SECRET!;
+const SHOPIFY_CLIENT_ID     = process.env.SHOPIFY_CLIENT_ID;
 const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
-// APP_URL is the public-facing base URL of the app (e.g. https://monarch.durhambrands.com)
-const APP_URL            = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const APP_URL               = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const SHOPIFY_SCOPES        = "read_orders,read_products,read_analytics,read_inventory,read_customers";
 
-const SHOPIFY_SCOPES = "read_orders,read_products,read_analytics,read_inventory,read_customers";
-
-const ALL_PROVIDERS = ["shopify", "google_ads", "google_analytics", "meta", "tiktok"] as const;
+const ALL_PROVIDERS = [
+  "shopify", "google_ads", "meta", "tiktok", "tiktok_shop",
+  "pinterest", "criteo", "applovin", "walmart", "target_roundel",
+  "google_analytics", "alloy_ai", "pattern_predict", "stay_ai", "yotpo",
+  "google_sheets",
+] as const;
+type AnyProvider = (typeof ALL_PROVIDERS)[number];
 
 // ─── GET /api/integrations ────────────────────────────────────────────────────
-// Returns the connection status for every known provider.
 
 router.get("/", authenticate, async (_req, res) => {
   try {
@@ -28,226 +30,191 @@ router.get("/", authenticate, async (_req, res) => {
 
     const integrations = ALL_PROVIDERS.map((provider) => {
       const row = rows.find((r) => r.provider === provider);
-      let clientId: string | null = null;
+      let savedFields: string[] = [];
+      let sheets: unknown[] = [];
+
       if (row?.metadata) {
-        try { clientId = (JSON.parse(row.metadata) as { clientId?: string }).clientId ?? null; } catch { /* ignore */ }
+        try {
+          const meta = JSON.parse(row.metadata) as Record<string, unknown>;
+          if (provider === "google_sheets") {
+            sheets = (meta.sheets as unknown[]) ?? [];
+          } else {
+            savedFields = Object.keys(meta).filter(
+              (k) => k !== "authType" && !!meta[k]
+            );
+          }
+        } catch { /* ignore */ }
       }
+
       return {
         provider,
         connected:  !!row,
         shopDomain: row?.shopDomain ?? null,
-        clientId,
-        status:     row?.status    ?? null,
+        savedFields,
+        sheets,
+        status:     row?.status ?? null,
       };
     });
 
     res.json({ integrations });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to fetch integrations" });
   }
 });
 
-// ─── GET /api/integrations/shopify/connect?shop=mystore.myshopify.com ─────────
-// Initiates the Shopify OAuth flow. Redirects the browser to Shopify.
+// ─── Shopify OAuth ────────────────────────────────────────────────────────────
 
 router.get("/shopify/connect", authenticate, (req, res) => {
   if (!SHOPIFY_CLIENT_ID || !SHOPIFY_CLIENT_SECRET) {
-    res.status(500).json({ error: "Shopify integration is not configured — set SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET" });
+    res.status(500).json({ error: "Shopify integration not configured" });
     return;
   }
-
   let shop = (req.query.shop as string | undefined)?.trim();
-  if (!shop) {
-    res.status(400).json({ error: "shop query parameter is required (e.g. mystore.myshopify.com)" });
-    return;
-  }
-
-  // Normalize: strip protocol/trailing slash, append .myshopify.com if bare name
+  if (!shop) { res.status(400).json({ error: "shop param required" }); return; }
   shop = shop.replace(/^https?:\/\//, "").replace(/\/$/, "");
-  if (!shop.includes(".")) {
-    shop = `${shop}.myshopify.com`;
-  }
+  if (!shop.includes(".")) shop = `${shop}.myshopify.com`;
 
-  // Sign a short-lived state JWT so we can re-identify the user on callback
-  const state = jwt.sign(
-    { userId: (req as any).auth!.userId, shop },
-    JWT_SECRET,
-    { expiresIn: "10m" }
-  );
-
-  const redirectUri  = `${APP_URL}/api/integrations/shopify/callback`;
+  const state = jwt.sign({ userId: (req as any).auth!.userId, shop }, JWT_SECRET, { expiresIn: "10m" });
+  const redirectUri = `${APP_URL}/api/integrations/shopify/callback`;
   const authUrl =
     `https://${shop}/admin/oauth/authorize` +
     `?client_id=${encodeURIComponent(SHOPIFY_CLIENT_ID)}` +
     `&scope=${encodeURIComponent(SHOPIFY_SCOPES)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&state=${encodeURIComponent(state)}`;
-
   res.redirect(authUrl);
 });
 
-// ─── GET /api/integrations/shopify/callback ───────────────────────────────────
-// Shopify redirects here after the user approves/denies the app.
-
 router.get("/shopify/callback", async (req, res) => {
   const { code, state, shop, hmac } = req.query as Record<string, string>;
-
   if (!code || !state || !shop) {
-    res.redirect(`${APP_URL}/integrations?error=shopify_missing_params`);
-    return;
+    res.redirect(`${APP_URL}/integrations?error=shopify_missing_params`); return;
   }
-
-  // Verify state JWT
-  try {
-    jwt.verify(state, JWT_SECRET);
-  } catch {
-    res.redirect(`${APP_URL}/integrations?error=shopify_invalid_state`);
-    return;
+  try { jwt.verify(state, JWT_SECRET); } catch {
+    res.redirect(`${APP_URL}/integrations?error=shopify_invalid_state`); return;
   }
-
-  // Verify Shopify HMAC signature
   if (hmac && SHOPIFY_CLIENT_SECRET) {
     const message = Object.entries(req.query)
-      .filter(([k]) => k !== "hmac")
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join("&");
-
-    const expected = crypto
-      .createHmac("sha256", SHOPIFY_CLIENT_SECRET)
-      .update(message)
-      .digest("hex");
-
-    if (expected !== hmac) {
-      res.redirect(`${APP_URL}/integrations?error=shopify_hmac_failed`);
-      return;
-    }
+      .filter(([k]) => k !== "hmac").sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`).join("&");
+    const expected = crypto.createHmac("sha256", SHOPIFY_CLIENT_SECRET).update(message).digest("hex");
+    if (expected !== hmac) { res.redirect(`${APP_URL}/integrations?error=shopify_hmac_failed`); return; }
   }
-
-  // Exchange authorization code for an access token
-  let accessToken: string;
-  let scopes: string;
+  let accessToken: string; let scopes: string;
   try {
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        client_id:     SHOPIFY_CLIENT_ID,
-        client_secret: SHOPIFY_CLIENT_SECRET,
-        code,
-      }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: SHOPIFY_CLIENT_ID, client_secret: SHOPIFY_CLIENT_SECRET, code }),
     });
+    if (!tokenRes.ok) { res.redirect(`${APP_URL}/integrations?error=shopify_token_failed`); return; }
+    const td = await tokenRes.json() as { access_token: string; scope: string };
+    accessToken = td.access_token; scopes = td.scope;
+  } catch { res.redirect(`${APP_URL}/integrations?error=shopify_network_error`); return; }
 
-    if (!tokenRes.ok) {
-      const err = await tokenRes.text();
-      console.error("Shopify token exchange failed:", err);
-      res.redirect(`${APP_URL}/integrations?error=shopify_token_failed`);
-      return;
-    }
-
-    const tokenData = await tokenRes.json() as { access_token: string; scope: string };
-    accessToken = tokenData.access_token;
-    scopes      = tokenData.scope;
-  } catch (err) {
-    console.error("Shopify token exchange error:", err);
-    res.redirect(`${APP_URL}/integrations?error=shopify_network_error`);
-    return;
-  }
-
-  // Upsert the integration record
-  await db
-    .insert(integrationsTable)
-    .values({
-      provider:    "shopify",
-      accessToken,
-      shopDomain:  shop,
-      scopes,
-      status:      "connected",
-    })
+  await db.insert(integrationsTable)
+    .values({ provider: "shopify", accessToken, shopDomain: shop, scopes, status: "connected" })
     .onConflictDoUpdate({
       target: integrationsTable.provider,
-      set: {
-        accessToken,
-        shopDomain: shop,
-        scopes,
-        status:    "connected",
-        updatedAt: new Date(),
-      },
+      set: { accessToken, shopDomain: shop, scopes, status: "connected", updatedAt: new Date() },
     });
-
   res.redirect(`${APP_URL}/integrations?success=shopify`);
 });
 
-// ─── DELETE /api/integrations/shopify ─────────────────────────────────────────
-// Removes the stored Shopify credentials.
-
-router.delete("/shopify", authenticate, async (_req, res) => {
-  try {
-    await db.delete(integrationsTable).where(eq(integrationsTable.provider, "shopify"));
-    res.json({ success: true });
-  } catch {
-    res.status(500).json({ error: "Failed to disconnect Shopify" });
-  }
-});
-
 // ─── POST /api/integrations/:provider/credentials ─────────────────────────────
-// Saves manual API key credentials (Client ID + Client Secret) for non-OAuth
-// providers such as Google Ads, Meta, TikTok, and Google Analytics.
-
-const MANUAL_PROVIDERS = ["google_ads", "google_analytics", "meta", "tiktok"] as const;
-type ManualProvider = (typeof MANUAL_PROVIDERS)[number];
+// Saves any set of fields for manual providers (stored as JSON in metadata).
 
 router.post("/:provider/credentials", authenticate, async (req, res) => {
-  const { provider } = req.params as { provider: string };
-
-  if (!MANUAL_PROVIDERS.includes(provider as ManualProvider)) {
-    res.status(400).json({ error: `Manual credentials not supported for provider: ${provider}` });
-    return;
+  const { provider } = req.params as { provider: AnyProvider };
+  if (!ALL_PROVIDERS.includes(provider) || provider === "shopify" || provider === "google_sheets") {
+    res.status(400).json({ error: `Invalid provider for manual credentials: ${provider}` }); return;
   }
 
-  const { clientId, clientSecret } = req.body as { clientId?: string; clientSecret?: string };
-
-  if (!clientId?.trim() || !clientSecret?.trim()) {
-    res.status(400).json({ error: "Both Client ID and Client Secret are required" });
-    return;
+  const fields = req.body as Record<string, string>;
+  const filled = Object.entries(fields).filter(([, v]) => typeof v === "string" && v.trim());
+  if (filled.length === 0) {
+    res.status(400).json({ error: "At least one credential field is required" }); return;
   }
+
+  const meta: Record<string, string> = {};
+  filled.forEach(([k, v]) => { meta[k] = v.trim(); });
 
   try {
-    await db
-      .insert(integrationsTable)
-      .values({
-        provider,
-        accessToken: clientSecret.trim(),
-        metadata:   JSON.stringify({ clientId: clientId.trim(), authType: "api_key" }),
-        status:     "connected",
-      })
+    await db.insert(integrationsTable)
+      .values({ provider, accessToken: "manual", metadata: JSON.stringify(meta), status: "connected" })
       .onConflictDoUpdate({
         target: integrationsTable.provider,
-        set: {
-          accessToken: clientSecret.trim(),
-          metadata:   JSON.stringify({ clientId: clientId.trim(), authType: "api_key" }),
-          status:     "connected",
-          updatedAt:  new Date(),
-        },
+        set: { accessToken: "manual", metadata: JSON.stringify(meta), status: "connected", updatedAt: new Date() },
       });
-
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: "Failed to save credentials" });
   }
 });
 
-// ─── DELETE /api/integrations/:provider ───────────────────────────────────────
-// Generic disconnect for any provider (manual or OAuth).
+// ─── Google Sheets management ─────────────────────────────────────────────────
 
-router.delete("/:provider", authenticate, async (req, res) => {
-  const { provider } = req.params as { provider: string };
+interface Sheet { id: string; name: string; url: string; tab?: string; }
 
-  if (!ALL_PROVIDERS.includes(provider as (typeof ALL_PROVIDERS)[number])) {
-    res.status(400).json({ error: `Unknown provider: ${provider}` });
-    return;
+router.post("/google_sheets/sheets", authenticate, async (req, res) => {
+  const { name, url, tab } = req.body as { name?: string; url?: string; tab?: string };
+  if (!name?.trim() || !url?.trim()) {
+    res.status(400).json({ error: "Sheet name and URL are required" }); return;
   }
 
+  try {
+    const existing = await db.select().from(integrationsTable)
+      .where(eq(integrationsTable.provider, "google_sheets")).limit(1);
+    const row = existing[0];
+    let sheets: Sheet[] = [];
+    if (row?.metadata) {
+      try { sheets = (JSON.parse(row.metadata) as { sheets: Sheet[] }).sheets ?? []; } catch { /* ignore */ }
+    }
+    sheets.push({ id: randomUUID(), name: name.trim(), url: url.trim(), tab: tab?.trim() || undefined });
+
+    await db.insert(integrationsTable)
+      .values({ provider: "google_sheets", accessToken: "sheets", metadata: JSON.stringify({ sheets }), status: "connected" })
+      .onConflictDoUpdate({
+        target: integrationsTable.provider,
+        set: { metadata: JSON.stringify({ sheets }), status: "connected", updatedAt: new Date() },
+      });
+    res.json({ success: true, sheets });
+  } catch {
+    res.status(500).json({ error: "Failed to add sheet" });
+  }
+});
+
+router.delete("/google_sheets/sheets/:sheetId", authenticate, async (req, res) => {
+  const { sheetId } = req.params;
+  try {
+    const existing = await db.select().from(integrationsTable)
+      .where(eq(integrationsTable.provider, "google_sheets")).limit(1);
+    const row = existing[0];
+    if (!row) { res.status(404).json({ error: "No sheets configured" }); return; }
+
+    let sheets: Sheet[] = [];
+    try { sheets = (JSON.parse(row.metadata ?? "{}") as { sheets: Sheet[] }).sheets ?? []; } catch { /* ignore */ }
+    sheets = sheets.filter((s) => s.id !== sheetId);
+
+    if (sheets.length === 0) {
+      await db.delete(integrationsTable).where(eq(integrationsTable.provider, "google_sheets"));
+    } else {
+      await db.update(integrationsTable)
+        .set({ metadata: JSON.stringify({ sheets }), updatedAt: new Date() })
+        .where(eq(integrationsTable.provider, "google_sheets"));
+    }
+    res.json({ success: true, sheets });
+  } catch {
+    res.status(500).json({ error: "Failed to remove sheet" });
+  }
+});
+
+// ─── DELETE /api/integrations/:provider ───────────────────────────────────────
+
+router.delete("/:provider", authenticate, async (req, res) => {
+  const { provider } = req.params;
+  if (!ALL_PROVIDERS.includes(provider as AnyProvider)) {
+    res.status(400).json({ error: `Unknown provider: ${provider}` }); return;
+  }
   try {
     await db.delete(integrationsTable).where(eq(integrationsTable.provider, provider));
     res.json({ success: true });

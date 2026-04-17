@@ -1,320 +1,494 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  SiGoogleads, SiMeta, SiTiktok, SiGoogleanalytics, SiShopify,
+  SiShopify, SiGoogleads, SiMeta, SiTiktok, SiGoogleanalytics,
+  SiGooglesheets, SiPinterest, SiWalmart,
 } from "react-icons/si";
 import {
-  CheckCircle, X, ExternalLink, Loader2, AlertCircle, Unplug, Eye, EyeOff, Key,
+  CheckCircle2, XCircle, Loader2, Plug2, Trash2, Pencil, Eye, EyeOff,
+  Plus, ShoppingBag, Target, Zap, ChartBar, Link2, X, AlertCircle,
 } from "lucide-react";
 import { API_BASE } from "@/lib/apiBase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface IntegrationStatus {
-  provider:   string;
-  connected:  boolean;
-  shopDomain: string | null;
-  clientId:   string | null;
-  status:     string | null;
+interface FieldDef {
+  key:         string;
+  label:       string;
+  placeholder?: string;
+  secret?:     boolean;
 }
 
-// ─── Provider metadata ────────────────────────────────────────────────────────
+interface ProviderDef {
+  id:       string;
+  name:     string;
+  desc:     string;
+  Icon:     React.ComponentType<{ size?: number; color?: string; className?: string }>;
+  color:    string;
+  section:  string;
+  authMode: "oauth_shopify" | "api_key";
+  fields?:  FieldDef[];
+}
 
-type AuthMode = "oauth_shopify" | "api_key";
+interface IntegrationStatus {
+  provider:    string;
+  connected:   boolean;
+  shopDomain:  string | null;
+  savedFields: string[];
+  status:      string | null;
+}
 
-const PROVIDERS: {
-  id:          string;
-  Icon:        React.ComponentType<{ size?: number; color?: string }>;
-  name:        string;
-  desc:        string;
-  color:       string;
-  authMode:    AuthMode;
-  clientIdLabel?:     string;
-  clientSecretLabel?: string;
-  hint?:       string;
-}[] = [
+// ─── Provider definitions ──────────────────────────────────────────────────────
+
+const PROVIDERS: ProviderDef[] = [
+  // eCommerce
   {
-    id:      "shopify",
-    Icon:    SiShopify,
-    name:    "Shopify",
-    desc:    "Connect your store for revenue attribution",
-    color:   "#96BF48",
-    authMode: "oauth_shopify",
+    id: "shopify", name: "Shopify", desc: "Orders, revenue & attribution",
+    Icon: SiShopify, color: "#96BF48", section: "eCommerce", authMode: "oauth_shopify",
   },
   {
-    id:                 "google_ads",
-    Icon:               SiGoogleads,
-    name:               "Google Ads",
-    desc:               "Import campaign data, spend, and conversions",
-    color:              "#4285F4",
-    authMode:           "api_key",
-    clientIdLabel:      "Client ID",
-    clientSecretLabel:  "Client Secret",
-    hint:               "Found in Google Cloud Console → APIs & Services → Credentials",
+    id: "tiktok_shop", name: "TikTok Shop", desc: "TikTok storefront sales data",
+    Icon: SiTiktok, color: "#010101", section: "eCommerce", authMode: "api_key",
+    fields: [
+      { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
+      { key: "shopId", label: "Shop ID", placeholder: "Enter shop ID" },
+    ],
   },
   {
-    id:                 "meta",
-    Icon:               SiMeta,
-    name:               "Meta Ads",
-    desc:               "Sync Facebook and Instagram ad data",
-    color:              "#0082FB",
-    authMode:           "api_key",
-    clientIdLabel:      "App ID",
-    clientSecretLabel:  "App Secret",
-    hint:               "Found in Meta for Developers → Your App → Settings → Basic",
+    id: "walmart", name: "Walmart Marketplace", desc: "Walmart seller performance",
+    Icon: SiWalmart, color: "#0071CE", section: "eCommerce", authMode: "api_key",
+    fields: [
+      { key: "clientId", label: "Client ID", placeholder: "Enter client ID" },
+      { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "Enter client secret" },
+    ],
   },
   {
-    id:                 "tiktok",
-    Icon:               SiTiktok,
-    name:               "TikTok Ads",
-    desc:               "Connect TikTok for Business campaigns",
-    color:              "#010101",
-    authMode:           "api_key",
-    clientIdLabel:      "App ID",
-    clientSecretLabel:  "App Secret",
-    hint:               "Found in TikTok for Business → Developer Portal → App Management",
+    id: "target_roundel", name: "Target Roundel", desc: "Target media network data",
+    Icon: Target, color: "#CC0000", section: "eCommerce", authMode: "api_key",
+    fields: [
+      { key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" },
+      { key: "advertiserId", label: "Advertiser ID", placeholder: "Enter advertiser ID" },
+    ],
+  },
+  // Advertising
+  {
+    id: "google_ads", name: "Google Ads", desc: "Search, display & shopping ads",
+    Icon: SiGoogleads, color: "#4285F4", section: "Advertising", authMode: "api_key",
+    fields: [
+      { key: "developerToken", label: "Developer Token", secret: true, placeholder: "xxxx" },
+      { key: "clientId", label: "Client ID", placeholder: "xxxx.apps.googleusercontent.com" },
+      { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "GOCSPX-..." },
+      { key: "refreshToken", label: "Refresh Token", secret: true, placeholder: "1//0..." },
+      { key: "customerId", label: "Customer ID", placeholder: "123-456-7890" },
+    ],
   },
   {
-    id:                 "google_analytics",
-    Icon:               SiGoogleanalytics,
-    name:               "Google Analytics",
-    desc:               "Pull traffic, pageview, and behavior data",
-    color:              "#E37400",
-    authMode:           "api_key",
-    clientIdLabel:      "Client ID",
-    clientSecretLabel:  "Client Secret",
-    hint:               "Found in Google Cloud Console → APIs & Services → Credentials",
+    id: "meta", name: "Meta Ads", desc: "Facebook & Instagram advertising",
+    Icon: SiMeta, color: "#0082FB", section: "Advertising", authMode: "api_key",
+    fields: [
+      { key: "appId", label: "App ID", placeholder: "Enter App ID" },
+      { key: "appSecret", label: "App Secret", secret: true, placeholder: "Enter App Secret" },
+      { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
+      { key: "adAccountId", label: "Ad Account ID", placeholder: "act_xxxx" },
+    ],
+  },
+  {
+    id: "tiktok", name: "TikTok Ads", desc: "TikTok in-feed & spark ads",
+    Icon: SiTiktok, color: "#010101", section: "Advertising", authMode: "api_key",
+    fields: [
+      { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
+      { key: "advertiserId", label: "Advertiser ID", placeholder: "Enter advertiser ID" },
+    ],
+  },
+  {
+    id: "pinterest", name: "Pinterest Ads", desc: "Pinterest campaign performance",
+    Icon: SiPinterest, color: "#E60023", section: "Advertising", authMode: "api_key",
+    fields: [
+      { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
+      { key: "adAccountId", label: "Ad Account ID", placeholder: "Enter ad account ID" },
+    ],
+  },
+  {
+    id: "criteo", name: "Criteo", desc: "Retargeting & commerce media",
+    Icon: Zap, color: "#F76B1C", section: "Advertising", authMode: "api_key",
+    fields: [
+      { key: "clientId", label: "Client ID", placeholder: "Enter client ID" },
+      { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "Enter client secret" },
+    ],
+  },
+  {
+    id: "applovin", name: "Axon by AppLovin", desc: "Mobile & CTV advertising",
+    Icon: ChartBar, color: "#E8563A", section: "Advertising", authMode: "api_key",
+    fields: [
+      { key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" },
+    ],
+  },
+  // Analytics
+  {
+    id: "google_analytics", name: "Google Analytics", desc: "Traffic, sessions & behavior",
+    Icon: SiGoogleanalytics, color: "#E37400", section: "Analytics", authMode: "api_key",
+    fields: [
+      { key: "clientId", label: "Client ID", placeholder: "xxxx.apps.googleusercontent.com" },
+      { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "Enter client secret" },
+      { key: "propertyId", label: "Property ID", placeholder: "GA4 property ID" },
+    ],
+  },
+  // Attribution & Insights
+  {
+    id: "alloy_ai", name: "Alloy.ai", desc: "Supply chain & demand forecasting",
+    Icon: Link2, color: "#6366F1", section: "Attribution & Insights", authMode: "api_key",
+    fields: [{ key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" }],
+  },
+  {
+    id: "pattern_predict", name: "Pattern Predict", desc: "eCommerce intelligence & analytics",
+    Icon: ChartBar, color: "#8B5CF6", section: "Attribution & Insights", authMode: "api_key",
+    fields: [{ key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" }],
+  },
+  // Retention
+  {
+    id: "stay_ai", name: "Stay.AI", desc: "Subscription retention analytics",
+    Icon: ShoppingBag, color: "#10B981", section: "Retention", authMode: "api_key",
+    fields: [
+      { key: "apiKey", label: "API Key", secret: true, placeholder: "Enter API key" },
+      { key: "storeId", label: "Store ID", placeholder: "Enter store ID" },
+    ],
+  },
+  {
+    id: "yotpo", name: "Yotpo", desc: "Reviews, loyalty & SMS",
+    Icon: Plug2, color: "#3B82F6", section: "Retention", authMode: "api_key",
+    fields: [
+      { key: "appKey", label: "App Key", placeholder: "Enter app key" },
+      { key: "secretKey", label: "Secret Key", secret: true, placeholder: "Enter secret key" },
+    ],
   },
 ];
 
-// ─── Shopify OAuth Modal ───────────────────────────────────────────────────────
+const SECTIONS = ["eCommerce", "Advertising", "Analytics", "Attribution & Insights", "Retention"];
+
+// ─── ShopifyModal ─────────────────────────────────────────────────────────────
 
 function ShopifyModal({ onClose }: { onClose: () => void }) {
-  const [shop, setShop]   = useState("");
+  const [shop, setShop] = useState("");
   const [error, setError] = useState("");
 
-  const handleConnect = () => {
-    const cleaned = shop.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
-    if (!cleaned) { setError("Please enter your Shopify store URL."); return; }
-    window.location.href = `${API_BASE}/api/integrations/shopify/connect?shop=${encodeURIComponent(cleaned)}`;
+  const go = () => {
+    const s = shop.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+    if (!s) { setError("Enter your store URL."); return; }
+    window.location.href = `${API_BASE}/api/integrations/shopify/connect?shop=${encodeURIComponent(s)}`;
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl p-6 monarch-card-settings">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <SiShopify size={18} color="#96BF48" />
-            <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Connect Shopify</h2>
+          <div className="flex items-center gap-2">
+            <SiShopify size={16} color="#96BF48" />
+            <span className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Connect Shopify</span>
           </div>
-          <button onClick={onClose} className="text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors">
-            <X size={16} />
-          </button>
+          <button onClick={onClose} className="opacity-40 hover:opacity-80 transition-opacity text-[#3A3A3A] dark:text-[#FFF9F2]"><X size={16} /></button>
         </div>
-
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-4">
-          Enter your store domain. You'll be redirected to Shopify to approve access, then returned here automatically.
-        </p>
-
-        <label className="block text-xs font-semibold text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 mb-1.5 uppercase tracking-wider">
-          Store URL
-        </label>
+        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-4">You'll be redirected to Shopify to approve access and then returned here.</p>
         <input
-          type="text"
-          value={shop}
-          onChange={(e) => { setShop(e.target.value); setError(""); }}
-          onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+          autoFocus value={shop} onChange={e => { setShop(e.target.value); setError(""); }}
+          onKeyDown={e => e.key === "Enter" && go()}
           placeholder="mystore.myshopify.com"
-          autoFocus
-          className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/30 dark:placeholder-[#FFF9F2]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 focus:border-transparent transition-all"
+          className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/30 dark:placeholder-[#FFF9F2]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 transition-all"
         />
-        {error && (
-          <p className="flex items-center gap-1.5 text-xs text-red-500 mt-1.5">
-            <AlertCircle size={12} /> {error}
-          </p>
-        )}
-
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={handleConnect}
-            className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] transition-opacity hover:opacity-85 flex items-center justify-center gap-1.5"
-            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
-          >
-            Authorize with Shopify <ExternalLink size={12} />
-          </button>
+        {error && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle size={11} />{error}</p>}
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors">Cancel</button>
+          <button onClick={go} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>Authorize with Shopify</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── API Key Credentials Modal ─────────────────────────────────────────────────
+// ─── Integration Card ─────────────────────────────────────────────────────────
 
-function CredentialsModal({
-  provider,
-  name,
-  clientIdLabel,
-  clientSecretLabel,
-  hint,
-  existingClientId,
-  onSaved,
-  onClose,
+function IntegrationCard({
+  provider, status, onSaved, onDisconnected,
 }: {
-  provider:          string;
-  name:              string;
-  clientIdLabel:     string;
-  clientSecretLabel: string;
-  hint?:             string;
-  existingClientId?: string | null;
-  onSaved:           (clientId: string) => void;
-  onClose:           () => void;
+  provider:      ProviderDef;
+  status?:       IntegrationStatus;
+  onSaved:       (p: string, fields: string[]) => void;
+  onDisconnected:(p: string) => void;
 }) {
-  const [clientId,     setClientId]     = useState(existingClientId ?? "");
-  const [clientSecret, setClientSecret] = useState("");
-  const [showSecret,   setShowSecret]   = useState(false);
-  const [saving,       setSaving]       = useState(false);
-  const [error,        setError]        = useState("");
+  const connected = status?.connected ?? false;
+  const [editing,   setEditing]   = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [removing,  setRemoving]  = useState(false);
+  const [showShopify, setShowShopify] = useState(false);
+  const [confirm,   setConfirm]   = useState(false);
+  const [err,       setErr]       = useState("");
+  const [vals,      setVals]      = useState<Record<string, string>>({});
+  const [revealed,  setRevealed]  = useState<Record<string, boolean>>({});
+
+  const setVal = (k: string, v: string) => setVals(p => ({ ...p, [k]: v }));
+  const toggleReveal = (k: string) => setRevealed(p => ({ ...p, [k]: !p[k] }));
 
   const handleSave = async () => {
-    if (!clientId.trim() || !clientSecret.trim()) {
-      setError(`Both ${clientIdLabel} and ${clientSecretLabel} are required.`);
-      return;
-    }
-    setSaving(true);
-    setError("");
+    const payload: Record<string, string> = {};
+    (provider.fields ?? []).forEach(f => { if (vals[f.key]?.trim()) payload[f.key] = vals[f.key].trim(); });
+    if (Object.keys(payload).length === 0) { setErr("Enter at least one field."); return; }
+    setSaving(true); setErr("");
     try {
-      const res = await fetch(`${API_BASE}/api/integrations/${provider}/credentials`, {
-        method:      "POST",
-        credentials: "include",
-        headers:     { "Content-Type": "application/json" },
-        body:        JSON.stringify({ clientId: clientId.trim(), clientSecret: clientSecret.trim() }),
+      const res = await fetch(`${API_BASE}/api/integrations/${provider.id}/credentials`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Failed to save credentials."); return; }
-      onSaved(clientId.trim());
-    } catch {
-      setError("Network error — please try again.");
-    } finally {
-      setSaving(false);
-    }
+      if (!res.ok) { setErr(data.error ?? "Save failed."); return; }
+      onSaved(provider.id, Object.keys(payload));
+      setEditing(false);
+      setVals({});
+    } catch { setErr("Network error."); }
+    finally { setSaving(false); }
   };
 
-  const isUpdate = !!existingClientId;
+  const handleRemove = async () => {
+    setRemoving(true);
+    try {
+      await fetch(`${API_BASE}/api/integrations/${provider.id}`, { method: "DELETE", credentials: "include" });
+      onDisconnected(provider.id);
+    } finally { setRemoving(false); setConfirm(false); }
+  };
+
+  const showForm = (!connected && provider.authMode === "api_key") || editing;
+  const { Icon, color } = provider;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl p-6 monarch-card-settings">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">
-            {isUpdate ? "Update" : "Connect"} {name}
-          </h2>
-          <button onClick={onClose} className="text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors">
-            <X size={16} />
-          </button>
+    <>
+      {showShopify && <ShopifyModal onClose={() => setShowShopify(false)} />}
+
+      <div className="rounded-xl p-4 monarch-card-settings flex flex-col gap-3">
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#2e2010]">
+              <Icon size={18} color={color} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] leading-tight">{provider.name}</p>
+              <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5 leading-snug">{provider.desc}</p>
+            </div>
+          </div>
+          {/* Status badge */}
+          <div className="shrink-0">
+            {connected ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-900/25 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+                <CheckCircle2 size={10} />Connected
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#3A3A3A]/6 dark:bg-[#FFF9F2]/6 text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10">
+                <XCircle size={10} />Not connected
+              </span>
+            )}
+          </div>
         </div>
 
-        {hint && (
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-4 leading-relaxed">
-            {hint}
-          </p>
+        {/* Connected summary */}
+        {connected && !editing && (
+          <div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+              {(provider.fields ?? []).map(f => {
+                const saved = status?.savedFields?.includes(f.key);
+                return (
+                  <div key={f.key} className="flex items-center gap-1">
+                    <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{f.label}</span>
+                    <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${saved ? "text-emerald-500" : "text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25"}`}>
+                      <CheckCircle2 size={9} />{saved ? "Saved" : "Not set"}
+                    </span>
+                  </div>
+                );
+              })}
+              {provider.authMode === "oauth_shopify" && status?.shopDomain && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Store</span>
+                  <span className="text-[10px] font-semibold text-emerald-500">{status.shopDomain}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {provider.authMode === "api_key" && (
+                <button onClick={() => { setEditing(true); setErr(""); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-[#FFBC80]/50 transition-colors">
+                  <Pencil size={11} />Edit
+                </button>
+              )}
+              {!confirm ? (
+                <button onClick={() => setConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-red-400/50 hover:text-red-500 transition-colors">
+                  <Trash2 size={11} />Disconnect
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Are you sure?</span>
+                  <button onClick={handleRemove} disabled={removing} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-red-500 hover:bg-red-600 text-white disabled:opacity-60 transition-colors flex items-center gap-1">
+                    {removing ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}Yes
+                  </button>
+                  <button onClick={() => setConfirm(false)} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
-        <div className="space-y-3">
-          {/* Client ID */}
-          <div>
-            <label className="block text-xs font-semibold text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 mb-1.5 uppercase tracking-wider">
-              {clientIdLabel}
-            </label>
-            <input
-              type="text"
-              value={clientId}
-              onChange={(e) => { setClientId(e.target.value); setError(""); }}
-              placeholder={`Enter ${clientIdLabel}`}
-              autoFocus
-              autoComplete="off"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/30 dark:placeholder-[#FFF9F2]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 focus:border-transparent transition-all font-mono"
-            />
-          </div>
+        {/* Shopify OAuth button (not connected) */}
+        {!connected && provider.authMode === "oauth_shopify" && (
+          <button onClick={() => setShowShopify(true)} className="w-full py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity flex items-center justify-center gap-1.5" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>
+            <SiShopify size={13} />Connect Shopify
+          </button>
+        )}
 
-          {/* Client Secret */}
-          <div>
-            <label className="block text-xs font-semibold text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 mb-1.5 uppercase tracking-wider">
-              {clientSecretLabel} {isUpdate && <span className="normal-case font-normal text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">(leave blank to keep existing)</span>}
-            </label>
-            <div className="relative">
-              <input
-                type={showSecret ? "text" : "password"}
-                value={clientSecret}
-                onChange={(e) => { setClientSecret(e.target.value); setError(""); }}
-                placeholder={isUpdate ? "Enter new value to update" : `Enter ${clientSecretLabel}`}
-                autoComplete="new-password"
-                className="w-full px-3.5 py-2.5 pr-10 text-sm rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/30 dark:placeholder-[#FFF9F2]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 focus:border-transparent transition-all font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowSecret((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#3A3A3A]/35 dark:text-[#FFF9F2]/30 hover:text-[#3A3A3A]/70 dark:hover:text-[#FFF9F2]/60"
-              >
-                {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
+        {/* Manual credential form */}
+        {showForm && provider.fields && (
+          <div className="space-y-2.5">
+            {provider.fields.map(f => (
+              <div key={f.key}>
+                <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">{f.label}</label>
+                <div className="relative">
+                  <input
+                    type={f.secret && !revealed[f.key] ? "password" : "text"}
+                    value={vals[f.key] ?? ""}
+                    onChange={e => { setVal(f.key, e.target.value); setErr(""); }}
+                    placeholder={f.placeholder}
+                    autoComplete="new-password"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all font-mono"
+                    style={{ paddingRight: f.secret ? "2.25rem" : undefined }}
+                  />
+                  {f.secret && (
+                    <button type="button" onClick={() => toggleReveal(f.key)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 hover:text-[#3A3A3A]/60 dark:hover:text-[#FFF9F2]/55">
+                      {revealed[f.key] ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {err && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
+
+            <div className="flex gap-2 pt-0.5">
+              {editing && (
+                <button onClick={() => { setEditing(false); setVals({}); setErr(""); }} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
+              )}
+              <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>
+                {saving ? <Loader2 size={12} className="animate-spin" /> : null}
+                {editing ? "Update Credentials" : "Save & Connect"}
               </button>
             </div>
           </div>
-        </div>
-
-        {error && (
-          <p className="flex items-center gap-1.5 text-xs text-red-500 mt-3">
-            <AlertCircle size={12} /> {error}
-          </p>
         )}
-
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] transition-opacity hover:opacity-85 disabled:opacity-60 flex items-center justify-center gap-1.5"
-            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
-          >
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Key size={12} />}
-            {isUpdate ? "Update Credentials" : "Save & Connect"}
-          </button>
-        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-// ─── Disconnect Confirm Modal ──────────────────────────────────────────────────
+// ─── Google Sheets Section ────────────────────────────────────────────────────
 
-function DisconnectModal({
-  name, onConfirm, onClose, loading,
-}: {
-  name: string; onConfirm: () => void; onClose: () => void; loading: boolean;
-}) {
+interface Sheet { id: string; name: string; url: string; tab?: string; }
+
+function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
+  const [sheets, setSheets]   = useState<Sheet[]>(initialSheets);
+  const [adding, setAdding]   = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [name, setName]       = useState("");
+  const [url,  setUrl]        = useState("");
+  const [tab,  setTab]        = useState("");
+  const [err,  setErr]        = useState("");
+
+  const handleAdd = async () => {
+    if (!name.trim() || !url.trim()) { setErr("Sheet name and URL are required."); return; }
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`${API_BASE}/api/integrations/google_sheets/sheets`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), url: url.trim(), tab: tab.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErr(data.error ?? "Failed to add sheet."); return; }
+      setSheets(data.sheets);
+      setAdding(false); setName(""); setUrl(""); setTab("");
+    } catch { setErr("Network error."); }
+    finally { setSaving(false); }
+  };
+
+  const handleRemove = async (id: string) => {
+    setRemoving(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/integrations/google_sheets/sheets/${id}`, { method: "DELETE", credentials: "include" });
+      const data = await res.json();
+      if (res.ok) setSheets(data.sheets ?? []);
+    } finally { setRemoving(null); }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-xs rounded-2xl p-6 monarch-card-settings">
-        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">Disconnect {name}?</h2>
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-5">
-          This removes the stored credentials. You can reconnect at any time.
-        </p>
-        <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-60 transition-colors flex items-center justify-center gap-1.5"
-          >
-            {loading ? <Loader2 size={12} className="animate-spin" /> : <Unplug size={12} />}
-            Disconnect
-          </button>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Data Exports</h3>
+          <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">Google Sheets — add as many sheets as needed</p>
         </div>
+        <button
+          onClick={() => { setAdding(true); setErr(""); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
+          style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+        >
+          <Plus size={13} />Add Sheet
+        </button>
+      </div>
+
+      {/* Sheet list */}
+      <div className="space-y-2">
+        {sheets.length === 0 && !adding && (
+          <div className="rounded-xl p-5 monarch-card-settings text-center">
+            <SiGooglesheets size={24} color="#34A853" className="mx-auto mb-2 opacity-60" />
+            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">No sheets connected yet. Click "Add Sheet" to link a Google Sheet.</p>
+          </div>
+        )}
+
+        {sheets.map(s => (
+          <div key={s.id} className="flex items-center gap-3 px-4 py-3 rounded-xl monarch-card-settings">
+            <SiGooglesheets size={16} color="#34A853" className="shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{s.name}</p>
+              <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 truncate">{s.url}{s.tab ? ` · ${s.tab}` : ""}</p>
+            </div>
+            <button
+              onClick={() => handleRemove(s.id)}
+              disabled={removing === s.id}
+              className="shrink-0 p-1.5 rounded-lg text-[#3A3A3A]/35 dark:text-[#FFF9F2]/30 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              {removing === s.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            </button>
+          </div>
+        ))}
+
+        {/* Add form */}
+        {adding && (
+          <div className="rounded-xl p-4 monarch-card-settings space-y-2.5">
+            <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">New Google Sheet</p>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">Sheet Name</label>
+              <input autoFocus value={name} onChange={e => { setName(e.target.value); setErr(""); }} placeholder="e.g. Sales Data Q1" className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">Sheet URL</label>
+              <input value={url} onChange={e => { setUrl(e.target.value); setErr(""); }} placeholder="https://docs.google.com/spreadsheets/d/..." className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all font-mono" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">Tab Name <span className="normal-case font-normal opacity-60">(optional)</span></label>
+              <input value={tab} onChange={e => setTab(e.target.value)} placeholder="Sheet1" className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all" />
+            </div>
+            {err && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
+            <div className="flex gap-2 pt-0.5">
+              <button onClick={() => { setAdding(false); setName(""); setUrl(""); setTab(""); setErr(""); }} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
+              <button onClick={handleAdd} disabled={saving} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}Add Sheet
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -323,26 +497,26 @@ function DisconnectModal({
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boolean }) {
-  const [statuses, setStatuses]                 = useState<IntegrationStatus[]>([]);
-  const [loading, setLoading]                   = useState(true);
-  const [shopifyModal, setShopifyModal]         = useState(false);
-  const [credentialsFor, setCredentialsFor]     = useState<string | null>(null);
-  const [disconnecting, setDisconnecting]       = useState<string | null>(null);
-  const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
-  const [banner, setBanner]                     = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [statuses, setStatuses] = useState<IntegrationStatus[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [banner,   setBanner]   = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [sheets,   setSheets]   = useState<Sheet[]>([]);
 
   const fetchStatuses = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/integrations`, { credentials: "include" });
-      if (res.ok) setStatuses((await res.json()).integrations ?? []);
-    } finally {
-      setLoading(false);
-    }
+      if (res.ok) {
+        const data = await res.json();
+        setStatuses(data.integrations ?? []);
+        const gsRow = data.integrations?.find((i: IntegrationStatus & { sheets: Sheet[] }) => i.provider === "google_sheets");
+        setSheets((gsRow as any)?.sheets ?? []);
+      }
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchStatuses(); }, [fetchStatuses]);
 
-  // Handle OAuth callback redirect params
+  // Handle OAuth return params
   useEffect(() => {
     const params  = new URLSearchParams(window.location.search);
     const success = params.get("success");
@@ -352,14 +526,14 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
       fetchStatuses();
     } else if (error) {
       const msgs: Record<string, string> = {
-        shopify_auth_failed:    "Shopify authorization failed. Please try again.",
-        shopify_invalid_state:  "OAuth state mismatch — please try connecting again.",
+        shopify_auth_failed:    "Shopify authorization failed.",
+        shopify_invalid_state:  "OAuth state mismatch — please try again.",
         shopify_hmac_failed:    "Shopify signature verification failed.",
-        shopify_token_failed:   "Failed to exchange the authorization code.",
+        shopify_token_failed:   "Failed to exchange authorization code.",
         shopify_network_error:  "Network error during Shopify authorization.",
         shopify_missing_params: "Missing parameters in Shopify callback.",
       };
-      setBanner({ type: "error", msg: msgs[error] ?? "An error occurred during OAuth." });
+      setBanner({ type: "error", msg: msgs[error] ?? "OAuth error." });
     }
     if (success || error) window.history.replaceState({}, "", window.location.pathname);
   }, [fetchStatuses]);
@@ -370,176 +544,73 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
     return () => clearTimeout(t);
   }, [banner]);
 
-  const handleDisconnect = async (provider: string) => {
-    setDisconnecting(provider);
-    try {
-      const res = await fetch(`${API_BASE}/api/integrations/${provider}`, {
-        method: "DELETE", credentials: "include",
-      });
-      if (res.ok) {
-        setStatuses((prev) =>
-          prev.map((s) => s.provider === provider ? { ...s, connected: false, shopDomain: null, clientId: null } : s)
-        );
-        setBanner({ type: "success", msg: `${PROVIDERS.find(p => p.id === provider)?.name} disconnected.` });
-      } else {
-        setBanner({ type: "error", msg: "Failed to disconnect. Please try again." });
-      }
-    } finally {
-      setDisconnecting(null);
-      setDisconnectTarget(null);
-    }
+  const statusFor = (id: string) => statuses.find(s => s.provider === id);
+
+  const handleSaved = (id: string, fields: string[]) => {
+    setStatuses(prev => prev.map(s =>
+      s.provider === id ? { ...s, connected: true, savedFields: [...new Set([...s.savedFields, ...fields])] } : s
+    ));
+    setBanner({ type: "success", msg: `${PROVIDERS.find(p => p.id === id)?.name} connected!` });
   };
 
-  const handleCredentialsSaved = (provider: string, clientId: string) => {
-    setStatuses((prev) =>
-      prev.map((s) => s.provider === provider ? { ...s, connected: true, clientId } : s)
+  const handleDisconnected = (id: string) => {
+    setStatuses(prev => prev.map(s =>
+      s.provider === id ? { ...s, connected: false, savedFields: [], shopDomain: null } : s
+    ));
+    setBanner({ type: "success", msg: `${PROVIDERS.find(p => p.id === id)?.name} disconnected.` });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={24} className="animate-spin text-[#FFBC80]" />
+      </div>
     );
-    setCredentialsFor(null);
-    setBanner({ type: "success", msg: `${PROVIDERS.find(p => p.id === provider)?.name} connected successfully!` });
-  };
-
-  const statusFor = (id: string) => statuses.find((s) => s.provider === id);
-  const credentialTarget = PROVIDERS.find((p) => p.id === credentialsFor);
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Modals */}
-      {shopifyModal && <ShopifyModal onClose={() => setShopifyModal(false)} />}
-
-      {credentialsFor && credentialTarget && credentialTarget.authMode === "api_key" && (
-        <CredentialsModal
-          provider={credentialsFor}
-          name={credentialTarget.name}
-          clientIdLabel={credentialTarget.clientIdLabel ?? "Client ID"}
-          clientSecretLabel={credentialTarget.clientSecretLabel ?? "Client Secret"}
-          hint={credentialTarget.hint}
-          existingClientId={statusFor(credentialsFor)?.clientId ?? null}
-          onSaved={(clientId) => handleCredentialsSaved(credentialsFor, clientId)}
-          onClose={() => setCredentialsFor(null)}
-        />
-      )}
-
-      {disconnectTarget && (
-        <DisconnectModal
-          name={PROVIDERS.find((p) => p.id === disconnectTarget)?.name ?? disconnectTarget}
-          onConfirm={() => handleDisconnect(disconnectTarget)}
-          onClose={() => setDisconnectTarget(null)}
-          loading={disconnecting === disconnectTarget}
-        />
-      )}
-
+    <div className="space-y-8">
       {/* Banner */}
       {banner && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${
-          banner.type === "success"
-            ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40"
-            : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200/60 dark:border-red-800/40"
-        }`}>
-          {banner.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${banner.type === "success" ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200/60 dark:border-red-800/40"}`}>
+          {banner.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
           {banner.msg}
           <button onClick={() => setBanner(null)} className="ml-auto opacity-60 hover:opacity-100"><X size={14} /></button>
         </div>
       )}
 
-      {/* Callback URI reference */}
-      <div className="rounded-xl p-4 bg-[#FFBC80]/8 border border-[#FFBC80]/25">
-        <p className="text-xs font-semibold text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 uppercase tracking-wider mb-1.5">
-          OAuth Callback URI
-        </p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 text-xs font-mono text-[#3A3A3A] dark:text-[#FFF9F2] break-all">
-            {window.location.origin}/api/integrations/&#123;provider&#125;/callback
-          </code>
-          <button
-            onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/api/integrations/shopify/callback`)}
-            className="shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 border border-[#FFBC80]/30 hover:bg-[#FFBC80]/15 transition-colors"
-          >
-            Copy Shopify URI
-          </button>
-        </div>
-        <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-1.5">
-          Register this in your platform's app settings before connecting.
-        </p>
-      </div>
+      {/* Sections */}
+      {SECTIONS.map(section => {
+        const sectionProviders = PROVIDERS.filter(p => p.section === section);
+        const connectedCount   = sectionProviders.filter(p => statusFor(p.id)?.connected).length;
 
-      {/* Integration list */}
-      <div className="space-y-2.5">
-        {PROVIDERS.map(({ id, Icon, name, desc, color, authMode, clientIdLabel, clientSecretLabel }) => {
-          const status    = statusFor(id);
-          const connected = status?.connected ?? false;
-
-          return (
-            <div key={id} className="flex items-center gap-4 p-4 rounded-xl monarch-card-settings">
-              {/* Icon */}
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#2e2010]">
-                {loading
-                  ? <div className="w-5 h-5 rounded bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10 animate-pulse" />
-                  : <Icon size={20} color={color} />
-                }
+        return (
+          <div key={section}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{section}</h3>
               </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{name}</p>
-                <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5 truncate">
-                  {connected
-                    ? (status?.shopDomain ?? (status?.clientId ? `${clientIdLabel}: ${status.clientId}` : "Connected"))
-                    : desc}
-                </p>
-              </div>
-
-              {/* Action */}
-              <div className="flex items-center gap-2 shrink-0">
-                {loading ? (
-                  <Loader2 size={16} className="text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 animate-spin" />
-                ) : connected ? (
-                  <>
-                    <CheckCircle size={16} className="text-emerald-500" />
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Connected</span>
-                    {!readOnly && (
-                      <div className="flex items-center gap-1.5 ml-1">
-                        {/* Update credentials button for API key providers */}
-                        {authMode === "api_key" && (
-                          <button
-                            onClick={() => setCredentialsFor(id)}
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 border border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 hover:border-[#FFBC80]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"
-                          >
-                            Update
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setDisconnectTarget(id)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 border border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 hover:border-red-400/60 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : readOnly ? (
-                  <span className="text-xs text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">Not connected</span>
-                ) : authMode === "oauth_shopify" ? (
-                  <button
-                    onClick={() => setShopifyModal(true)}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] transition-opacity hover:opacity-80"
-                    style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
-                  >
-                    Connect
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setCredentialsFor(id)}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] transition-opacity hover:opacity-80"
-                    style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
-                  >
-                    Connect
-                  </button>
-                )}
-              </div>
+              <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#FFBC80]/15 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                {connectedCount}/{sectionProviders.length} connected
+              </span>
             </div>
-          );
-        })}
-      </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {sectionProviders.map(p => (
+                <IntegrationCard
+                  key={p.id}
+                  provider={p}
+                  status={statusFor(p.id)}
+                  onSaved={readOnly ? () => {} : handleSaved}
+                  onDisconnected={readOnly ? () => {} : handleDisconnected}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Google Sheets */}
+      {!readOnly && <GoogleSheetsSection initialSheets={sheets} />}
     </div>
   );
 }
