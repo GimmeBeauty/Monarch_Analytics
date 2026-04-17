@@ -5,6 +5,7 @@ import forecastRouter from "./forecast.js";
 import authRouter from "./auth.js";
 import integrationsRouter from "./integrations.js";
 import oauthRouter from "./oauth.js";
+import dataRouter from "./data.js";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use("/forecast", forecastRouter);
 router.use("/auth", authRouter);
 router.use("/integrations", integrationsRouter);
 router.use("/oauth", oauthRouter);
+router.use("/data", dataRouter);
 
 export default router;

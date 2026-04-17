@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
@@ -17,6 +18,16 @@ import {
   type AdChannelRow, type AdSignal, type BlendedMetric,
   type ChannelFunnel, type AdvancedRow, type SignalType,
 } from "@/lib/adAttributionData";
+import { API_BASE } from "@/lib/apiBase";
+
+interface AdPlatformData {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  revenue: number;
+  dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }>;
+}
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -690,13 +701,101 @@ export default function Attribution() {
     [selectedChannelIds],
   );
 
-  const data = useMemo(() => generateAdAttributionData({
+  const { data: realGoogleAds } = useQuery<AdPlatformData | null>({
+    queryKey: ["google-ads-data", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/google_ads?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return null;
+      return res.json() as Promise<AdPlatformData>;
+    },
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const { data: realMetaAds } = useQuery<AdPlatformData | null>({
+    queryKey: ["meta-ads-data", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/meta?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return null;
+      return res.json() as Promise<AdPlatformData>;
+    },
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const mockData = useMemo(() => generateAdAttributionData({
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
     selectedStoreIds: storeIds,
     filterChannelIds,
     pricingMode,
   }), [dateRange.startDate, dateRange.endDate, storeIds, filterChannelIds, pricingMode]);
+
+  const data = useMemo(() => {
+    const overrides: Record<string, AdPlatformData> = {};
+    if (realGoogleAds) overrides["google-ads"] = realGoogleAds;
+    if (realMetaAds)   overrides["meta-ads"]   = realMetaAds;
+    if (Object.keys(overrides).length === 0) return mockData;
+
+    const channels = mockData.channels.map((ch): AdChannelRow => {
+      const real = overrides[ch.channelId];
+      if (!real) return ch;
+      const { spend, impressions, clicks, conversions, revenue } = real;
+      const ctr         = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      const cvr         = clicks > 0 ? (conversions / clicks) * 100 : 0;
+      const roas        = spend > 0 ? revenue / spend : 0;
+      const cpa         = conversions > 0 ? spend / conversions : 0;
+      const cpm         = impressions > 0 ? (spend / impressions) * 1000 : 0;
+      const cpc         = clicks > 0 ? spend / clicks : 0;
+      const frequency   = ch.frequency;
+      return {
+        ...ch,
+        spend, impressions, clicks, conversions, revenue,
+        ctr, cvr, roas, cpa, cpm, cpc, frequency,
+      };
+    });
+
+    const totalSpend       = channels.reduce((s, c) => s + c.spend, 0);
+    const totalRevenue     = channels.reduce((s, c) => s + c.revenue, 0);
+    const totalImpressions = channels.reduce((s, c) => s + c.impressions, 0);
+    const totalClicks      = channels.reduce((s, c) => s + c.clicks, 0);
+    const blendedRoas      = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+    const blendedCtr       = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+    const blendedCpm       = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
+    const blendedCpc       = totalClicks > 0 ? totalSpend / totalClicks : 0;
+
+    const fmt = (v: number, id: string): string => {
+      if (id === "spend" || id === "revenue" || id === "cpm" || id === "cpc") {
+        if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+        if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+        return `$${v.toFixed(2)}`;
+      }
+      if (id === "roas") return `${blendedRoas.toFixed(2)}x`;
+      if (id === "ctr")  return `${blendedCtr.toFixed(2)}%`;
+      if (id === "impressions") {
+        if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+        if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+        return Math.round(v).toLocaleString();
+      }
+      return String(v);
+    };
+
+    const blendedMetrics: BlendedMetric[] = mockData.blendedMetrics.map((m) => {
+      const vals: Record<string, number> = {
+        spend: totalSpend, revenue: totalRevenue, roas: blendedRoas,
+        ctr: blendedCtr, cpm: blendedCpm, impressions: totalImpressions, cpc: blendedCpc,
+      };
+      if (!(m.id in vals)) return m;
+      const newVal = vals[m.id];
+      return { ...m, value: newVal, formatted: fmt(newVal, m.id) };
+    });
+
+    return { ...mockData, channels, blendedMetrics };
+  }, [mockData, realGoogleAds, realMetaAds]);
 
   // Funnel channel selector
   const [funnelChannelId, setFunnelChannelId] = useState<string>("");
