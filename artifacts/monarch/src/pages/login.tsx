@@ -14,9 +14,9 @@ function AuthShell({ children }: { children: React.ReactNode }) {
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2.5 mb-1">
             <img
-              src="/Monarch-Icon-500x.jpg"
+              src="/monarch-logo.jpg"
               alt="Monarch"
-              className="w-9 h-9 rounded-xl object-cover shadow-sm"
+              className="w-9 h-9 rounded-xl object-cover object-center shadow-sm"
             />
             <span className="text-2xl font-black tracking-widest text-[#3A3A3A] dark:text-[#FFF9F2]">
               MONARCH

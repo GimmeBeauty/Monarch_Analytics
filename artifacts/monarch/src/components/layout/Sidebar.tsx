@@ -60,7 +60,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 shrink-0">
         <div className="flex items-center gap-2">
-          <img src="/Monarch-Icon-500x.jpg" alt="Monarch" className="w-7 h-7 rounded-md object-cover" />
+          <img src="/monarch-logo.jpg" alt="Monarch" className="w-7 h-7 rounded-md object-cover object-center" />
           <span className="font-black text-xl tracking-widest text-[#3A3A3A] dark:text-[#FFF9F2]">MONARCH</span>
         </div>
       </div>

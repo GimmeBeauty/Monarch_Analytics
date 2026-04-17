@@ -13,9 +13,12 @@ const SHOPIFY_CLIENT_ID     = process.env.SHOPIFY_CLIENT_ID;
 const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const GOOGLE_ADS_CLIENT_ID     = process.env.GOOGLE_ADS_CLIENT_ID;
 const GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET;
+const META_APP_ID              = process.env.META_APP_ID;
+const META_APP_SECRET          = process.env.META_APP_SECRET;
 const APP_URL                  = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const SHOPIFY_SCOPES           = "read_orders,read_products,read_analytics,read_inventory,read_customers";
 const GOOGLE_ADS_SCOPE         = "https://www.googleapis.com/auth/adwords";
+const META_SCOPES              = "ads_read,ads_management";
 
 const ALL_PROVIDERS = [
   "shopify", "google_ads", "meta", "tiktok", "tiktok_shop",
@@ -140,6 +143,24 @@ router.get("/google_ads/connect", authenticate, (req, res) => {
     `&access_type=offline` +
     `&prompt=consent` +
     `&state=${encodeURIComponent(state)}`;
+  res.redirect(authUrl);
+});
+
+// ─── Meta Ads OAuth ───────────────────────────────────────────────────────────
+
+router.get("/meta/connect", authenticate, (req, res) => {
+  if (!META_APP_ID || !META_APP_SECRET) {
+    res.status(500).json({ error: "Meta Ads integration not configured" }); return;
+  }
+  const state = jwt.sign({ userId: (req as any).auth!.userId }, JWT_SECRET, { expiresIn: "10m" });
+  const redirectUri = `${APP_URL}/api/oauth/meta/callback`;
+  const authUrl =
+    `https://www.facebook.com/v18.0/dialog/oauth` +
+    `?client_id=${encodeURIComponent(META_APP_ID)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=${encodeURIComponent(META_SCOPES)}` +
+    `&state=${encodeURIComponent(state)}` +
+    `&response_type=code`;
   res.redirect(authUrl);
 });
 

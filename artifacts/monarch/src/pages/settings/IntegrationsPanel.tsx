@@ -87,11 +87,8 @@ const PROVIDERS: ProviderDef[] = [
   {
     id: "meta", name: "Meta Ads", desc: "Facebook & Instagram advertising",
     Icon: SiMeta, color: "#0082FB", section: "Advertising",
-    authMode: "oauth", oauthLabel: "Connect Meta Ads",
+    authMode: "oauth", oauthLabel: "Connect with Meta",
     fields: [
-      { key: "appId", label: "App ID", placeholder: "Enter App ID" },
-      { key: "appSecret", label: "App Secret", secret: true, placeholder: "Enter App Secret" },
-      { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
       { key: "adAccountId", label: "Ad Account ID", placeholder: "act_xxxx" },
     ],
   },
