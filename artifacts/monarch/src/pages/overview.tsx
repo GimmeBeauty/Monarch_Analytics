@@ -24,17 +24,21 @@ export default function Overview() {
   const { selectedIds } = useStoreFilter();
   const { mode: pricingMode } = usePricingMode();
 
-  const { data: shopifyData } = useQuery<ShopifyData | null>({
+  const { data: shopifyData, error: shopifyError } = useQuery<ShopifyData | null>({
     queryKey: ["shopify-data", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       const res = await fetch(
         `${API_BASE}/api/data/shopify?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
       return res.json() as Promise<ShopifyData>;
     },
     staleTime: 1000 * 60 * 15,
+    retry: false,
   });
 
   const mockData = useMemo(
@@ -60,43 +64,55 @@ export default function Overview() {
   );
 
   const data = useMemo(() => {
-    if (!shopifyData) return mockData;
+    if (!shopifyData || shopifyError) return mockData;
 
-    // Replace Shopify store row with real revenue
-    const storeBreakdown = mockData.storeBreakdown.map((s) => {
-      if (s.storeId !== "shopify") return s;
-      return {
+    const fmt = (v: number) =>
+      v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(2)}M`
+      : v >= 1_000   ? `$${(v / 1_000).toFixed(1)}K`
+      : `$${Math.round(v).toLocaleString()}`;
+
+    // Replace Shopify row revenue
+    const withRealShopify = mockData.storeBreakdown.map((s) =>
+      s.storeId !== "shopify"
+        ? s
+        : { ...s, revenue: shopifyData.revenue, formattedRevenue: fmt(shopifyData.revenue) }
+    );
+
+    // Recompute total and recalculate every store's contribution % from scratch
+    const newTotal = withRealShopify.reduce((sum, s) => sum + s.revenue, 0);
+    const storeBreakdown = withRealShopify
+      .map((s) => ({
         ...s,
-        revenue: shopifyData.revenue,
-        formattedRevenue:
-          shopifyData.revenue >= 1_000_000
-            ? `$${(shopifyData.revenue / 1_000_000).toFixed(2)}M`
-            : shopifyData.revenue >= 1_000
-              ? `$${(shopifyData.revenue / 1_000).toFixed(1)}K`
-              : `$${Math.round(shopifyData.revenue).toLocaleString()}`,
-      };
-    });
+        contribution: newTotal > 0 ? Math.round((s.revenue / newTotal) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
 
-    // Adjust total revenue KPI by the delta between real and mock Shopify revenue
+    // Rebuild the pie-chart slices from the updated breakdown
+    const topN = 6;
+    const contributionByStore = [
+      ...storeBreakdown.slice(0, topN).map((s) => ({ name: s.label, value: s.contribution, color: s.color })),
+    ];
+    const otherContrib = storeBreakdown.slice(topN).reduce((sum, s) => sum + s.contribution, 0);
+    if (otherContrib > 0) contributionByStore.push({ name: "Other", value: otherContrib, color: "#9CA3AF" });
+
+    // Update revenue and AOV KPIs
     const mockShopify = mockData.storeBreakdown.find((s) => s.storeId === "shopify");
     const revenueDelta = shopifyData.revenue - (mockShopify?.revenue ?? 0);
 
     const kpis = mockData.kpis.map((k) => {
-      if (k.id !== "revenue") return k;
-      const newValue = k.value + revenueDelta;
-      return {
-        ...k,
-        value: newValue,
-        formatted:
-          newValue >= 1_000_000
-            ? `$${(newValue / 1_000_000).toFixed(2)}M`
-            : newValue >= 1_000
-              ? `$${(newValue / 1_000).toFixed(1)}K`
-              : `$${Math.round(newValue).toLocaleString()}`,
-      };
+      if (k.id === "revenue") {
+        const v = k.value + revenueDelta;
+        return { ...k, value: v, formatted: fmt(v) };
+      }
+      if (k.id === "aov" && shopifyData.orders > 0) {
+        // AOV: we only have real Shopify orders — use that directly for the Shopify store
+        const v = shopifyData.revenue / shopifyData.orders;
+        return { ...k, value: v, formatted: fmt(v) };
+      }
+      return k;
     });
 
-    return { ...mockData, kpis, storeBreakdown };
+    return { ...mockData, kpis, storeBreakdown, contributionByStore };
   }, [mockData, shopifyData]);
 
   return (
@@ -105,6 +121,12 @@ export default function Overview() {
       description="Unified view of revenue, spend, and performance drivers across all stores and channels."
     >
       <div className="space-y-5">
+        {shopifyError && (
+          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/40 text-xs text-amber-700 dark:text-amber-400">
+            Shopify data unavailable — {(shopifyError as Error).message}. Showing estimated data.
+          </div>
+        )}
+
         {/* 8 KPIs */}
         <KPIGrid kpis={data.kpis} />
 
