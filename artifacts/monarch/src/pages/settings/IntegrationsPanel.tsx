@@ -78,12 +78,9 @@ const PROVIDERS: ProviderDef[] = [
   {
     id: "google_ads", name: "Google Ads", desc: "Search, display & shopping ads",
     Icon: SiGoogleads, color: "#4285F4", section: "Advertising",
-    authMode: "oauth", oauthLabel: "Connect Google Ads",
+    authMode: "oauth", oauthLabel: "Connect with Google",
     fields: [
       { key: "developerToken", label: "Developer Token", secret: true, placeholder: "xxxx" },
-      { key: "clientId", label: "Client ID", placeholder: "xxxx.apps.googleusercontent.com" },
-      { key: "clientSecret", label: "Client Secret", secret: true, placeholder: "GOCSPX-..." },
-      { key: "refreshToken", label: "Refresh Token", secret: true, placeholder: "1//0..." },
       { key: "customerId", label: "Customer ID", placeholder: "123-456-7890" },
     ],
   },

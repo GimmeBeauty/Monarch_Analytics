@@ -11,8 +11,11 @@ const router = Router();
 const JWT_SECRET            = process.env.JWT_SECRET!;
 const SHOPIFY_CLIENT_ID     = process.env.SHOPIFY_CLIENT_ID;
 const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
-const APP_URL               = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
-const SHOPIFY_SCOPES        = "read_orders,read_products,read_analytics,read_inventory,read_customers";
+const GOOGLE_ADS_CLIENT_ID     = process.env.GOOGLE_ADS_CLIENT_ID;
+const GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET;
+const APP_URL                  = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const SHOPIFY_SCOPES           = "read_orders,read_products,read_analytics,read_inventory,read_customers";
+const GOOGLE_ADS_SCOPE         = "https://www.googleapis.com/auth/adwords";
 
 const ALL_PROVIDERS = [
   "shopify", "google_ads", "meta", "tiktok", "tiktok_shop",
@@ -120,8 +123,28 @@ router.get("/shopify/callback", async (req, res) => {
   res.redirect(`${APP_URL}/integrations?success=shopify`);
 });
 
+// ─── Google Ads OAuth ─────────────────────────────────────────────────────────
+
+router.get("/google_ads/connect", authenticate, (req, res) => {
+  if (!GOOGLE_ADS_CLIENT_ID || !GOOGLE_ADS_CLIENT_SECRET) {
+    res.status(500).json({ error: "Google Ads integration not configured" }); return;
+  }
+  const state = jwt.sign({ userId: (req as any).auth!.userId }, JWT_SECRET, { expiresIn: "10m" });
+  const redirectUri = `${APP_URL}/api/oauth/google_ads/callback`;
+  const authUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth` +
+    `?client_id=${encodeURIComponent(GOOGLE_ADS_CLIENT_ID)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&response_type=code` +
+    `&scope=${encodeURIComponent(GOOGLE_ADS_SCOPE)}` +
+    `&access_type=offline` +
+    `&prompt=consent` +
+    `&state=${encodeURIComponent(state)}`;
+  res.redirect(authUrl);
+});
+
 // ─── POST /api/integrations/:provider/credentials ─────────────────────────────
-// Saves any set of fields for manual providers (stored as JSON in metadata).
+// Saves credential fields, merging with any existing metadata (e.g. OAuth tokens).
 
 router.post("/:provider/credentials", authenticate, async (req, res) => {
   const { provider } = req.params as { provider: AnyProvider };
@@ -135,15 +158,23 @@ router.post("/:provider/credentials", authenticate, async (req, res) => {
     res.status(400).json({ error: "At least one credential field is required" }); return;
   }
 
-  const meta: Record<string, string> = {};
-  filled.forEach(([k, v]) => { meta[k] = v.trim(); });
+  const incoming: Record<string, string> = {};
+  filled.forEach(([k, v]) => { incoming[k] = v.trim(); });
 
   try {
+    const existing = await db.select().from(integrationsTable)
+      .where(eq(integrationsTable.provider, provider)).limit(1);
+    const existingMeta = existing[0]?.metadata ? JSON.parse(existing[0].metadata) as Record<string, string> : {};
+    const mergedMeta   = { ...existingMeta, ...incoming };
+    const accessToken  = existing[0]?.accessToken && existing[0].accessToken !== "manual"
+      ? existing[0].accessToken
+      : "manual";
+
     await db.insert(integrationsTable)
-      .values({ provider, accessToken: "manual", metadata: JSON.stringify(meta), status: "connected" })
+      .values({ provider, accessToken, metadata: JSON.stringify(mergedMeta), status: "connected" })
       .onConflictDoUpdate({
         target: integrationsTable.provider,
-        set: { accessToken: "manual", metadata: JSON.stringify(meta), status: "connected", updatedAt: new Date() },
+        set: { metadata: JSON.stringify(mergedMeta), status: "connected", updatedAt: new Date() },
       });
     res.json({ success: true });
   } catch {
