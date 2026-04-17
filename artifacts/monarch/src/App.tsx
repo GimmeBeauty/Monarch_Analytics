@@ -25,6 +25,8 @@ import Login from "@/pages/login";
 import SetPassword from "@/pages/set-password";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfUse from "@/pages/terms-of-use";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 1000 * 60 * 2 } },
@@ -72,6 +74,14 @@ function Router() {
       {/* OAuth callback — public, no auth required */}
       <Route path="/oauth/callback">
         {() => <OAuthCallback />}
+      </Route>
+
+      {/* Legal pages — public, no auth required */}
+      <Route path="/privacy-policy">
+        {() => <PrivacyPolicy />}
+      </Route>
+      <Route path="/terms-of-use">
+        {() => <TermsOfUse />}
       </Route>
 
       {/* Public auth routes */}

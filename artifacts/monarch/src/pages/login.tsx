@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import Footer from "@/components/layout/Footer";
 
 // ─── Shared Layout ────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ function AuthShell({ children }: { children: React.ReactNode }) {
         >
           {children}
         </div>
+
+        <Footer className="mt-6" />
       </div>
     </div>
   );

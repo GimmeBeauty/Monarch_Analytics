@@ -13,6 +13,7 @@ import {
 import { useProfile } from "@/context/ProfileContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import Footer from "./Footer";
 
 const topNavItems = [
   { path: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -160,6 +161,8 @@ export default function Sidebar() {
             Sign Out
           </button>
         </div>
+
+        <Footer className="px-3 pb-3 pt-1" />
       </div>
     </aside>
   );
