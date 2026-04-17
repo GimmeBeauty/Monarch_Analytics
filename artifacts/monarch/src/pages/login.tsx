@@ -7,6 +7,8 @@ import { useTheme } from "@/context/ThemeContext";
 // ─── Shared Layout ────────────────────────────────────────────────────────────
 
 function AuthShell({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
+  const logoSrc = theme === "dark" ? "/monarch-logo.jpg" : "/monarch-logo-light.jpg";
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#FFF9F2] dark:bg-[#120d06] px-4">
       <div className="w-full max-w-sm">
@@ -14,7 +16,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2.5 mb-1">
             <img
-              src="/monarch-logo.jpg"
+              src={logoSrc}
               alt="Monarch"
               className="w-9 h-9 rounded-xl object-cover object-center shadow-sm"
             />

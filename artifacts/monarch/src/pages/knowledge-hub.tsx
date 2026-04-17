@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { ArrowLeft, BookOpen, Search, ChevronRight } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
 
 const articles = [
   {
@@ -36,6 +37,8 @@ const articles = [
 ];
 
 export default function KnowledgeHub() {
+  const { theme } = useTheme();
+  const logoSrc = theme === "dark" ? "/monarch-logo.jpg" : "/monarch-logo-light.jpg";
   return (
     <div className="min-h-screen bg-[#FFF9F2] dark:bg-[#120d06]">
       {/* Top nav bar */}
@@ -49,9 +52,7 @@ export default function KnowledgeHub() {
           </Link>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
-              <span className="text-[#3A3A3A] font-black text-xs">M</span>
-            </div>
+            <img src={logoSrc} alt="Monarch" className="w-7 h-7 rounded-md object-cover object-center" />
             <span className="font-black text-sm tracking-widest text-[#3A3A3A] dark:text-[#FFF9F2]">MONARCH</span>
           </div>
         </div>
