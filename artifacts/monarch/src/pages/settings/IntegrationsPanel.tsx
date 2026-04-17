@@ -51,10 +51,6 @@ const PROVIDERS: ProviderDef[] = [
     id: "tiktok_shop", name: "TikTok Shop", desc: "TikTok storefront sales data",
     Icon: SiTiktok, color: "#010101", section: "eCommerce",
     authMode: "oauth", oauthLabel: "Connect TikTok Shop",
-    fields: [
-      { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
-      { key: "shopId", label: "Shop ID", placeholder: "Enter shop ID" },
-    ],
   },
   {
     id: "walmart", name: "Walmart Marketplace", desc: "Walmart seller performance",

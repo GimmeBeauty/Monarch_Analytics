@@ -10,6 +10,8 @@ const GOOGLE_ADS_CLIENT_ID     = process.env.GOOGLE_ADS_CLIENT_ID;
 const GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET;
 const META_APP_ID              = process.env.META_APP_ID;
 const META_APP_SECRET          = process.env.META_APP_SECRET;
+const TIKTOK_SHOP_APP_KEY      = process.env.TIKTOK_SHOP_APP_KEY;
+const TIKTOK_SHOP_SECRET       = process.env.TIKTOK_SHOP_SECRET;
 const APP_URL                  = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 // ─── GET /api/oauth/google_ads/callback ───────────────────────────────────────
@@ -109,6 +111,55 @@ router.get("/meta/callback", async (req, res) => {
       set: { accessToken, metadata: JSON.stringify(existingMeta), status: "connected", updatedAt: new Date() },
     });
   res.redirect(`${APP_URL}/settings/integrations?success=meta`);
+});
+
+// ─── GET /api/oauth/tiktok_shop/callback ──────────────────────────────────────
+
+router.get("/tiktok_shop/callback", async (req, res) => {
+  const { code, state } = req.query as Record<string, string>;
+  if (!code || !state) {
+    res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return;
+  }
+  try { jwt.verify(state, JWT_SECRET); } catch {
+    res.redirect(`${APP_URL}/settings/integrations?error=oauth_invalid_state`); return;
+  }
+
+  let accessToken: string; let refreshToken: string; let shopId: string;
+  try {
+    const tokenRes = await fetch(
+      `https://auth.tiktok-shops.com/api/authorize/token` +
+      `?app_key=${encodeURIComponent(TIKTOK_SHOP_APP_KEY!)}` +
+      `&app_secret=${encodeURIComponent(TIKTOK_SHOP_SECRET!)}` +
+      `&auth_code=${encodeURIComponent(code)}` +
+      `&grant_type=authorized_code`,
+    );
+    if (!tokenRes.ok) { res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return; }
+    const body = await tokenRes.json() as {
+      data?: { access_token: string; refresh_token?: string; seller_id?: string };
+      access_token?: string; refresh_token?: string; seller_id?: string;
+    };
+    // TikTok Shop wraps the payload in a `data` field
+    const td   = body.data ?? body;
+    accessToken  = td.access_token ?? "";
+    refreshToken = td.refresh_token ?? "";
+    shopId       = td.seller_id ?? "";
+    if (!accessToken) { res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return; }
+  } catch { res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return; }
+
+  const existing = await db.select().from(integrationsTable)
+    .where(eq(integrationsTable.provider, "tiktok_shop")).limit(1);
+  const existingMeta = existing[0]?.metadata
+    ? JSON.parse(existing[0].metadata) as Record<string, string>
+    : {};
+  const newMeta = { ...existingMeta, refreshToken, ...(shopId && { shopId }) };
+
+  await db.insert(integrationsTable)
+    .values({ provider: "tiktok_shop", accessToken, metadata: JSON.stringify(newMeta), status: "connected" })
+    .onConflictDoUpdate({
+      target: integrationsTable.provider,
+      set: { accessToken, metadata: JSON.stringify(newMeta), status: "connected", updatedAt: new Date() },
+    });
+  res.redirect(`${APP_URL}/settings/integrations?success=tiktok_shop`);
 });
 
 export default router;

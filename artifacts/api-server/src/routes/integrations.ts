@@ -15,6 +15,9 @@ const GOOGLE_ADS_CLIENT_ID     = process.env.GOOGLE_ADS_CLIENT_ID;
 const GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET;
 const META_APP_ID              = process.env.META_APP_ID;
 const META_APP_SECRET          = process.env.META_APP_SECRET;
+const TIKTOK_SHOP_APP_KEY      = process.env.TIKTOK_SHOP_APP_KEY;
+const TIKTOK_SHOP_CLIENT_ID    = process.env.TIKTOK_SHOP_CLIENT_ID;
+const TIKTOK_SHOP_SECRET       = process.env.TIKTOK_SHOP_SECRET;
 const APP_URL                  = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const SHOPIFY_SCOPES           = "read_orders,read_products,read_analytics,read_inventory,read_customers";
 const GOOGLE_ADS_SCOPE         = "https://www.googleapis.com/auth/adwords";
@@ -161,6 +164,22 @@ router.get("/meta/connect", authenticate, (req, res) => {
     `&scope=${encodeURIComponent(META_SCOPES)}` +
     `&state=${encodeURIComponent(state)}` +
     `&response_type=code`;
+  res.redirect(authUrl);
+});
+
+// ─── TikTok Shop OAuth ────────────────────────────────────────────────────────
+
+router.get("/tiktok_shop/connect", authenticate, (req, res) => {
+  if (!TIKTOK_SHOP_APP_KEY || !TIKTOK_SHOP_SECRET) {
+    res.status(500).json({ error: "TikTok Shop integration not configured" }); return;
+  }
+  const state = jwt.sign({ userId: (req as any).auth!.userId }, JWT_SECRET, { expiresIn: "10m" });
+  const redirectUri = `${APP_URL}/api/oauth/tiktok_shop/callback`;
+  const authUrl =
+    `https://auth.tiktok-shops.com/oauth/authorize` +
+    `?app_key=${encodeURIComponent(TIKTOK_SHOP_APP_KEY)}` +
+    `&state=${encodeURIComponent(state)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}`;
   res.redirect(authUrl);
 });
 
