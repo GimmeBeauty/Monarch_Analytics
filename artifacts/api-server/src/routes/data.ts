@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authenticate } from "../middlewares/authenticate.js";
+import { querySnowflake } from "../lib/snowflake.js";
 
 const router = Router();
 
@@ -12,11 +13,6 @@ function parseMeta(raw: string | null | undefined): Record<string, string> {
   try { return JSON.parse(raw) as Record<string, string>; } catch { return {}; }
 }
 
-/**
- * Exchange a Google OAuth refresh token for a short-lived access token.
- * Accepts clientId / clientSecret from the stored credentials (metadata) so
- * we don't rely on application-level env vars.
- */
 async function refreshGoogleToken(
   refreshToken: string,
   clientId: string,
@@ -45,11 +41,73 @@ router.get("/shopify", authenticate, async (req, res) => {
   const { start, end } = req.query as Record<string, string>;
   if (!start || !end) { res.status(400).json({ error: "start and end required" }); return; }
 
+  // ── 1. Try Snowflake first ────────────────────────────────────────────────
+  try {
+    const db_name = process.env.SNOWFLAKE_DATABASE ?? "MONARCH_RAW";
+    const sql = `
+      SELECT raw_data
+      FROM ${db_name}.COMMERCE.SHOPIFY_ORDERS_RAW
+      WHERE ingestion_date BETWEEN '${start}' AND '${end}'
+      ORDER BY ingested_at ASC
+    `;
+    const rows = await querySnowflake(sql);
+
+    if (rows.length > 0) {
+      const dailyMap: Record<string, { revenue: number; orders: number }> = {};
+      let totalRevenue = 0;
+      let totalOrders = 0;
+
+      for (const row of rows) {
+        let order: Record<string, unknown>;
+        const raw = row["RAW_DATA"] ?? row["raw_data"];
+        if (typeof raw === "string") {
+          order = JSON.parse(raw) as Record<string, unknown>;
+        } else {
+          order = (raw ?? {}) as Record<string, unknown>;
+        }
+
+        const status = order["financial_status"] as string | undefined;
+        if (status === "voided" || status === "refunded") continue;
+
+        const price = parseFloat((order["total_price"] as string) ?? "0");
+        const date  = ((order["created_at"] as string) ?? "").slice(0, 10);
+        if (!date) continue;
+
+        totalRevenue += price;
+        totalOrders  += 1;
+        if (!dailyMap[date]) dailyMap[date] = { revenue: 0, orders: 0 };
+        dailyMap[date].revenue += price;
+        dailyMap[date].orders  += 1;
+      }
+
+      const dailySeries = Object.entries(dailyMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({
+          date,
+          revenue: Math.round(v.revenue * 100) / 100,
+          orders:  v.orders,
+        }));
+
+      res.json({
+        revenue:     Math.round(totalRevenue * 100) / 100,
+        orders:      totalOrders,
+        aov:         totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
+        dailySeries,
+        source:      "snowflake",
+      });
+      return;
+    }
+  } catch (snowflakeErr) {
+    // Log and fall through to live Shopify API
+    console.error("[data/shopify] Snowflake error:", snowflakeErr);
+  }
+
+  // ── 2. Fall back to live Shopify API ──────────────────────────────────────
   const rows = await db.select().from(integrationsTable)
     .where(eq(integrationsTable.provider, "shopify")).limit(1);
   const row = rows[0];
   if (!row?.shopDomain || !row.accessToken || row.accessToken === "manual") {
-    res.status(404).json({ error: "Shopify not connected" }); return;
+    res.status(404).json({ error: "Shopify not connected and no Snowflake data for range" }); return;
   }
 
   const { shopDomain, accessToken } = row;
@@ -114,6 +172,7 @@ router.get("/shopify", authenticate, async (req, res) => {
     orders:      orders.length,
     aov:         orders.length > 0 ? totalRevenue / orders.length : 0,
     dailySeries,
+    source:      "shopify-live",
   });
 });
 
@@ -128,7 +187,7 @@ router.get("/google_ads", authenticate, async (req, res) => {
   const row = rows[0];
   if (!row) { res.status(404).json({ error: "Google Ads not connected" }); return; }
 
-  const meta         = parseMeta(row.metadata);
+  const meta           = parseMeta(row.metadata);
   const developerToken = meta.developerToken;
   const customerId     = meta.customerId;
   const clientId       = meta.clientId;
@@ -142,11 +201,8 @@ router.get("/google_ads", authenticate, async (req, res) => {
     res.status(400).json({ error: "Client ID, Client Secret, and Refresh Token are required" }); return;
   }
 
-  // The stored accessToken may be "manual" (new credential format) or a cached OAuth token.
-  // Always try to get a fresh access token via the refresh token.
   let accessToken = row.accessToken !== "manual" ? row.accessToken : "";
 
-  // Refresh the token if we don't have a valid one cached
   if (!accessToken) {
     const fresh = await refreshGoogleToken(refreshToken, clientId, clientSecret);
     if (!fresh) {
@@ -186,7 +242,6 @@ router.get("/google_ads", authenticate, async (req, res) => {
 
   let gRes = await doFetch(accessToken);
 
-  // Token expired — try one refresh cycle
   if (gRes.status === 401) {
     const newToken = await refreshGoogleToken(refreshToken, clientId, clientSecret);
     if (newToken) {
@@ -258,12 +313,9 @@ router.get("/meta", authenticate, async (req, res) => {
 
   const meta = parseMeta(row.metadata);
 
-  // Access token: stored in metadata.accessToken (new credential format) or
-  // directly in row.accessToken (legacy format where it was saved there).
   const accessToken = (meta.accessToken?.trim())
     || (row.accessToken !== "manual" ? row.accessToken : "");
 
-  // Ad account ID — stored in metadata
   const adAccountId = meta.adAccountId?.trim();
 
   if (!accessToken) {
@@ -273,7 +325,6 @@ router.get("/meta", authenticate, async (req, res) => {
     res.status(400).json({ error: "Ad Account ID is required — update your Meta Ads credentials" }); return;
   }
 
-  // Normalize: ensure act_ prefix
   const normalizedAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
 
   const fields    = "spend,impressions,clicks,actions,action_values,frequency,reach";

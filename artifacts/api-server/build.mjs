@@ -42,6 +42,7 @@ async function buildAll() {
       "bufferutil",
       "utf-8-validate",
       "ssh2",
+      "snowflake-sdk",
       "cpu-features",
       "dtrace-provider",
       "isolated-vm",

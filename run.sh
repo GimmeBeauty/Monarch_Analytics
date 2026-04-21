@@ -1,0 +1,5 @@
+#!/bin/bash
+PYTHON="/nix/store/0098c9aa3ld5mqxx1rahrijirns923zg-python3-3.9.13-env/bin/python3"
+export PYTHONPATH="/home/runner/workspace/.pip"
+set -a && source /home/runner/workspace/.env && set +a
+$PYTHON "$@"

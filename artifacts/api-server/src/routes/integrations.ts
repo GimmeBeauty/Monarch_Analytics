@@ -282,7 +282,7 @@ router.delete("/google_sheets/sheets/:sheetId", authenticate, async (req, res) =
 // ─── DELETE /api/integrations/:provider ───────────────────────────────────────
 
 router.delete("/:provider", authenticate, async (req, res) => {
-  const { provider } = req.params;
+  const provider = req.params.provider as string;
   if (!ALL_PROVIDERS.includes(provider as AnyProvider)) {
     res.status(400).json({ error: `Unknown provider: ${provider}` }); return;
   }

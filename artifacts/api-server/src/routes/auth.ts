@@ -487,7 +487,7 @@ router.post("/reset-password", async (req: Request, res: Response) => {
 // Cannot remove yourself or the owner account.
 
 router.delete("/users/:id", authenticate, requireRole("owner", "admin"), async (req: Request, res: Response) => {
-  const targetId = req.params.id;
+  const targetId = req.params.id as string;
   const requesterId = req.auth!.userId;
 
   if (targetId === requesterId) {
