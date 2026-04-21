@@ -1,38 +1,117 @@
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useDateRange } from "@/context/DateRangeContext";
 import { useStoreFilter } from "@/context/StoreFilterContext";
-import { usePricingMode } from "@/context/PricingModeContext";
-import { generateTrafficData } from "@/lib/trafficData";
 import TrafficKPISection from "@/components/traffic/TrafficKPISection";
 import ProductPerformanceTable from "@/components/traffic/ProductPerformanceTable";
 import USMap from "@/components/traffic/USMap";
+import { API_BASE } from "@/lib/apiBase";
+import type { TrafficKPI, ProductRow, StateRevenue } from "@/lib/trafficData";
+
+// ─── State Name Lookup ────────────────────────────────────────────────────────
+
+const STATE_NAMES: Record<string, string> = {
+  AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",
+  DE:"Delaware",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",IA:"Iowa",
+  KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",MI:"Michigan",
+  MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",
+  NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",
+  OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",SD:"South Dakota",
+  TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",VA:"Virginia",WA:"Washington",WV:"West Virginia",
+  WI:"Wisconsin",WY:"Wyoming",DC:"Washington D.C.",
+};
+
+// ─── API Response Type ─────────────────────────────────────────────────────────
+
+interface TrafficApiResponse {
+  revenue: number;
+  orders: number;
+  aov: number;
+  products: Array<{ id: string; productName: string; revenue: number; orders: number; units: number }>;
+  stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
+  isEmpty: boolean;
+}
+
+function fmtCurrency(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
+}
 
 export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
-  const { mode: pricingMode } = usePricingMode();
 
-  const data = useMemo(
-    () =>
-      generateTrafficData({
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
-        selectedStoreIds: selectedIds,
-        compareStart: dateRange.compareEnabled ? dateRange.compareStart : undefined,
-        compareEnd: dateRange.compareEnabled ? dateRange.compareEnd : undefined,
-        pricingMode,
-      }),
-    [
-      dateRange.startDate,
-      dateRange.endDate,
-      dateRange.compareEnabled,
-      dateRange.compareStart,
-      dateRange.compareEnd,
-      selectedIds,
-      pricingMode,
-    ]
-  );
+  const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
+    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<TrafficApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+  });
+
+  const data = useMemo(() => {
+    if (!apiData || apiData.isEmpty) return null;
+
+    // ── KPIs ──────────────────────────────────────────────────────────────────
+    const kpis: TrafficKPI[] = [
+      { id: "revenue",     label: "Revenue",       value: apiData.revenue, formatted: fmtCurrency(apiData.revenue), change: 0, positive: true,  description: "Total Shopify revenue in period" },
+      { id: "orders",      label: "Orders",        value: apiData.orders,  formatted: apiData.orders.toLocaleString(), change: 0, positive: true, description: "Total orders placed" },
+      { id: "aov",         label: "AOV",           value: apiData.aov,     formatted: fmtCurrency(apiData.aov),    change: 0, positive: true,  description: "Average Order Value" },
+      { id: "sessions",    label: "Sessions",      value: 0,               formatted: "—",                         change: 0, positive: true,  description: "Sessions data not yet available from Snowflake" },
+    ];
+
+    // ── Products ──────────────────────────────────────────────────────────────
+    const totalRevenue = apiData.products.reduce((s, p) => s + p.revenue, 0);
+    const products: ProductRow[] = apiData.products.map((p, i) => ({
+      id:              p.id,
+      productName:     p.productName,
+      storeId:         "shopify",
+      storeName:       "Shopify",
+      storeColor:      "#96BF48",
+      sales:           p.revenue,
+      formattedSales:  fmtCurrency(p.revenue),
+      salesPrior:      0,
+      units:           p.units,
+      unitsPrior:      0,
+      avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
+      changeInSales:   0,
+      conversionRate:  0,
+      pctSalesOnline:  100,
+      pageViews:       0,
+      isTop10:         i < 10,
+    }));
+
+    // ── State Revenue ─────────────────────────────────────────────────────────
+    const totalStateRevenue = apiData.stateRevenue.reduce((s, x) => s + x.revenue, 0);
+    const stateRevenue: StateRevenue[] = apiData.stateRevenue.map(s => {
+      const contrib = totalStateRevenue > 0 ? (s.revenue / totalStateRevenue) * 100 : 0;
+      const band: 0|1|2|3|4|5 =
+        contrib > 20 ? 0 : contrib > 12 ? 1 : contrib > 6 ? 2 : contrib > 2 ? 3 : contrib > 0.5 ? 4 : 5;
+      return {
+        code:         s.stateCode,
+        name:         STATE_NAMES[s.stateCode] ?? s.stateCode,
+        revenue:      s.revenue,
+        units:        s.orders,
+        contribution: Math.round(contrib * 10) / 10,
+        band,
+      };
+    });
+
+    return { kpis, products, stateRevenue, storeLocations: [] };
+  }, [apiData]);
+
+  const isEmpty = !isLoading && (!apiData || apiData.isEmpty || !data);
 
   return (
     <DashboardLayout
@@ -40,20 +119,44 @@ export default function Traffic() {
       description="Performance by store, product, and geography."
     >
       <div className="space-y-6">
-        {/* ── KPIs ── */}
-        <TrafficKPISection kpis={data.kpis} />
+        {error && (
+          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/40 text-xs text-amber-700 dark:text-amber-400">
+            Unable to load data — {(error as Error).message}. Check your Snowflake connection.
+          </div>
+        )}
 
-        {/* ── Products ── */}
-        <ProductPerformanceTable
-          products={data.products}
-          selectedStoreIds={selectedIds}
-        />
+        {isEmpty && !error && (
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+              No data available — check your Snowflake connection and date range.
+            </p>
+          </div>
+        )}
 
-        {/* ── Geo Map ── */}
-        <USMap
-          stateRevenue={data.stateRevenue}
-          storeLocations={data.storeLocations}
-        />
+        {isLoading && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+              ))}
+            </div>
+            <div className="h-64 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+          </div>
+        )}
+
+        {data && (
+          <>
+            <TrafficKPISection kpis={data.kpis} />
+            <ProductPerformanceTable
+              products={data.products}
+              selectedStoreIds={selectedIds}
+            />
+            <USMap
+              stateRevenue={data.stateRevenue}
+              storeLocations={data.storeLocations}
+            />
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

@@ -158,6 +158,8 @@ export interface SpendParams {
   endDate: string;
   selectedStoreIds: string[];
   pricingMode?: PricingMode;
+  /** If provided, use real spend per channel (from Snowflake) instead of dailySpendBaseline */
+  realSpendByChannel?: Record<string, number>;
 }
 
 // ─── Per-channel MMM Configuration ───────────────────────────────────────────
@@ -575,16 +577,22 @@ function buildSimulator(
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
 export function generateSpendData(params: SpendParams): SpendData {
-  const { startDate, endDate, selectedStoreIds, pricingMode = "msrp" } = params;
+  const { startDate, endDate, selectedStoreIds, pricingMode = "msrp", realSpendByChannel } = params;
   const dayCount = getDayCount(startDate, endDate);
   const trend = periodTrendFactor(startDate);
   const channels = getChannelsForStores(selectedStoreIds);
   const wsMultiplier = getBlendedWholesaleMultiplier(selectedStoreIds, pricingMode);
 
   // ── Step 1: Compute raw spend per channel ──────────────────────────────────
+  // When realSpendByChannel is provided, NEVER fall back to baseline model.
+  // Missing channels get 0 spend. Only fall back to baseline when the caller
+  // did not provide real data at all (realSpendByChannel === undefined).
   const channelSpends = channels.map((ch) => ({
     ch,
-    nominalSpend: ch.dailySpendBaseline * dayCount * trend,
+    nominalSpend:
+      realSpendByChannel !== undefined
+        ? (realSpendByChannel[ch.channelId] ?? 0)
+        : ch.dailySpendBaseline * dayCount * trend,
   }));
 
   // ── Step 2: Compute Hill params and all metrics per channel ────────────────
@@ -809,4 +817,27 @@ export function aggregateChannels(channels: ChannelMMM[], totalBase: number): Sp
     modelRSquared: weightedRSq,
     modelMape: weightedMape,
   };
+}
+
+// ─── Real-data entrypoint (used by the Spend page) ────────────────────────────
+// Requires actual spend per channel from Snowflake; does not fall back to the
+// deterministic PRNG baseline model.
+
+export interface RealSpendParams {
+  startDate: string;
+  endDate: string;
+  selectedStoreIds: string[];
+  pricingMode?: PricingMode;
+  realSpendByChannel: Record<string, number>; // required — not optional
+}
+
+/**
+ * Build spend analytics from real Snowflake data.
+ * Returns null when there is no real spend to display (empty state).
+ * Never falls back to the deterministic baseline model.
+ */
+export function buildSpendData(params: RealSpendParams): SpendData | null {
+  const hasData = Object.values(params.realSpendByChannel).some(v => v > 0);
+  if (!hasData) return null;
+  return generateSpendData({ ...params });
 }

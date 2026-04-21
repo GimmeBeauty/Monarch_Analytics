@@ -14,9 +14,9 @@ import { useStoreFilter } from "@/context/StoreFilterContext";
 import { usePricingMode } from "@/context/PricingModeContext";
 import { getChannelsForStores, type ChannelMapping } from "@/lib/channelStoreMapping";
 import {
-  generateAdAttributionData,
   type AdChannelRow, type AdSignal, type BlendedMetric,
   type ChannelFunnel, type AdvancedRow, type SignalType,
+  type RoasTrendPoint, type AdAttributionData,
 } from "@/lib/adAttributionData";
 import { API_BASE } from "@/lib/apiBase";
 
@@ -701,101 +701,158 @@ export default function Attribution() {
     [selectedChannelIds],
   );
 
-  const { data: realGoogleAds } = useQuery<AdPlatformData | null>({
-    queryKey: ["google-ads-data", dateRange.startDate, dateRange.endDate],
+  // ─── API: Fetch all channel attribution data from Snowflake ─────────────────
+
+  interface AttrApiChannel {
+    channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[];
+    spend: number; impressions: number; clicks: number; conversions: number; revenue: number;
+    dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }>;
+  }
+  interface AttrApiResponse { channels: AttrApiChannel[]; isEmpty: boolean; }
+
+  const { data: attrApiData, isLoading: attrLoading } = useQuery<AttrApiResponse>({
+    queryKey: ["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(",")],
     queryFn: async () => {
+      const storeParam = storeIds.length ? `&storeIds=${storeIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/google_ads?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        `${API_BASE}/api/data/attribution?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
       );
-      if (!res.ok) return null;
-      return res.json() as Promise<AdPlatformData>;
+      if (!res.ok) return { channels: [], isEmpty: true };
+      return res.json() as Promise<AttrApiResponse>;
     },
     staleTime: 1000 * 60 * 15,
+    retry: false,
   });
 
-  const { data: realMetaAds } = useQuery<AdPlatformData | null>({
-    queryKey: ["meta-ads-data", dateRange.startDate, dateRange.endDate],
-    queryFn: async () => {
-      const res = await fetch(
-        `${API_BASE}/api/data/meta?start=${dateRange.startDate}&end=${dateRange.endDate}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) return null;
-      return res.json() as Promise<AdPlatformData>;
-    },
-    staleTime: 1000 * 60 * 15,
-  });
+  function fmtC(v: number): string {
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+    if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+    return `$${v.toFixed(2)}`;
+  }
 
-  const mockData = useMemo(() => generateAdAttributionData({
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
-    selectedStoreIds: storeIds,
-    filterChannelIds,
-    pricingMode,
-  }), [dateRange.startDate, dateRange.endDate, storeIds, filterChannelIds, pricingMode]);
+  const data = useMemo((): AdAttributionData => {
+    const raw = (attrApiData?.channels ?? [])
+      .filter(c => filterChannelIds == null || filterChannelIds.includes(c.channelId));
 
-  const data = useMemo(() => {
-    const overrides: Record<string, AdPlatformData> = {};
-    if (realGoogleAds) overrides["google-ads"] = realGoogleAds;
-    if (realMetaAds)   overrides["meta-ads"]   = realMetaAds;
-    if (Object.keys(overrides).length === 0) return mockData;
+    // ── Channel rows ──────────────────────────────────────────────────────────
+    const channels: AdChannelRow[] = raw.map(c => {
+      const ctr  = c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
+      const cvr  = c.clicks      > 0 ? (c.conversions / c.clicks) * 100 : 0;
+      const roas = c.spend       > 0 ? c.revenue / c.spend : 0;
+      const cpa  = c.conversions > 0 ? c.spend / c.conversions : 0;
+      const cpm  = c.impressions > 0 ? (c.spend / c.impressions) * 1000 : 0;
+      const cpc  = c.clicks      > 0 ? c.spend / c.clicks : 0;
+      return { channelId: c.channelId, channelLabel: c.channelLabel, color: c.color, channelFamily: c.channelFamily,
+        spend: c.spend, revenue: c.revenue, conversions: c.conversions, impressions: c.impressions, clicks: c.clicks,
+        ctr, cvr, roas, cpa, cpm, cpc, frequency: 0 };
+    }).sort((a, b) => b.revenue - a.revenue);
 
-    const channels = mockData.channels.map((ch): AdChannelRow => {
-      const real = overrides[ch.channelId];
-      if (!real) return ch;
-      const { spend, impressions, clicks, conversions, revenue } = real;
-      const ctr         = impressions > 0 ? (clicks / impressions) * 100 : 0;
-      const cvr         = clicks > 0 ? (conversions / clicks) * 100 : 0;
-      const roas        = spend > 0 ? revenue / spend : 0;
-      const cpa         = conversions > 0 ? spend / conversions : 0;
-      const cpm         = impressions > 0 ? (spend / impressions) * 1000 : 0;
-      const cpc         = clicks > 0 ? spend / clicks : 0;
-      const frequency   = ch.frequency;
+    // ── Blended metrics ───────────────────────────────────────────────────────
+    const tSpend  = channels.reduce((s, c) => s + c.spend, 0);
+    const tRev    = channels.reduce((s, c) => s + c.revenue, 0);
+    const tImpr   = channels.reduce((s, c) => s + c.impressions, 0);
+    const tClicks = channels.reduce((s, c) => s + c.clicks, 0);
+    const blRoas  = tSpend  > 0 ? tRev    / tSpend  : 0;
+    const blCtr   = tImpr   > 0 ? (tClicks / tImpr)  * 100 : 0;
+    const blCpm   = tImpr   > 0 ? (tSpend  / tImpr)  * 1000 : 0;
+    const blCpc   = tClicks > 0 ? tSpend  / tClicks : 0;
+
+    const blendedMetrics: BlendedMetric[] = [
+      { id: "spend",       label: "Total Spend",       value: tSpend,  formatted: fmtC(tSpend),            change: 0, positiveIsUp: false, description: "Aggregate ad spend across all channels" },
+      { id: "revenue",     label: "Total Revenue",     value: tRev,    formatted: fmtC(tRev),              change: 0, positiveIsUp: true,  description: "Attributed revenue across all channels" },
+      { id: "roas",        label: "Blended ROAS",      value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend" },
+      { id: "ctr",         label: "Blended CTR",       value: blCtr,   formatted: `${blCtr.toFixed(2)}%`,  change: 0, positiveIsUp: true,  description: "Clicks ÷ Impressions" },
+      { id: "impressions", label: "Impressions",       value: tImpr,   formatted: tImpr >= 1e6 ? `${(tImpr/1e6).toFixed(1)}M` : tImpr >= 1e3 ? `${(tImpr/1e3).toFixed(1)}K` : tImpr.toLocaleString(), change: 0, positiveIsUp: true, description: "Total impressions" },
+      { id: "cpm",         label: "Blended CPM",       value: blCpm,   formatted: fmtC(blCpm),             change: 0, positiveIsUp: false, description: "Cost per 1K impressions" },
+      { id: "cpc",         label: "Blended CPC",       value: blCpc,   formatted: `$${blCpc.toFixed(2)}`,  change: 0, positiveIsUp: false, description: "Cost per click" },
+    ];
+
+    // ── Signals (detect from real channel metrics) ────────────────────────────
+    const signals: AdSignal[] = [];
+    let sigIdx = 0;
+    for (const ch of channels) {
+      if (ch.roas < 1 && ch.spend > 0) {
+        signals.push({ id: `sig-${sigIdx++}`, channelId: ch.channelId, channelLabel: ch.channelLabel, color: ch.color,
+          type: "declining-roas" as SignalType, severity: "critical",
+          issue: "ROAS below break-even",
+          explanation: `${ch.channelLabel} is returning ${ch.roas.toFixed(2)}x — spending more than it earns.`,
+          recommendation: "Pause low-ROAS ad sets and reallocate budget to higher-performing audiences.",
+          currentValue: `${ch.roas.toFixed(2)}x`, priorValue: "—", changeText: "Below 1.0x threshold" });
+      } else if (ch.roas < 2 && ch.spend > 0) {
+        signals.push({ id: `sig-${sigIdx++}`, channelId: ch.channelId, channelLabel: ch.channelLabel, color: ch.color,
+          type: "declining-roas" as SignalType, severity: "warning",
+          issue: "ROAS below target (2.0x)",
+          explanation: `${ch.channelLabel} ROAS is ${ch.roas.toFixed(2)}x — below the recommended 2.0x target.`,
+          recommendation: "Review creative performance and audience targeting.",
+          currentValue: `${ch.roas.toFixed(2)}x`, priorValue: "—", changeText: "Below 2.0x target" });
+      }
+      if (ch.ctr < 0.5 && ch.impressions > 1000) {
+        signals.push({ id: `sig-${sigIdx++}`, channelId: ch.channelId, channelLabel: ch.channelLabel, color: ch.color,
+          type: "declining-ctr" as SignalType, severity: "warning",
+          issue: "Low click-through rate",
+          explanation: `${ch.channelLabel} CTR is ${ch.ctr.toFixed(2)}% — indicates poor ad relevance or creative fatigue.`,
+          recommendation: "Refresh creative assets and test new audience segments.",
+          currentValue: `${ch.ctr.toFixed(2)}%`, priorValue: "—", changeText: "Below 0.5% benchmark" });
+      }
+    }
+
+    // ── Funnels ───────────────────────────────────────────────────────────────
+    const funnels: ChannelFunnel[] = channels.map(ch => {
+      const impr  = ch.impressions;
+      const clicks = ch.clicks;
+      const convs  = ch.conversions;
+      const maxVal = impr;
+      const stages = [
+        { name: "Impressions", value: impr,   formatted: impr >= 1e6 ? `${(impr/1e6).toFixed(1)}M` : `${Math.round(impr/1e3)}K`,   rate: null, dropOff: 0, relativeWidth: 100, isLargestDropOff: false },
+        { name: "Clicks",      value: clicks, formatted: clicks >= 1e3 ? `${(clicks/1e3).toFixed(1)}K` : String(Math.round(clicks)), rate: impr > 0 ? (clicks/impr)*100 : 0, dropOff: impr > 0 ? ((impr-clicks)/impr)*100 : 0, relativeWidth: maxVal > 0 ? (clicks/maxVal)*100 : 0, isLargestDropOff: false },
+        { name: "Conversions", value: convs,  formatted: String(Math.round(convs)), rate: clicks > 0 ? (convs/clicks)*100 : 0, dropOff: clicks > 0 ? ((clicks-convs)/clicks)*100 : 0, relativeWidth: maxVal > 0 ? (convs/maxVal)*100 : 0, isLargestDropOff: false },
+      ];
+      // Mark largest dropOff
+      const maxDrop = Math.max(...stages.slice(1).map(s => s.dropOff));
+      stages.forEach(s => { if (s.dropOff === maxDrop && maxDrop > 0) s.isLargestDropOff = true; });
+      return { channelId: ch.channelId, channelLabel: ch.channelLabel, color: ch.color, roas: ch.roas, revenue: ch.revenue, stages };
+    });
+
+    // ── ROAS Trend ────────────────────────────────────────────────────────────
+    // Build date-keyed map with roas per channel
+    const dateRoasMap: Record<string, Record<string, number>> = {};
+    for (const apiCh of raw) {
+      for (const d of apiCh.dailySeries) {
+        if (!dateRoasMap[d.date]) dateRoasMap[d.date] = {};
+        dateRoasMap[d.date][apiCh.channelId] = d.spend > 0 ? d.revenue / d.spend : 0;
+      }
+    }
+    const fmtDate = (dt: string) => { const [, m, day] = dt.split("-"); return `${Number(m)}/${Number(day)}`; };
+    const roasTrend: RoasTrendPoint[] = Object.keys(dateRoasMap).sort().map(date => ({
+      date, label: fmtDate(date), ...dateRoasMap[date],
+    }));
+
+    const trendChannelIds = channels.map(c => c.channelId);
+
+    // ── Advanced rows ─────────────────────────────────────────────────────────
+    const advanced: AdvancedRow[] = channels.map(ch => {
+      const apiCh = raw.find(r => r.channelId === ch.channelId);
+      const series = apiCh?.dailySeries ?? [];
+      const midpoint = Math.floor(series.length / 2);
+      const firstHalf  = series.slice(0, midpoint);
+      const secondHalf = series.slice(midpoint);
+      const roasFirst  = firstHalf.reduce((s, d) => s + (d.spend > 0 ? d.revenue/d.spend : 0), 0) / (firstHalf.length || 1);
+      const roasSecond = secondHalf.reduce((s, d) => s + (d.spend > 0 ? d.revenue/d.spend : 0), 0) / (secondHalf.length || 1);
+      const efficiencyDecay = roasFirst > 0 ? Math.max(0, ((roasFirst - roasSecond) / roasFirst) * 100) : 0;
       return {
-        ...ch,
-        spend, impressions, clicks, conversions, revenue,
-        ctr, cvr, roas, cpa, cpm, cpc, frequency,
+        channelId:           ch.channelId,
+        channelLabel:        ch.channelLabel,
+        color:               ch.color,
+        elasticity:          0.7,  // static estimate — requires A/B hold-out data
+        incrementalLift:     ch.roas * 20,
+        impressionsPerClick: ch.clicks > 0 ? ch.impressions / ch.clicks : 0,
+        efficiencyDecay,
       };
     });
 
-    const totalSpend       = channels.reduce((s, c) => s + c.spend, 0);
-    const totalRevenue     = channels.reduce((s, c) => s + c.revenue, 0);
-    const totalImpressions = channels.reduce((s, c) => s + c.impressions, 0);
-    const totalClicks      = channels.reduce((s, c) => s + c.clicks, 0);
-    const blendedRoas      = totalSpend > 0 ? totalRevenue / totalSpend : 0;
-    const blendedCtr       = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-    const blendedCpm       = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
-    const blendedCpc       = totalClicks > 0 ? totalSpend / totalClicks : 0;
-
-    const fmt = (v: number, id: string): string => {
-      if (id === "spend" || id === "revenue" || id === "cpm" || id === "cpc") {
-        if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-        if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
-        return `$${v.toFixed(2)}`;
-      }
-      if (id === "roas") return `${blendedRoas.toFixed(2)}x`;
-      if (id === "ctr")  return `${blendedCtr.toFixed(2)}%`;
-      if (id === "impressions") {
-        if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-        if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-        return Math.round(v).toLocaleString();
-      }
-      return String(v);
-    };
-
-    const blendedMetrics: BlendedMetric[] = mockData.blendedMetrics.map((m) => {
-      const vals: Record<string, number> = {
-        spend: totalSpend, revenue: totalRevenue, roas: blendedRoas,
-        ctr: blendedCtr, cpm: blendedCpm, impressions: totalImpressions, cpc: blendedCpc,
-      };
-      if (!(m.id in vals)) return m;
-      const newVal = vals[m.id];
-      return { ...m, value: newVal, formatted: fmt(newVal, m.id) };
-    });
-
-    return { ...mockData, channels, blendedMetrics };
-  }, [mockData, realGoogleAds, realMetaAds]);
+    return { blendedMetrics, channels, signals, funnels, roasTrend, trendChannelIds, advanced };
+  }, [attrApiData, filterChannelIds]);
 
   // Funnel channel selector
   const [funnelChannelId, setFunnelChannelId] = useState<string>("");
@@ -804,6 +861,7 @@ export default function Attribution() {
     data.funnels.find(f => f.channelId === effectiveFunnelId) ?? data.funnels[0];
 
   const hasData = data.channels.length > 0;
+  const isLoading = attrLoading;
 
   return (
     <DashboardLayout
@@ -833,10 +891,16 @@ export default function Attribution() {
             />
           </section>
 
-          {!hasData ? (
+          {isLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+              ))}
+            </div>
+          ) : !hasData ? (
             <div className={`${CARD_CLASS} p-10 text-center`}>
               <p className="text-sm text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
-                No data for the selected channels. Select at least one channel above.
+                No data available — check your Snowflake connection and date range.
               </p>
             </div>
           ) : (

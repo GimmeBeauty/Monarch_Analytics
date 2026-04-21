@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
   LineChart,
@@ -20,14 +21,17 @@ import { useStoreFilter } from "@/context/StoreFilterContext";
 import { usePricingMode } from "@/context/PricingModeContext";
 import { getChannelsForStores, type ChannelMapping } from "@/lib/channelStoreMapping";
 import {
-  generatePerformanceTrendsData,
   EFFICIENCY_METRICS,
   type EfficiencyMetric,
   type EfficiencyMetricMeta,
   type ChannelMetricSeries,
   type ROASAnomaly,
   type DowDataPoint,
+  type ChartRow,
+  type RevSpendPoint,
+  type PerformanceTrendsData,
 } from "@/lib/performanceTrendsData";
+import { API_BASE } from "@/lib/apiBase";
 import {
   TrendingUp, TrendingDown, Minus, AlertTriangle, TrendingUpIcon,
   ChevronDown, SlidersHorizontal,
@@ -388,7 +392,7 @@ function AnomalyRow({ anomaly }: { anomaly: ROASAnomaly }) {
 export default function Performance() {
   const { dateRange }   = useDateRange();
   const { selectedIds } = useStoreFilter();
-  const { mode: pricingMode } = usePricingMode();
+  void usePricingMode(); // kept for store context — not used for MMM generation
 
   const [metric, setMetric]     = useState<EfficiencyMetric>("roas");
   const [showMA7, setShowMA7]   = useState(false);
@@ -425,28 +429,142 @@ export default function Performance() {
   const handleClearAll  = () =>
     setSelectedChannelIds(new Set([allChannels[0]?.channelId ?? ""]));
 
-  // Generate chart data — respects date range, store filter, and channel filter
-  const data = useMemo(
-    () =>
-      generatePerformanceTrendsData({
-        startDate:        dateRange.startDate,
-        endDate:          dateRange.endDate,
-        selectedStoreIds: selectedIds,
-        metric,
-        channelIds:       selectedChannelIds.size > 0 ? [...selectedChannelIds] : undefined,
-        pricingMode,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      dateRange.startDate,
-      dateRange.endDate,
-      selectedIds.join(","),
-      metric,
-      // stable primitive for the channel set
-      [...selectedChannelIds].sort().join(","),
-      pricingMode,
-    ],
-  );
+  // ─── Fetch performance data from Snowflake ──────────────────────────────────
+
+  interface PerfApiChannel {
+    channelId: string; channelLabel: string; color: string; channelFamily: string;
+    dailySeries: Array<{ date: string; spend: number; revenue: number; impressions: number; clicks: number; conversions: number; roas: number; cpc: number; ctr: number; cvr: number; cpm: number; cpa: number }>;
+  }
+  interface PerfApiResponse { channels: PerfApiChannel[]; isEmpty: boolean; }
+
+  const { data: perfApiData, isLoading: perfLoading } = useQuery<PerfApiResponse>({
+    queryKey: ["performance-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryFn: async () => {
+      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/performance?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return { channels: [], isEmpty: true };
+      return res.json() as Promise<PerfApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+  });
+
+  const DOW_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const DOW_FULL  = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  function movingAvg(vals: (number | null | undefined)[], window: number): (number | null)[] {
+    return vals.map((_, i) => {
+      const slice = vals.slice(Math.max(0, i - window + 1), i + 1).filter(v => v != null) as number[];
+      return slice.length >= Math.min(window, 3) ? slice.reduce((s, v) => s + v, 0) / slice.length : null;
+    });
+  }
+
+  const data = useMemo((): PerformanceTrendsData & { channels: ChannelMapping[] } => {
+    const isAll = selectedChannelIds.size === 0;
+    const apiChannels = (perfApiData?.channels ?? [])
+      .filter(c => isAll || selectedChannelIds.has(c.channelId));
+
+    // Map to ChannelMapping shape for the components
+    const channels: ChannelMapping[] = apiChannels.map(c => ({
+      channelId: c.channelId, channelLabel: c.channelLabel, color: c.color,
+      channelFamily: c.channelFamily as "core" | "rmn" | "experimental",
+      storeIds: [], dailySpendBaseline: 0, baseRoas: 0,
+    }));
+
+    // ── Build date-keyed metrics per channel ──────────────────────────────────
+    const allDates = [...new Set(apiChannels.flatMap(c => c.dailySeries.map(d => d.date)))].sort();
+
+    // chartRows: one row per date with per-channel metric values
+    const chartRows: ChartRow[] = allDates.map(date => {
+      const row: ChartRow = { date, label: date.slice(5).replace("-", "/") };
+      for (const ch of apiChannels) {
+        const d = ch.dailySeries.find(s => s.date === date);
+        row[ch.channelId] = d ? d[metric as keyof typeof d] as number : null;
+      }
+      return row;
+    });
+
+    // Add moving averages
+    for (const ch of apiChannels) {
+      const vals = chartRows.map(r => r[ch.channelId] as number | null);
+      const ma7  = movingAvg(vals, 7);
+      const ma30 = movingAvg(vals, 30);
+      chartRows.forEach((r, i) => {
+        r[`${ch.channelId}_ma7`]  = ma7[i];
+        r[`${ch.channelId}_ma30`] = ma30[i];
+      });
+    }
+
+    // ── Channel series (for signal badges) ────────────────────────────────────
+    const channelSeries: ChannelMetricSeries[] = apiChannels.map(ch => {
+      const vals = ch.dailySeries.map(d => d[metric as keyof typeof d] as number).filter(v => v > 0);
+      if (!vals.length) return { channelId: ch.channelId, channelLabel: ch.channelLabel, color: ch.color, signal: "stable" as const, signalPct: 0, latestValue: 0, avgValue: 0 };
+      const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+      const latest = vals[vals.length - 1];
+      const halfIdx = Math.floor(vals.length / 2);
+      const firstHalfAvg  = vals.slice(0, halfIdx).reduce((s, v) => s + v, 0) / (halfIdx || 1);
+      const secondHalfAvg = vals.slice(halfIdx).reduce((s, v) => s + v, 0) / ((vals.length - halfIdx) || 1);
+      const pct = firstHalfAvg > 0 ? ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100 : 0;
+      const meta = EFFICIENCY_METRICS.find(m => m.id === metric);
+      const improving = meta?.higherIsBetter ? pct > 5 : pct < -5;
+      const declining = meta?.higherIsBetter ? pct < -5 : pct > 5;
+      return { channelId: ch.channelId, channelLabel: ch.channelLabel, color: ch.color,
+        signal: (improving ? "improving" : declining ? "declining" : "stable") as "improving" | "declining" | "stable",
+        signalPct: Math.abs(pct), latestValue: latest, avgValue: avg };
+    });
+
+    // ── Revenue vs Spend series ───────────────────────────────────────────────
+    const revSpendSeries: RevSpendPoint[] = allDates.map(date => {
+      const totalRevenue = apiChannels.reduce((s, c) => s + (c.dailySeries.find(d => d.date === date)?.revenue ?? 0), 0);
+      const totalSpend   = apiChannels.reduce((s, c) => s + (c.dailySeries.find(d => d.date === date)?.spend ?? 0), 0);
+      return { date, label: date.slice(5).replace("-", "/"), revenue: totalRevenue, spend: totalSpend };
+    });
+
+    // ── Day-of-week seasonality ───────────────────────────────────────────────
+    const dowAgg: Record<number, { revSum: number; spendSum: number; count: number }> = {};
+    for (const pt of revSpendSeries) {
+      const [y, m, d] = pt.date.split("-").map(Number);
+      const jsDay = new Date(y, m - 1, d).getDay();
+      if (!dowAgg[jsDay]) dowAgg[jsDay] = { revSum: 0, spendSum: 0, count: 0 };
+      dowAgg[jsDay].revSum   += pt.revenue;
+      dowAgg[jsDay].spendSum += pt.spend;
+      dowAgg[jsDay].count    += 1;
+    }
+    const dowData: DowDataPoint[] = DOW_NAMES.map((name, i) => ({
+      day: name, dayFull: DOW_FULL[i], jsDay: i,
+      avgRevenue: dowAgg[i] ? dowAgg[i].revSum / dowAgg[i].count : 0,
+      avgSpend:   dowAgg[i] ? dowAgg[i].spendSum / dowAgg[i].count : 0,
+    }));
+    const bestDay    = [...dowData].sort((a, b) => b.avgRevenue - a.avgRevenue)[0] ?? dowData[0];
+    const slowestDay = [...dowData].sort((a, b) => a.avgRevenue - b.avgRevenue)[0] ?? dowData[0];
+
+    // ── ROAS Anomalies ────────────────────────────────────────────────────────
+    const anomalies: ROASAnomaly[] = [];
+    for (const ch of apiChannels) {
+      const roasVals = ch.dailySeries.filter(d => d.spend > 0).map(d => ({ date: d.date, roas: d.roas }));
+      if (roasVals.length < 3) continue;
+      const avgRoas = roasVals.reduce((s, d) => s + d.roas, 0) / roasVals.length;
+      for (const d of roasVals) {
+        const deviationPct = avgRoas > 0 ? Math.abs((d.roas - avgRoas) / avgRoas) * 100 : 0;
+        if (deviationPct >= 40) {
+          anomalies.push({
+            date: d.date, label: d.date.slice(5).replace("-", "/"),
+            channelId: ch.channelId, channelLabel: ch.channelLabel, channelColor: ch.color,
+            roasValue: d.roas, avgRoas, deviationPct,
+            type: d.roas > avgRoas ? "above" : "below",
+          });
+        }
+      }
+    }
+    anomalies.sort((a, b) => b.deviationPct - a.deviationPct);
+    const top6Anomalies = anomalies.slice(0, 6);
+
+    return { channels, channelSeries, chartRows, dowData, bestDay, slowestDay, revSpendSeries, anomalies: top6Anomalies };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfApiData, [...selectedChannelIds].sort().join(","), metric]);
 
   const metricMeta = EFFICIENCY_METRICS.find((m) => m.id === metric)!;
 
@@ -470,6 +588,20 @@ export default function Performance() {
           onClearAll={handleClearAll}
         />
 
+        {/* ── Empty / loading state ────────────────────────────────────── */}
+        {perfLoading && (
+          <div className="h-40 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+        )}
+        {!perfLoading && perfApiData?.isEmpty && (
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+              No data available — check your Snowflake connection and date range.
+            </p>
+          </div>
+        )}
+
+        {!perfLoading && !perfApiData?.isEmpty && (
+          <>
         {/* ── Section 1: Daily Revenue vs Spend Composition ─────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
@@ -853,6 +985,8 @@ export default function Performance() {
             </p>
           )}
         </div>
+          </>
+        )}
 
       </div>
     </DashboardLayout>
