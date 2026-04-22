@@ -106,6 +106,12 @@ const AD_SOURCES: AdSourceConfig[] = [
   { table: `${DB_NAME}.ADS.CRITEO_RAW`,           channelId: "criteo",          channelLabel: "Criteo",           color: "#F57C00", channelFamily: "rmn",  storeIds: ["walmart", "target", "kroger", "cvs", "ulta"] },
 ];
 
+/** Maps DAILY_AD_SUMMARY channel values to display metadata. */
+const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; color: string; channelFamily: "core" | "rmn" | "experimental"; storeIds: string[] }> = {
+  meta_ads:   { channelId: "meta-ads",   channelLabel: "Meta Ads",   color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
+  google_ads: { channelId: "google-ads", channelLabel: "Google Ads", color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
+};
+
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
 
 function parseAdRaw(raw: unknown): Record<string, unknown> {
@@ -180,6 +186,13 @@ function groupByDate(rows: AdDayRow[]): Map<string, AdDayRow> {
     }
   }
   return m;
+}
+
+/** Normalise a Snowflake DATE value (may be a JS Date or string) to YYYY-MM-DD. */
+function toDateStr(val: unknown): string {
+  if (!val) return "";
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  return String(val).slice(0, 10);
 }
 
 // ─── GET /api/data/shopify ────────────────────────────────────────────────────
@@ -542,100 +555,108 @@ router.get("/overview", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
-  const storeIds = parseStoreIds(req.query.storeIds);
-  const adSources = filterAdSources(storeIds);
-  const commerceSources = filterCommerceSources(storeIds);
+  try {
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows] = await Promise.all([
+      // Aggregate totals from MONARCH_DAILY_SUMMARY
+      querySnowflake(`
+        SELECT
+          SUM(total_revenue) AS total_revenue,
+          SUM(ad_spend)      AS total_spend,
+          SUM(units_sold)    AS total_units,
+          SUM(order_count)   AS total_orders
+        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+      `),
+      // Daily revenue & spend series
+      querySnowflake(`
+        SELECT summary_date, total_revenue, ad_spend
+        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        ORDER BY summary_date ASC
+      `),
+      // Daily conversion value from DAILY_AD_SUMMARY (for adRevenue per day)
+      querySnowflake(`
+        SELECT summary_date, SUM(conversion_value) AS cv
+        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        GROUP BY summary_date
+        ORDER BY summary_date ASC
+      `),
+      // Channel breakdown from DAILY_AD_SUMMARY
+      querySnowflake(`
+        SELECT channel, SUM(spend) AS spend, SUM(conversion_value) AS revenue
+        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        GROUP BY channel
+        ORDER BY spend DESC
+      `),
+    ]);
 
-  // 1. Query in-scope commerce sources (e.g. Shopify orders when storeIds includes "shopify")
-  let totalRevenue = 0;
-  let totalOrders = 0;
-  const dailyRevenueMap: Record<string, number> = {};
+    const agg          = summaryRows[0] ?? {};
+    const totalRevenue = Number(agg["TOTAL_REVENUE"] ?? agg["total_revenue"] ?? 0);
+    const totalSpend   = Number(agg["TOTAL_SPEND"]   ?? agg["total_spend"]   ?? 0);
+    const totalOrders  = Number(agg["TOTAL_ORDERS"]  ?? agg["total_orders"]  ?? 0);
+    const totalUnits   = Number(agg["TOTAL_UNITS"]   ?? agg["total_units"]   ?? 0);
 
-  for (const src of commerceSources) {
-    try {
-      const rows = await querySnowflake(`
-        SELECT raw_data FROM ${src.table}
-        WHERE TRY_CAST(LEFT(raw_data:${src.dateField}::STRING, 10) AS DATE) BETWEEN '${start}' AND '${end}'
-      `);
-      for (const row of rows) {
-        const raw = row["RAW_DATA"] ?? row["raw_data"];
-        let order: Record<string, unknown>;
-        if (typeof raw === "string") { try { order = JSON.parse(raw) as Record<string, unknown>; } catch { continue; } }
-        else { order = (raw ?? {}) as Record<string, unknown>; }
-        const status = order["financial_status"] as string | undefined;
-        if (status === "voided" || status === "refunded") continue;
-        const price = parseFloat((order["total_price"] as string) ?? "0");
-        const date  = ((order[src.dateField] as string) ?? "").slice(0, 10);
-        if (!date) continue;
-        totalRevenue += price;
-        totalOrders  += 1;
-        dailyRevenueMap[date] = (dailyRevenueMap[date] ?? 0) + price;
-      }
-    } catch (e) {
-      console.error(`[data/overview] Commerce source ${src.storeId} query error:`, e);
+    // Build daily conversion-value map for adRevenue per day
+    const dailyCvMap: Record<string, number> = {};
+    let totalAdRevenue = 0;
+    for (const row of adDailyRows) {
+      const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+      const cv   = Number(row["CV"] ?? row["cv"] ?? 0);
+      if (date) { dailyCvMap[date] = (dailyCvMap[date] ?? 0) + cv; totalAdRevenue += cv; }
     }
-  }
 
-  // 2. Query all ad platform tables (filtered by store scope)
-  const channelBreakdown: Array<{ channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[]; spend: number; revenue: number }> = [];
-  const dailySpendMap: Record<string, number> = {};
-  const dailyAdRevenueMap: Record<string, number> = {};
-
-  await Promise.all(adSources.map(async (src) => {
-    const rows = await queryAdSource(src, start, end);
-    if (rows.length === 0) return;
-    const agg = aggregateAdRows(rows);
-    channelBreakdown.push({
-      channelId: src.channelId,
-      channelLabel: src.channelLabel,
-      color: src.color,
-      channelFamily: src.channelFamily,
-      storeIds: src.storeIds,
-      spend: agg.spend,
-      revenue: agg.revenue,
+    // Daily series combining MONARCH_DAILY_SUMMARY revenue/spend with ad conversion value
+    const dailySeries = dailySummaryRows.map(row => {
+      const date    = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+      const revenue = Number(row["TOTAL_REVENUE"] ?? row["total_revenue"] ?? 0);
+      const spend   = Number(row["AD_SPEND"]      ?? row["ad_spend"]      ?? 0);
+      return { date, revenue, spend, adRevenue: dailyCvMap[date] ?? 0 };
     });
-    for (const r of rows) {
-      dailySpendMap[r.date]     = (dailySpendMap[r.date]     ?? 0) + r.spend;
-      dailyAdRevenueMap[r.date] = (dailyAdRevenueMap[r.date] ?? 0) + r.revenue;
-    }
-  }));
 
-  const totalSpend = channelBreakdown.reduce((s, c) => s + c.spend, 0);
-  const adRevenue  = channelBreakdown.reduce((s, c) => s + c.revenue, 0);
-  const mer   = totalSpend > 0 ? totalRevenue / totalSpend : 0;
-  const roas  = totalSpend > 0 && adRevenue > 0 ? adRevenue / totalSpend : 0;
-  const aov   = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    // Channel breakdown with metadata mapping
+    const channelBreakdown = channelRows
+      .map(row => {
+        const ch    = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+        const spend = Number(row["SPEND"]   ?? row["spend"]   ?? 0);
+        const rev   = Number(row["REVENUE"] ?? row["revenue"] ?? 0);
+        const meta  = CHANNEL_META[ch];
+        if (!meta) return null;
+        return { ...meta, spend, revenue: rev };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort((a, b) => b.spend - a.spend);
 
-  // 3. Build daily series — include ad-attributed revenue per day for accurate ROAS
-  const allDates = new Set([...Object.keys(dailyRevenueMap), ...Object.keys(dailySpendMap)]);
-  const dailySeries = [...allDates].sort().map(date => ({
-    date,
-    revenue:   dailyRevenueMap[date]     ?? 0,
-    spend:     dailySpendMap[date]       ?? 0,
-    adRevenue: dailyAdRevenueMap[date]   ?? 0,
-  }));
+    const mer = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+    const roas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
+    const aov  = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-  // 4. Store breakdown — derived from queried commerce sources
-  const storeBreakdown = commerceSources.length > 0 && totalRevenue > 0
-    ? commerceSources.map(src => ({ storeId: src.storeId, revenue: totalRevenue }))
-    : [];
+    const storeBreakdown = totalRevenue > 0
+      ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }]
+      : [];
 
-  const isEmpty = totalRevenue === 0 && totalSpend === 0;
+    const isEmpty = totalRevenue === 0 && totalSpend === 0;
 
-  res.json({
-    revenue: Math.round(totalRevenue * 100) / 100,
-    orders:  totalOrders,
-    aov:     Math.round(aov * 100) / 100,
-    spend:   Math.round(totalSpend * 100) / 100,
-    adRevenue: Math.round(adRevenue * 100) / 100,
-    mer:     Math.round(mer * 1000) / 1000,
-    roas:    Math.round(roas * 1000) / 1000,
-    storeBreakdown,
-    channelBreakdown: channelBreakdown.sort((a, b) => b.spend - a.spend),
-    dailySeries,
-    isEmpty,
-    source: "snowflake",
-  });
+    res.json({
+      revenue:   Math.round(totalRevenue   * 100) / 100,
+      orders:    totalOrders,
+      units:     totalUnits,
+      aov:       Math.round(aov            * 100) / 100,
+      spend:     Math.round(totalSpend     * 100) / 100,
+      adRevenue: Math.round(totalAdRevenue * 100) / 100,
+      mer:       Math.round(mer            * 1000) / 1000,
+      roas:      Math.round(roas           * 1000) / 1000,
+      storeBreakdown,
+      channelBreakdown,
+      dailySeries,
+      isEmpty,
+      source: "snowflake-summary",
+    });
+  } catch (e) {
+    console.error("[data/overview] Error:", e);
+    res.status(500).json({ error: "Failed to query overview data", detail: String(e) });
+  }
 });
 
 // ─── GET /api/data/attribution ────────────────────────────────────────────────
@@ -646,29 +667,76 @@ router.get("/attribution", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
-  const adSources = filterAdSources(parseStoreIds(req.query.storeIds));
+  try {
+    const [aggRows, dailyRows] = await Promise.all([
+      // Aggregated metrics per channel
+      querySnowflake(`
+        SELECT
+          channel,
+          SUM(spend)            AS spend,
+          SUM(impressions)      AS impressions,
+          SUM(clicks)           AS clicks,
+          SUM(conversions)      AS conversions,
+          SUM(conversion_value) AS revenue
+        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        GROUP BY channel
+      `),
+      // Daily series per channel
+      querySnowflake(`
+        SELECT
+          summary_date,
+          channel,
+          spend,
+          impressions,
+          clicks,
+          conversions,
+          conversion_value AS revenue
+        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        ORDER BY summary_date ASC
+      `),
+    ]);
 
-  const results = await Promise.all(
-    adSources.map(async (src) => {
-      const rows = await queryAdSource(src, start, end);
-      if (rows.length === 0) return null;
-      const agg = aggregateAdRows(rows);
-      const byDate = groupByDate(rows);
-      const dailySeries = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-      return {
-        channelId:     src.channelId,
-        channelLabel:  src.channelLabel,
-        color:         src.color,
-        channelFamily: src.channelFamily,
-        storeIds:      src.storeIds,
-        ...agg,
-        dailySeries,
-      };
-    }),
-  );
+    // Group daily rows by channel
+    const dailyByChannel: Record<string, Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }>> = {};
+    for (const row of dailyRows) {
+      const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+      const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+      if (!ch || !date) continue;
+      if (!dailyByChannel[ch]) dailyByChannel[ch] = [];
+      dailyByChannel[ch].push({
+        date,
+        spend:       Number(row["SPEND"]       ?? row["spend"]       ?? 0),
+        impressions: Number(row["IMPRESSIONS"] ?? row["impressions"] ?? 0),
+        clicks:      Number(row["CLICKS"]      ?? row["clicks"]      ?? 0),
+        conversions: Number(row["CONVERSIONS"] ?? row["conversions"] ?? 0),
+        revenue:     Number(row["REVENUE"]     ?? row["revenue"]     ?? 0),
+      });
+    }
 
-  const channels = results.filter(Boolean);
-  res.json({ channels, isEmpty: channels.length === 0 });
+    const channels = aggRows
+      .map(row => {
+        const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+        const meta = CHANNEL_META[ch];
+        if (!meta) return null;
+        return {
+          ...meta,
+          spend:       Number(row["SPEND"]       ?? row["spend"]       ?? 0),
+          impressions: Number(row["IMPRESSIONS"] ?? row["impressions"] ?? 0),
+          clicks:      Number(row["CLICKS"]      ?? row["clicks"]      ?? 0),
+          conversions: Number(row["CONVERSIONS"] ?? row["conversions"] ?? 0),
+          revenue:     Number(row["REVENUE"]     ?? row["revenue"]     ?? 0),
+          dailySeries: dailyByChannel[ch] ?? [],
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
+
+    res.json({ channels, isEmpty: channels.length === 0 });
+  } catch (e) {
+    console.error("[data/attribution] Error:", e);
+    res.status(500).json({ error: "Failed to query attribution data", detail: String(e) });
+  }
 });
 
 // ─── GET /api/data/traffic ────────────────────────────────────────────────────
@@ -679,118 +747,73 @@ router.get("/traffic", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
-  let totalRevenue = 0;
-  let totalOrders  = 0;
-  const productMap: Record<string, { revenue: number; orders: number; units: number }> = {};
-  const stateMap:   Record<string, { revenue: number; orders: number }> = {};
-
-  // Query Shopify orders for product and geographic data
   try {
-    const rows = await querySnowflake(`
-      SELECT raw_data FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
-      WHERE TRY_CAST(LEFT(raw_data:created_at::STRING, 10) AS DATE) BETWEEN '${start}' AND '${end}'
-    `);
+    const [summaryRows, productRows, geoRows] = await Promise.all([
+      // Top-level KPIs from SHOPIFY_DAILY_SUMMARY
+      querySnowflake(`
+        SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+      `),
+      // Product performance from SHOPIFY_PRODUCT_DAILY
+      querySnowflake(`
+        SELECT
+          product_id,
+          title,
+          SUM(revenue)     AS revenue,
+          SUM(units_sold)  AS units_sold,
+          SUM(order_count) AS order_count,
+          AVG(avg_price)   AS avg_price
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_PRODUCT_DAILY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        GROUP BY product_id, title
+        ORDER BY revenue DESC
+        LIMIT 50
+      `),
+      // Geographic breakdown from SHOPIFY_GEO_DAILY
+      querySnowflake(`
+        SELECT state, SUM(revenue) AS revenue, SUM(order_count) AS order_count
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_GEO_DAILY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        GROUP BY state
+        ORDER BY revenue DESC
+      `),
+    ]);
 
-    for (const row of rows) {
-      const raw = row["RAW_DATA"] ?? row["raw_data"];
-      let order: Record<string, unknown>;
-      if (typeof raw === "string") { try { order = JSON.parse(raw) as Record<string, unknown>; } catch { continue; } }
-      else { order = (raw ?? {}) as Record<string, unknown>; }
+    const summaryAgg   = summaryRows[0] ?? {};
+    const totalRevenue = Number(summaryAgg["TOTAL_REVENUE"] ?? summaryAgg["total_revenue"] ?? 0);
+    const totalOrders  = Number(summaryAgg["TOTAL_ORDERS"]  ?? summaryAgg["total_orders"]  ?? 0);
+    const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-      const status = order["financial_status"] as string | undefined;
-      if (status === "voided" || status === "refunded") continue;
+    const products = productRows.map(row => ({
+      id:          String(row["PRODUCT_ID"]  ?? row["product_id"]  ?? ""),
+      productName: String(row["TITLE"]       ?? row["title"]       ?? "Unknown Product"),
+      revenue:     Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      orders:      Number(row["ORDER_COUNT"] ?? row["order_count"] ?? 0),
+      units:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+    }));
 
-      const price = parseFloat((order["total_price"] as string) ?? "0");
-      totalRevenue += price;
-      totalOrders  += 1;
+    const stateRevenue = geoRows.map(row => ({
+      stateCode: String(row["STATE"]       ?? row["state"]       ?? "").toUpperCase(),
+      revenue:   Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      orders:    Number(row["ORDER_COUNT"] ?? row["order_count"] ?? 0),
+    }));
 
-      // Geographic — shipping address state
-      const shippingAddr = (order["shipping_address"] as Record<string, unknown> | undefined) ?? {};
-      const provinceCode = ((shippingAddr["province_code"] as string | undefined) ?? "").toUpperCase();
-      if (provinceCode && provinceCode.length === 2) {
-        if (!stateMap[provinceCode]) stateMap[provinceCode] = { revenue: 0, orders: 0 };
-        stateMap[provinceCode].revenue += price;
-        stateMap[provinceCode].orders  += 1;
-      }
+    const isEmpty = totalRevenue === 0 && products.length === 0;
 
-      // Product breakdown from line_items
-      const lineItems = (order["line_items"] as Array<Record<string, unknown>> | undefined) ?? [];
-      for (const item of lineItems) {
-        const productId = String(item["product_id"] ?? "unknown");
-        const title     = String(item["title"] ?? "Unknown Product");
-        const qty       = Number(item["quantity"] ?? 1);
-        const unitPrice = parseFloat(String(item["price"] ?? "0"));
-        const lineRev   = qty * unitPrice;
-        const key = productId;
-        if (!productMap[key]) productMap[key] = { revenue: 0, orders: 0, units: 0 };
-        productMap[key].revenue += lineRev;
-        productMap[key].orders  += 1;
-        productMap[key].units   += qty;
-        // Store title on first occurrence
-        if (!(productMap[key] as Record<string, unknown>)["title"]) {
-          (productMap[key] as Record<string, unknown>)["title"] = title;
-          (productMap[key] as Record<string, unknown>)["id"]    = productId;
-        }
-      }
-    }
+    res.json({
+      revenue:     Math.round(totalRevenue * 100) / 100,
+      orders:      totalOrders,
+      aov:         Math.round(aov * 100) / 100,
+      products,
+      stateRevenue,
+      isEmpty,
+      source: "snowflake-summary",
+    });
   } catch (e) {
-    console.error("[data/traffic] Shopify orders query error:", e);
+    console.error("[data/traffic] Error:", e);
+    res.status(500).json({ error: "Failed to query traffic data", detail: String(e) });
   }
-
-  // Enrich product metadata (title, image) from SHOPIFY_PRODUCTS_RAW
-  try {
-    const pRows = await querySnowflake(`
-      SELECT raw_data FROM ${DB_NAME}.COMMERCE.SHOPIFY_PRODUCTS_RAW
-    `);
-    for (const row of pRows) {
-      const raw = row["RAW_DATA"] ?? row["raw_data"];
-      let product: Record<string, unknown>;
-      if (typeof raw === "string") { try { product = JSON.parse(raw) as Record<string, unknown>; } catch { continue; } }
-      else { product = (raw ?? {}) as Record<string, unknown>; }
-      const pid = String(product["id"] ?? "");
-      if (!pid || !productMap[pid]) continue;
-      const pm = productMap[pid] as Record<string, unknown>;
-      if (product["title"]) pm["title"] = product["title"];
-      const images = product["images"] as Array<{ src?: string }> | undefined;
-      if (images?.[0]?.src) pm["imageSrc"] = images[0].src;
-    }
-  } catch (e) {
-    console.error("[data/traffic] Products enrichment error:", e);
-  }
-
-  // Build product array
-  const products = Object.entries(productMap)
-    .map(([id, v]) => ({
-      id,
-      productName: (v as Record<string, unknown>)["title"] as string ?? id,
-      imageSrc:    (v as Record<string, unknown>)["imageSrc"] as string | undefined,
-      revenue:     Math.round(v.revenue * 100) / 100,
-      orders:      v.orders,
-      units:       v.units,
-    }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 50);
-
-  // Build state revenue array
-  const stateRevenue = Object.entries(stateMap)
-    .map(([stateCode, v]) => ({
-      stateCode,
-      revenue: Math.round(v.revenue * 100) / 100,
-      orders:  v.orders,
-    }))
-    .sort((a, b) => b.revenue - a.revenue);
-
-  const isEmpty = totalRevenue === 0 && products.length === 0;
-
-  res.json({
-    revenue:  Math.round(totalRevenue * 100) / 100,
-    orders:   totalOrders,
-    aov:      totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
-    products,
-    stateRevenue,
-    isEmpty,
-    source: "snowflake",
-  });
 });
 
 // ─── GET /api/data/spend ──────────────────────────────────────────────────────
@@ -801,21 +824,39 @@ router.get("/spend", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
-  const results = await Promise.all(
-    AD_SOURCES.map(async (src) => {
-      const rows = await queryAdSource(src, start, end);
-      if (rows.length === 0) return null;
-      const byDate = groupByDate(rows);
-      const dailySpend = [...byDate.values()]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map(r => ({ date: r.date, spend: r.spend }));
-      const totalSpend = dailySpend.reduce((s, r) => s + r.spend, 0);
-      return { channelId: src.channelId, totalSpend, dailySpend };
-    }),
-  );
+  try {
+    const rows = await querySnowflake(`
+      SELECT summary_date, channel, spend
+      FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'
+      ORDER BY summary_date ASC
+    `);
 
-  const channels = results.filter(Boolean);
-  res.json({ channels, isEmpty: channels.length === 0 });
+    // Group rows by channelId (mapped from DB channel name)
+    const channelMap: Record<string, { totalSpend: number; dailySpend: Array<{ date: string; spend: number }> }> = {};
+    for (const row of rows) {
+      const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+      const meta = CHANNEL_META[ch];
+      if (!meta) continue;
+      const cid   = meta.channelId;
+      const date  = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+      const spend = Number(row["SPEND"] ?? row["spend"] ?? 0);
+      if (!channelMap[cid]) channelMap[cid] = { totalSpend: 0, dailySpend: [] };
+      channelMap[cid].totalSpend += spend;
+      if (date) channelMap[cid].dailySpend.push({ date, spend });
+    }
+
+    const channels = Object.entries(channelMap).map(([channelId, v]) => ({
+      channelId,
+      totalSpend:  Math.round(v.totalSpend * 100) / 100,
+      dailySpend:  v.dailySpend,
+    }));
+
+    res.json({ channels, isEmpty: channels.length === 0 });
+  } catch (e) {
+    console.error("[data/spend] Error:", e);
+    res.status(500).json({ error: "Failed to query spend data", detail: String(e) });
+  }
 });
 
 // ─── GET /api/data/performance ────────────────────────────────────────────────

@@ -584,16 +584,20 @@ export function generateSpendData(params: SpendParams): SpendData {
   const wsMultiplier = getBlendedWholesaleMultiplier(selectedStoreIds, pricingMode);
 
   // ── Step 1: Compute raw spend per channel ──────────────────────────────────
-  // When realSpendByChannel is provided, NEVER fall back to baseline model.
-  // Missing channels get 0 spend. Only fall back to baseline when the caller
-  // did not provide real data at all (realSpendByChannel === undefined).
-  const channelSpends = channels.map((ch) => ({
-    ch,
-    nominalSpend:
-      realSpendByChannel !== undefined
-        ? (realSpendByChannel[ch.channelId] ?? 0)
-        : ch.dailySpendBaseline * dayCount * trend,
-  }));
+  // When realSpendByChannel is provided, only include channels that have actual
+  // spend — zero-spend entries cause alpha=NaN in the Hill calibration (0*(0+0)/0)
+  // which can corrupt array sorting and silently drop channels from the chart.
+  const channelSpends = channels
+    .map((ch) => ({
+      ch,
+      nominalSpend:
+        realSpendByChannel !== undefined
+          ? (realSpendByChannel[ch.channelId] ?? 0)
+          : ch.dailySpendBaseline * dayCount * trend,
+    }))
+    .filter(({ nominalSpend }) =>
+      realSpendByChannel !== undefined ? nominalSpend > 0 : true
+    );
 
   // ── Step 2: Compute Hill params and all metrics per channel ────────────────
   const totalChannelSpend = channelSpends.reduce((s, x) => s + x.nominalSpend, 0);

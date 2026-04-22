@@ -1,89 +1,111 @@
-import requests, os, json
+import requests, json, os, warnings
+import snowflake.connector
 from datetime import date, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
+warnings.filterwarnings("ignore")
 
-def _get_credentials():
-    db_url = os.environ.get("DATABASE_URL", "")
-    if not db_url:
-        raise RuntimeError("DATABASE_URL not set — cannot load Meta credentials from app database")
-    import psycopg2, psycopg2.extras
-    conn = psycopg2.connect(db_url)
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT access_token, metadata FROM integrations WHERE provider = 'meta' LIMIT 1")
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if not row:
-        raise RuntimeError("Meta integration not found in integrations table")
-    meta = json.loads(row["metadata"] or "{}")
-    access_token = meta.get("accessToken") or (row["access_token"] if row["access_token"] != "manual" else None)
-    ad_account_id = meta.get("adAccountId", "")
-    if not access_token:
-        raise RuntimeError("Meta access token not found in integrations table")
-    if not ad_account_id:
-        raise RuntimeError("Meta ad account ID not found in integrations table")
-    normalized = ad_account_id if ad_account_id.startswith("act_") else f"act_{ad_account_id}"
-    return access_token, normalized
+def run_meta_ingestion(start_date=None, end_date=None):
+    token = os.environ["META_ACCESS_TOKEN"]
+    account_id = os.environ["META_AD_ACCOUNT_ID"]
 
-
-def _fetch_insights(access_token, ad_account_id, since, until):
-    fields = "date_start,spend,impressions,clicks,actions,action_values,frequency"
-    time_range = json.dumps({"since": since, "until": until})
-    url = (
-        f"https://graph.facebook.com/v18.0/{ad_account_id}/insights"
-        f"?fields={fields}&time_range={requests.utils.quote(time_range)}"
-        f"&time_increment=1&level=account&limit=90"
+    conn = snowflake.connector.connect(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        password=os.environ["SNOWFLAKE_PASSWORD"],
+        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        database=os.environ["SNOWFLAKE_DATABASE"],
+        schema="ADS",
     )
-    rows = []
-    while url:
-        r = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-        rows.extend(data.get("data", []))
-        paging = data.get("paging", {})
-        url = paging.get("next")
-    return rows
+    cur = conn.cursor()
+    print("Connected to Snowflake")
 
+    if not start_date:
+        start_date = (date.today() - timedelta(days=1)).isoformat()
+    if not end_date:
+        end_date = start_date
 
-def _normalize(row):
-    purchases = next(
-        (a for a in row.get("actions", []) if a.get("action_type") == "purchase"), {}
-    )
-    purchase_value = next(
-        (a for a in row.get("action_values", []) if a.get("action_type") == "purchase"), {}
-    )
-    return {
-        "date": row.get("date_start", ""),
-        "spend": float(row.get("spend", 0) or 0),
-        "impressions": int(row.get("impressions", 0) or 0),
-        "clicks": int(row.get("clicks", 0) or 0),
-        "conversions": float(purchases.get("value", 0) or 0),
-        "revenue": float(purchase_value.get("value", 0) or 0),
-        "frequency": float(row.get("frequency", 0) or 0),
+    print(f"Pulling Meta Ads {start_date} to {end_date}\n")
+
+    # Pull all insights at ad level
+    url = f"https://graph.facebook.com/v19.0/act_{account_id}/insights"
+    params = {
+        "access_token": token,
+        "level": "ad",
+        "time_range": json.dumps({"since": start_date, "until": end_date}),
+        "fields": (
+            "date_start,date_stop,"
+            "ad_id,ad_name,"
+            "adset_id,adset_name,"
+            "campaign_id,campaign_name,"
+            "spend,impressions,clicks,reach,frequency,"
+            "cpc,cpm,ctr,cpp,"
+            "actions,action_values,"
+            "cost_per_action_type,"
+            "video_avg_time_watched_actions,"
+            "video_p25_watched_actions,"
+            "video_p50_watched_actions,"
+            "video_p75_watched_actions,"
+            "video_p100_watched_actions"
+        ),
+        "limit": 500,
+        "time_increment": 1,
     }
 
+    records = []
+    next_url = url
+    while next_url:
+        r = requests.get(next_url, params=params if next_url == url else {}, timeout=30)
+        r.raise_for_status()
+        body = r.json()
+        if "error" in body:
+            print(f"Meta API error: {body['error']}")
+            break
+        records.extend(body.get("data", []))
+        next_url = body.get("paging", {}).get("next")
+        params = {}
 
-class MetaAdsIngestor:
-    def __init__(self):
-        from ingestion.base_ingestor import BaseIngestor
-        self._base = BaseIngestor.__new__(BaseIngestor)
-        BaseIngestor.__init__(self._base, "meta_ads", "ADS", "META_ADS_RAW")
+    print(f"Fetched {len(records)} ad records — writing to file...")
 
-    def run(self, since=None, until=None):
-        if since is None:
-            since = (date.today() - timedelta(days=1)).isoformat()
-        if until is None:
-            until = since
-        print(f"[meta_ads] Fetching insights {since} → {until}")
-        access_token, ad_account_id = _get_credentials()
-        raw_rows = _fetch_insights(access_token, ad_account_id, since, until)
-        print(f"[meta_ads] Received {len(raw_rows)} insight rows")
-        normalized = [_normalize(r) for r in raw_rows if r.get("date_start")]
-        self._base.upsert_records(normalized, id_field="date")
-        self._base.close()
+    # Write all records to file first
+    with open("/tmp/meta_ads.json", "w") as f:
+        for record in records:
+            record_id = f"{record.get('ad_id')}_{record.get('date_start')}"
+            f.write(json.dumps({
+                "ID": record_id,
+                "INGESTION_DATE": record.get("date_start"),
+                "SOURCE": "meta_ads",
+                "RAW_DATA": json.dumps(record),
+            }) + "\n")
 
+    # Bulk load into Snowflake
+    print("Uploading to Snowflake...")
+    cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
+    cur.execute("PUT file:///tmp/meta_ads.json @monarch_stage AUTO_COMPRESS=TRUE OVERWRITE=TRUE")
+
+    cur.execute(f"DELETE FROM META_ADS_RAW WHERE ingestion_date BETWEEN '{start_date}' AND '{end_date}'")
+    cur.execute("""
+        COPY INTO META_ADS_RAW (id, ingestion_date, source, raw_data)
+        FROM (
+            SELECT
+                $1:ID::STRING,
+                $1:INGESTION_DATE::DATE,
+                $1:SOURCE::STRING,
+                PARSE_JSON($1:RAW_DATA::STRING)
+            FROM @monarch_stage/meta_ads.json.gz
+        )
+        FILE_FORMAT = (TYPE = 'JSON')
+        ON_ERROR = 'CONTINUE'
+    """)
+
+    print(f"✅ {len(records)} Meta ad records written to Snowflake")
+    cur.close()
+    conn.close()
 
 if __name__ == "__main__":
-    MetaAdsIngestor().run()
+    import sys
+    if len(sys.argv) == 3:
+        run_meta_ingestion(start_date=sys.argv[1], end_date=sys.argv[2])
+    else:
+        run_meta_ingestion()
