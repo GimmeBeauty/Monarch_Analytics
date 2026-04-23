@@ -160,6 +160,8 @@ export interface SpendParams {
   pricingMode?: PricingMode;
   /** If provided, use real spend per channel (from Snowflake) instead of dailySpendBaseline */
   realSpendByChannel?: Record<string, number>;
+  /** If provided, use real conversion value per channel instead of spend × baseRoas */
+  conversionValueByChannel?: Record<string, number>;
 }
 
 // ─── Per-channel MMM Configuration ───────────────────────────────────────────
@@ -577,7 +579,7 @@ function buildSimulator(
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
 export function generateSpendData(params: SpendParams): SpendData {
-  const { startDate, endDate, selectedStoreIds, pricingMode = "msrp", realSpendByChannel } = params;
+  const { startDate, endDate, selectedStoreIds, pricingMode = "msrp", realSpendByChannel, conversionValueByChannel } = params;
   const dayCount = getDayCount(startDate, endDate);
   const trend = periodTrendFactor(startDate);
   const channels = getChannelsForStores(selectedStoreIds);
@@ -608,7 +610,9 @@ export function generateSpendData(params: SpendParams): SpendData {
     const { gamma, saturationRatio } = cfg;
 
     const effectiveSpend = nominalSpend / (1 - cfg.adstockDecay);
-    const attributedRevenue = nominalSpend * ch.baseRoas * wsMultiplier;
+    const attributedRevenue = (conversionValueByChannel && conversionValueByChannel[ch.channelId] != null)
+      ? conversionValueByChannel[ch.channelId]
+      : nominalSpend * ch.baseRoas * wsMultiplier;
 
     // Calibrate Hill: α so that f(effectiveSpend) = attributedRevenue
     const kappa = effectiveSpend / saturationRatio;
@@ -833,6 +837,7 @@ export interface RealSpendParams {
   selectedStoreIds: string[];
   pricingMode?: PricingMode;
   realSpendByChannel: Record<string, number>; // required — not optional
+  conversionValueByChannel?: Record<string, number>;
 }
 
 /**

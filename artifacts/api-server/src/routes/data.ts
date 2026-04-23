@@ -748,7 +748,7 @@ router.get("/traffic", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   try {
-    const [summaryRows, productRows, geoRows] = await Promise.all([
+    const [summaryRows, productRows, geoRows, ga4Rows] = await Promise.all([
       // Top-level KPIs from SHOPIFY_DAILY_SUMMARY
       querySnowflake(`
         SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
@@ -778,12 +778,22 @@ router.get("/traffic", authenticate, async (req, res) => {
         GROUP BY state
         ORDER BY revenue DESC
       `),
+      // Sessions from GA4_DAILY_SUMMARY
+      querySnowflake(`
+        SELECT SUM(sessions) AS total_sessions
+        FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+      `),
     ]);
 
     const summaryAgg   = summaryRows[0] ?? {};
     const totalRevenue = Number(summaryAgg["TOTAL_REVENUE"] ?? summaryAgg["total_revenue"] ?? 0);
     const totalOrders  = Number(summaryAgg["TOTAL_ORDERS"]  ?? summaryAgg["total_orders"]  ?? 0);
     const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    const ga4Agg       = ga4Rows[0] ?? {};
+    const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
+    const cvr = totalSessions > 0 ? totalOrders / totalSessions : 0;
 
     const products = productRows.map(row => ({
       id:          String(row["PRODUCT_ID"]  ?? row["product_id"]  ?? ""),
@@ -805,6 +815,8 @@ router.get("/traffic", authenticate, async (req, res) => {
       revenue:     Math.round(totalRevenue * 100) / 100,
       orders:      totalOrders,
       aov:         Math.round(aov * 100) / 100,
+      sessions:    totalSessions,
+      cvr:         Math.round(cvr * 10000) / 10000,
       products,
       stateRevenue,
       isEmpty,
@@ -826,14 +838,14 @@ router.get("/spend", authenticate, async (req, res) => {
 
   try {
     const rows = await querySnowflake(`
-      SELECT summary_date, channel, spend
+      SELECT summary_date, channel, spend, conversion_value
       FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
       WHERE summary_date BETWEEN '${start}' AND '${end}'
       ORDER BY summary_date ASC
     `);
 
     // Group rows by channelId (mapped from DB channel name)
-    const channelMap: Record<string, { totalSpend: number; dailySpend: Array<{ date: string; spend: number }> }> = {};
+    const channelMap: Record<string, { totalSpend: number; totalConversionValue: number; dailySpend: Array<{ date: string; spend: number }> }> = {};
     for (const row of rows) {
       const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
       const meta = CHANNEL_META[ch];
@@ -841,15 +853,18 @@ router.get("/spend", authenticate, async (req, res) => {
       const cid   = meta.channelId;
       const date  = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
       const spend = Number(row["SPEND"] ?? row["spend"] ?? 0);
-      if (!channelMap[cid]) channelMap[cid] = { totalSpend: 0, dailySpend: [] };
+      const cv    = Number(row["CONVERSION_VALUE"] ?? row["conversion_value"] ?? 0);
+      if (!channelMap[cid]) channelMap[cid] = { totalSpend: 0, totalConversionValue: 0, dailySpend: [] };
       channelMap[cid].totalSpend += spend;
+      channelMap[cid].totalConversionValue += cv;
       if (date) channelMap[cid].dailySpend.push({ date, spend });
     }
 
     const channels = Object.entries(channelMap).map(([channelId, v]) => ({
       channelId,
-      totalSpend:  Math.round(v.totalSpend * 100) / 100,
-      dailySpend:  v.dailySpend,
+      totalSpend:           Math.round(v.totalSpend * 100) / 100,
+      totalConversionValue: Math.round(v.totalConversionValue * 100) / 100,
+      dailySpend:           v.dailySpend,
     }));
 
     res.json({ channels, isEmpty: channels.length === 0 });

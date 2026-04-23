@@ -28,6 +28,8 @@ interface TrafficApiResponse {
   revenue: number;
   orders: number;
   aov: number;
+  sessions: number;
+  cvr: number;
   products: Array<{ id: string; productName: string; revenue: number; orders: number; units: number }>;
   stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
   isEmpty: boolean;
@@ -65,10 +67,11 @@ export default function Traffic() {
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const kpis: TrafficKPI[] = [
-      { id: "revenue",     label: "Revenue",       value: apiData.revenue, formatted: fmtCurrency(apiData.revenue), change: 0, positive: true,  description: "Total Shopify revenue in period" },
-      { id: "orders",      label: "Orders",        value: apiData.orders,  formatted: apiData.orders.toLocaleString(), change: 0, positive: true, description: "Total orders placed" },
-      { id: "aov",         label: "AOV",           value: apiData.aov,     formatted: fmtCurrency(apiData.aov),    change: 0, positive: true,  description: "Average Order Value" },
-      { id: "sessions",    label: "Sessions",      value: 0,               formatted: "—",                         change: 0, positive: true,  description: "Sessions data not yet available from Snowflake" },
+      { id: "revenue",  label: "Revenue",  value: apiData.revenue  ?? 0, formatted: fmtCurrency(apiData.revenue  ?? 0), change: 0, positive: true, description: "Total Shopify revenue in period" },
+      { id: "orders",   label: "Orders",   value: apiData.orders   ?? 0, formatted: (apiData.orders   ?? 0).toLocaleString(), change: 0, positive: true, description: "Total orders placed" },
+      { id: "aov",      label: "AOV",      value: apiData.aov      ?? 0, formatted: fmtCurrency(apiData.aov      ?? 0), change: 0, positive: true, description: "Average Order Value" },
+      { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: 0, positive: true, description: "Total GA4 sessions in period" },
+      { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: 0, positive: true, description: "Orders ÷ Sessions" },
     ];
 
     // ── Products ──────────────────────────────────────────────────────────────

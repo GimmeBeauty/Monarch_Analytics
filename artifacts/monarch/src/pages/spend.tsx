@@ -18,7 +18,7 @@ import { usePricingMode } from "@/context/PricingModeContext";
 import { API_BASE } from "@/lib/apiBase";
 
 interface SpendApiResponse {
-  channels: Array<{ channelId: string; totalSpend: number; dailySpend: Array<{ date: string; spend: number }> }>;
+  channels: Array<{ channelId: string; totalSpend: number; totalConversionValue: number; dailySpend: Array<{ date: string; spend: number }> }>;
   isEmpty: boolean;
 }
 
@@ -43,14 +43,20 @@ export default function Spend() {
     retry: false,
   });
 
-  // Build real spend map from API data
-  const realSpendByChannel = useMemo(() => {
-    if (!spendApiData || spendApiData.isEmpty) return undefined;
-    const map: Record<string, number> = {};
+  // Build real spend and conversion value maps from API data
+  const { realSpendByChannel, conversionValueByChannel } = useMemo(() => {
+    if (!spendApiData || spendApiData.isEmpty) return { realSpendByChannel: undefined, conversionValueByChannel: undefined };
+    const spendMap: Record<string, number> = {};
+    const cvMap: Record<string, number> = {};
     for (const ch of spendApiData.channels) {
-      map[ch.channelId] = ch.totalSpend;
+      spendMap[ch.channelId] = ch.totalSpend;
+      cvMap[ch.channelId] = ch.totalConversionValue;
     }
-    return Object.keys(map).length > 0 ? map : undefined;
+    const hasSpend = Object.keys(spendMap).length > 0;
+    return {
+      realSpendByChannel: hasSpend ? spendMap : undefined,
+      conversionValueByChannel: hasSpend ? cvMap : undefined,
+    };
   }, [spendApiData]);
 
   const data = useMemo(
@@ -62,6 +68,7 @@ export default function Spend() {
         selectedStoreIds: selectedIds,
         pricingMode,
         realSpendByChannel,
+        conversionValueByChannel,
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
