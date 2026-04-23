@@ -3,20 +3,29 @@ import json
 import warnings
 import snowflake.connector
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 
 load_dotenv()
 warnings.filterwarnings("ignore")
 
 
 def get_connection():
-    return snowflake.connector.connect(
+    params = dict(
         account=os.environ["SNOWFLAKE_ACCOUNT"],
         user=os.environ["SNOWFLAKE_USER"],
-        password=os.environ["SNOWFLAKE_PASSWORD"],
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        database=os.environ["SNOWFLAKE_DATABASE"],
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "MONARCH_WH"),
+        database=os.environ.get("SNOWFLAKE_DATABASE", "MONARCH_RAW"),
         login_timeout=30,
     )
+    key_path = "/home/runner/workspace/monarch_private_key.pem"
+    if os.path.exists(key_path):
+        with open(key_path, "rb") as f:
+            pk = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+        params["private_key"] = pk.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+    else:
+        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    return snowflake.connector.connect(**params)
 
 
 def query_date_range(schema: str, table: str, days: int) -> list[dict]:

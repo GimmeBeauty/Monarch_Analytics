@@ -1,9 +1,28 @@
 import snowflake.connector
-import json
-import os
+import json, os
 from datetime import date
 from dotenv import load_dotenv
-load_dotenv()
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+load_dotenv(dotenv_path=".env")
+
+def _get_snowflake_connection(schema=None):
+    params = dict(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "MONARCH_WH"),
+        database=os.environ.get("SNOWFLAKE_DATABASE", "MONARCH_RAW"),
+    )
+    if schema:
+        params["schema"] = schema
+    key_path = "/home/runner/workspace/monarch_private_key.pem"
+    if os.path.exists(key_path):
+        with open(key_path, "rb") as f:
+            pk = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+        params["private_key"] = pk.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+    else:
+        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    return snowflake.connector.connect(**params)
 
 class BaseIngestor:
     def __init__(self, source_name, schema, table):
@@ -11,14 +30,8 @@ class BaseIngestor:
         self.schema = schema
         self.table = table
         self.ingestion_date = date.today().isoformat()
-        self.conn = snowflake.connector.connect(
-            account=os.environ["SNOWFLAKE_ACCOUNT"],
-            user=os.environ["SNOWFLAKE_USER"],
-            password=os.environ["SNOWFLAKE_PASSWORD"],
-            warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-            database=os.environ["SNOWFLAKE_DATABASE"],
-            schema=schema,
-        )
+        self.conn = _get_snowflake_connection(schema=schema)
+        print(f"[{self.source_name}] Connected to Snowflake")
 
     def upsert_records(self, records, id_field="id"):
         if not records:
@@ -28,21 +41,8 @@ class BaseIngestor:
         success = 0
         for r in records:
             try:
-                cur.execute(f"""
-                    MERGE INTO {self.table} AS target
-                    USING (
-                        SELECT %s AS id, %s::DATE AS ingestion_date,
-                               %s AS source, PARSE_JSON(%s) AS raw_data
-                    ) AS src
-                    ON target.id = src.id
-                    AND target.ingestion_date = src.ingestion_date
-                    WHEN MATCHED THEN UPDATE SET
-                        target.raw_data = src.raw_data,
-                        target.ingested_at = CURRENT_TIMESTAMP()
-                    WHEN NOT MATCHED THEN INSERT
-                        (id, ingestion_date, source, raw_data)
-                    VALUES (src.id, src.ingestion_date, src.source, src.raw_data)
-                """, (str(r.get(id_field,"")), self.ingestion_date, self.source_name, json.dumps(r)))
+                cur.execute(f"INSERT INTO {self.table} (id,ingestion_date,source,raw_data) SELECT %s,%s::DATE,%s,PARSE_JSON(%s)",
+                    (str(r.get(id_field,"")), self.ingestion_date, self.source_name, json.dumps(r)))
                 success += 1
             except Exception as e:
                 print(f"[{self.source_name}] Row error: {e}")

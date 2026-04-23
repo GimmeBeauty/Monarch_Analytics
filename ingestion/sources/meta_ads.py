@@ -2,22 +2,35 @@ import requests, json, os, warnings
 import snowflake.connector
 from datetime import date, timedelta
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 
 load_dotenv()
 warnings.filterwarnings("ignore")
+
+def _get_snowflake_connection(schema=None):
+    params = dict(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "MONARCH_WH"),
+        database=os.environ.get("SNOWFLAKE_DATABASE", "MONARCH_RAW"),
+    )
+    if schema:
+        params["schema"] = schema
+    key_path = "/home/runner/workspace/monarch_private_key.pem"
+    if os.path.exists(key_path):
+        with open(key_path, "rb") as f:
+            pk = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+        params["private_key"] = pk.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+    else:
+        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    return snowflake.connector.connect(**params)
 
 def run_meta_ingestion(start_date=None, end_date=None):
     token = os.environ["META_ACCESS_TOKEN"]
     account_id = os.environ["META_AD_ACCOUNT_ID"]
 
-    conn = snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        password=os.environ["SNOWFLAKE_PASSWORD"],
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        database=os.environ["SNOWFLAKE_DATABASE"],
-        schema="ADS",
-    )
+    conn = _get_snowflake_connection(schema="ADS")
     cur = conn.cursor()
     print("Connected to Snowflake")
 

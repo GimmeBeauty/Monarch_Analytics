@@ -1,11 +1,32 @@
 import requests, json, os, warnings, time
 import snowflake.connector
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 load_dotenv(dotenv_path=".env")
 warnings.filterwarnings("ignore")
+
+def _get_snowflake_connection(schema=None):
+    params = dict(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "MONARCH_WH"),
+        database=os.environ.get("SNOWFLAKE_DATABASE", "MONARCH_RAW"),
+    )
+    if schema:
+        params["schema"] = schema
+    key_path = "/home/runner/workspace/monarch_private_key.pem"
+    if os.path.exists(key_path):
+        with open(key_path, "rb") as f:
+            pk = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+        params["private_key"] = pk.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+    else:
+        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    return snowflake.connector.connect(**params)
+
 token = "EAAST61QHyfQBRZAqRdoxcrXD0K2x7qZC2ZB4MD7arMJK9xB4wmhwPO0XtFMxqb47zWIYzdEuNlmg3IcWNgnEZApZBIdOeVZBGlx4JrDyqXl9y9NCPE25xKZCxvhX74n2u3bPHaHXotHM98i9MIXaLrTYRXwI3XOm2JkBHMoLisWQsXrHZBT7Xvh6Ub7MCnS58ZAdOkAZDZD"
 account_id = "10152407382101579"
-conn = snowflake.connector.connect(account=os.environ["SNOWFLAKE_ACCOUNT"],user=os.environ["SNOWFLAKE_USER"],password=os.environ["SNOWFLAKE_PASSWORD"],warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],database=os.environ["SNOWFLAKE_DATABASE"],schema="ADS")
+conn = _get_snowflake_connection(schema="ADS")
 cur = conn.cursor()
 print("Connected to Snowflake")
 months = [("2025-02-01","2025-02-28"),("2025-03-01","2025-03-31"),("2025-04-01","2025-04-30"),("2025-05-01","2025-05-31"),("2025-06-01","2025-06-30"),("2025-07-01","2025-07-31"),("2025-08-01","2025-08-31"),("2025-09-01","2025-09-30"),("2025-10-01","2025-10-31"),("2025-11-01","2025-11-30"),("2025-12-01","2025-12-31"),("2026-01-01","2026-01-31"),("2026-02-01","2026-02-28"),("2026-03-01","2026-03-31"),("2026-04-01","2026-04-20")]
