@@ -794,6 +794,7 @@ router.get("/traffic", authenticate, async (req, res) => {
     const ga4Agg       = ga4Rows[0] ?? {};
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
     const cvr = totalSessions > 0 ? totalOrders / totalSessions : 0;
+    console.log("[data/traffic] totalSessions:", totalSessions);
 
     const products = productRows.map(row => ({
       id:          String(row["PRODUCT_ID"]  ?? row["product_id"]  ?? ""),
@@ -866,6 +867,7 @@ router.get("/spend", authenticate, async (req, res) => {
       totalConversionValue: Math.round(v.totalConversionValue * 100) / 100,
       dailySpend:           v.dailySpend,
     }));
+    console.log("[data/spend] conversionValue by channel:", channels.map(c => `${c.channelId}=${c.totalConversionValue}`).join(", "));
 
     res.json({ channels, isEmpty: channels.length === 0 });
   } catch (e) {
