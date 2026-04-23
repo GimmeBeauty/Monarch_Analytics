@@ -556,7 +556,7 @@ router.get("/overview", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   try {
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows] = await Promise.all([
       // Aggregate totals from MONARCH_DAILY_SUMMARY
       querySnowflake(`
         SELECT
@@ -589,6 +589,20 @@ router.get("/overview", authenticate, async (req, res) => {
         WHERE summary_date BETWEEN '${start}' AND '${end}'
         GROUP BY channel
         ORDER BY spend DESC
+      `),
+      // Sessions from GA4_DAILY_SUMMARY
+      querySnowflake(`
+        SELECT SUM(sessions) AS total_sessions
+        FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+      `),
+      // Web orders from SHOPIFY_ORDERS_RAW (for CVR numerator)
+      querySnowflake(`
+        SELECT COUNT(*) AS web_orders
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+        WHERE ingestion_date BETWEEN '${start}' AND '${end}'
+        AND raw_data:financial_status::STRING IN ('paid','partially_paid')
+        AND raw_data:source_name::STRING = 'web'
       `),
     ]);
 
@@ -628,6 +642,12 @@ router.get("/overview", authenticate, async (req, res) => {
       .filter((c): c is NonNullable<typeof c> => c !== null)
       .sort((a, b) => b.spend - a.spend);
 
+    const ga4Agg        = ga4Rows[0] ?? {};
+    const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
+    const webOrderAgg   = webOrderRows[0] ?? {};
+    const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
+    const cvr           = totalSessions > 0 ? webOrders / totalSessions : 0;
+
     const mer = totalSpend > 0 ? totalRevenue / totalSpend : 0;
     const roas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
     const aov  = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -647,6 +667,8 @@ router.get("/overview", authenticate, async (req, res) => {
       adRevenue: Math.round(totalAdRevenue * 100) / 100,
       mer:       Math.round(mer            * 1000) / 1000,
       roas:      Math.round(roas           * 1000) / 1000,
+      sessions:  totalSessions,
+      cvr:       Math.round(cvr * 10000) / 10000,
       storeBreakdown,
       channelBreakdown,
       dailySeries,

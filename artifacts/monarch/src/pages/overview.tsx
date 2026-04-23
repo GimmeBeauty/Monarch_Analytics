@@ -22,6 +22,8 @@ interface OverviewApiResponse {
   adRevenue: number;
   mer: number;
   roas: number;
+  sessions: number;
+  cvr: number;
   storeBreakdown: Array<{ storeId: string; revenue: number }>;
   channelBreakdown: Array<{ channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[]; spend: number; revenue: number }>;
   dailySeries: Array<{ date: string; revenue: number; spend: number; adRevenue: number }>;
@@ -78,8 +80,8 @@ export default function Overview() {
       { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
       { id: "orders",  label: "Orders",             value: apiData.orders ?? 0,   formatted: (apiData.orders ?? 0).toLocaleString(), change: 0, positive: true, format: "number",  description: "Total orders from all selected stores" },
       { id: "aov",     label: "AOV",               value: apiData.aov,      formatted: fmtCurrency(apiData.aov),      change: 0, positive: true,  format: "currency", description: "Average Order Value — Total Revenue ÷ Total Orders" },
-      { id: "sessions", label: "Sessions / Views", value: 0,                formatted: "—",                           change: 0, positive: true,  format: "number",   description: "Sessions data not yet available from Snowflake" },
-      { id: "cvr",     label: "Conversion Rate",   value: 0,                formatted: "—",                           change: 0, positive: true,  format: "percent",  description: "Conversion rate data not yet available" },
+      { id: "sessions", label: "Sessions / Views", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(),         change: 0, positive: true, format: "number",  description: "Total GA4 sessions in period" },
+      { id: "cvr",      label: "Conversion Rate",  value: apiData.cvr     ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`,        change: 0, positive: true, format: "percent", description: "Web orders ÷ GA4 sessions" },
     ];
 
     // ── Trend Series ─────────────────────────────────────────────────────────
