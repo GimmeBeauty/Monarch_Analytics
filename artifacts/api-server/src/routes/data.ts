@@ -770,7 +770,7 @@ router.get("/traffic", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   try {
-    const [summaryRows, productRows, geoRows, ga4Rows] = await Promise.all([
+    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows] = await Promise.all([
       // Top-level KPIs from SHOPIFY_DAILY_SUMMARY
       querySnowflake(`
         SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
@@ -806,6 +806,14 @@ router.get("/traffic", authenticate, async (req, res) => {
         FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
         WHERE summary_date BETWEEN '${start}' AND '${end}'
       `),
+      // Web orders from SHOPIFY_ORDERS_RAW (for CVR numerator)
+      querySnowflake(`
+        SELECT COUNT(*) AS web_orders
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+        WHERE ingestion_date BETWEEN '${start}' AND '${end}'
+        AND raw_data:financial_status::STRING IN ('paid','partially_paid')
+        AND raw_data:source_name::STRING = 'web'
+      `),
     ]);
 
     const summaryAgg   = summaryRows[0] ?? {};
@@ -813,9 +821,11 @@ router.get("/traffic", authenticate, async (req, res) => {
     const totalOrders  = Number(summaryAgg["TOTAL_ORDERS"]  ?? summaryAgg["total_orders"]  ?? 0);
     const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    const ga4Agg       = ga4Rows[0] ?? {};
+    const ga4Agg        = ga4Rows[0] ?? {};
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
-    const cvr = totalSessions > 0 ? totalOrders / totalSessions : 0;
+    const webOrderAgg   = webOrderRows[0] ?? {};
+    const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
+    const cvr           = totalSessions > 0 ? webOrders / totalSessions : 0;
     console.log("[data/traffic] totalSessions:", totalSessions);
 
     const products = productRows.map(row => ({
@@ -936,6 +946,74 @@ router.get("/performance", authenticate, async (req, res) => {
 
   const channels = results.filter(Boolean);
   res.json({ channels, isEmpty: channels.length === 0 });
+});
+
+// ─── GET /api/data/target/products ───────────────────────────────────────────
+
+router.get("/target/products", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        item_description,
+        SUM(revenue)     AS revenue,
+        SUM(units_sold)  AS units_sold,
+        SUM(store_count) AS store_count
+      FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'
+      GROUP BY item_description
+      ORDER BY revenue DESC
+      LIMIT 50
+    `);
+
+    const products = rows.map(row => ({
+      itemDescription: String(row["ITEM_DESCRIPTION"] ?? row["item_description"] ?? ""),
+      revenue:         Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      unitsSold:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+      storeCount:      Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
+    }));
+
+    res.json({ products, isEmpty: products.length === 0 });
+  } catch (e) {
+    console.error("[data/target/products] Error:", e);
+    res.status(500).json({ error: "Failed to query Target product data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/target/fulfillment ────────────────────────────────────────
+
+router.get("/target/fulfillment", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        fulfillment_type,
+        SUM(revenue)    AS revenue,
+        SUM(units_sold) AS units_sold
+      FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'
+      GROUP BY fulfillment_type
+    `);
+
+    const fulfillment = rows.map(row => ({
+      fulfillmentType: String(row["FULFILLMENT_TYPE"] ?? row["fulfillment_type"] ?? ""),
+      revenue:         Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100,
+      unitsSold:       Number(row["UNITS_SOLD"] ?? row["units_sold"] ?? 0),
+    }));
+
+    res.json({ fulfillment, isEmpty: fulfillment.length === 0 });
+  } catch (e) {
+    console.error("[data/target/fulfillment] Error:", e);
+    res.status(500).json({ error: "Failed to query Target fulfillment data", detail: String(e) });
+  }
 });
 
 export default router;
