@@ -53,10 +53,11 @@ export default function Traffic() {
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
-    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate],
+    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
+      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -92,6 +93,7 @@ export default function Traffic() {
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
+    console.log("[Traffic memo] isTargetOnly:", isTargetOnly, "| targetProductData:", targetProductData ? `${targetProductData.products.length} products` : "undefined");
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const kpis: TrafficKPI[] = [
@@ -123,24 +125,27 @@ export default function Traffic() {
           storeCount:     p.storeCount,
           isTop10:        i < 10,
         }))
-      : apiData.products.map((p, i) => ({
-          id:              p.id,
-          productName:     p.productName,
-          storeId:         "shopify",
-          storeName:       "Shopify",
-          storeColor:      "#96BF48",
-          sales:           p.revenue,
-          formattedSales:  fmtCurrency(p.revenue),
-          salesPrior:      0,
-          units:           p.units,
-          unitsPrior:      0,
-          avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
-          changeInSales:   0,
-          conversionRate:  0,
-          pctSalesOnline:  100,
-          pageViews:       0,
-          isTop10:         i < 10,
-        }));
+      : (selectedIds.length === 0 || selectedIds.includes("shopify"))
+        ? apiData.products.map((p, i) => ({
+            id:              p.id,
+            productName:     p.productName,
+            storeId:         "shopify",
+            storeName:       "Shopify",
+            storeColor:      "#96BF48",
+            sales:           p.revenue,
+            formattedSales:  fmtCurrency(p.revenue),
+            salesPrior:      0,
+            units:           p.units,
+            unitsPrior:      0,
+            avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
+            changeInSales:   0,
+            conversionRate:  0,
+            pctSalesOnline:  100,
+            pageViews:       0,
+            isTop10:         i < 10,
+          }))
+        : [];
+    console.log("[Traffic memo] products resolved:", products.length, "rows | first storeId:", products[0]?.storeId ?? "empty");
 
     // ── State Revenue ─────────────────────────────────────────────────────────
     const totalStateRevenue = apiData.stateRevenue.reduce((s, x) => s + x.revenue, 0);
@@ -159,7 +164,7 @@ export default function Traffic() {
     });
 
     return { kpis, products, stateRevenue, storeLocations: [] };
-  }, [apiData, isTargetOnly, targetProductData]);
+  }, [apiData, selectedIds, targetProductData]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
@@ -197,10 +202,12 @@ export default function Traffic() {
         {data && (
           <>
             <TrafficKPISection kpis={data.kpis} />
-            <ProductPerformanceTable
-              products={data.products}
-              selectedStoreIds={selectedIds}
-            />
+            {!effectiveIsLoading && (
+              <ProductPerformanceTable
+                products={data.products}
+                selectedStoreIds={selectedIds}
+              />
+            )}
             <USMap
               stateRevenue={data.stateRevenue}
               storeLocations={data.storeLocations}

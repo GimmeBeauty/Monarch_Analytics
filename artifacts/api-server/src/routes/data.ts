@@ -550,23 +550,36 @@ router.get("/meta", authenticate, async (req, res) => {
 // ─── GET /api/data/overview ───────────────────────────────────────────────────
 
 router.get("/overview", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
+  const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
 
   try {
+    const aggregateQuery = isTargetOnly
+      ? querySnowflake(`
+          SELECT
+            SUM(revenue)    AS total_revenue,
+            0               AS total_spend,
+            SUM(units_sold) AS total_units,
+            SUM(units_sold) AS total_orders
+          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : querySnowflake(`
+          SELECT
+            SUM(total_revenue) AS total_revenue,
+            SUM(ad_spend)      AS total_spend,
+            SUM(units_sold)    AS total_units,
+            SUM(order_count)   AS total_orders
+          FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `);
+
     const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows] = await Promise.all([
-      // Aggregate totals from MONARCH_DAILY_SUMMARY
-      querySnowflake(`
-        SELECT
-          SUM(total_revenue) AS total_revenue,
-          SUM(ad_spend)      AS total_spend,
-          SUM(units_sold)    AS total_units,
-          SUM(order_count)   AS total_orders
-        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-      `),
+      aggregateQuery,
       // Daily revenue & spend series
       querySnowflake(`
         SELECT summary_date, total_revenue, ad_spend
@@ -764,19 +777,28 @@ router.get("/attribution", authenticate, async (req, res) => {
 // ─── GET /api/data/traffic ────────────────────────────────────────────────────
 
 router.get("/traffic", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
+  const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
 
   try {
+    const summaryQuery = isTargetOnly
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders
+          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : querySnowflake(`
+          SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `);
+
     const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows] = await Promise.all([
-      // Top-level KPIs from SHOPIFY_DAILY_SUMMARY
-      querySnowflake(`
-        SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
-        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-      `),
+      summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
         SELECT
