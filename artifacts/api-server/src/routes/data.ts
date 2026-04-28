@@ -556,6 +556,7 @@ router.get("/overview", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
   const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
+  const includesTarget = storeIds.includes("target");
 
   try {
     const aggregateQuery = isTargetOnly
@@ -578,15 +579,41 @@ router.get("/overview", authenticate, async (req, res) => {
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows] = await Promise.all([
+    const dailySeriesQuery = isTargetOnly
+      ? querySnowflake(`
+          SELECT summary_date, sale_amount AS total_revenue, 0 AS ad_spend
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+          ORDER BY summary_date ASC
+        `)
+      : querySnowflake(`
+          SELECT summary_date, total_revenue, ad_spend
+          FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+          ORDER BY summary_date ASC
+        `);
+
+    const targetSummaryQuery = (includesTarget && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS target_revenue
+          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
+    const targetDailyQuery = (includesTarget && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT summary_date, SUM(sale_amount) AS total_revenue
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+          GROUP BY summary_date
+          ORDER BY summary_date ASC
+        `)
+      : Promise.resolve([]);
+
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, targetDailyRows] = await Promise.all([
       aggregateQuery,
-      // Daily revenue & spend series
-      querySnowflake(`
-        SELECT summary_date, total_revenue, ad_spend
-        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-        ORDER BY summary_date ASC
-      `),
+      dailySeriesQuery,
       // Daily conversion value from DAILY_AD_SUMMARY (for adRevenue per day)
       querySnowflake(`
         SELECT summary_date, SUM(conversion_value) AS cv
@@ -617,6 +644,8 @@ router.get("/overview", authenticate, async (req, res) => {
         AND raw_data:financial_status::STRING IN ('paid','partially_paid')
         AND raw_data:source_name::STRING = 'web'
       `),
+      targetSummaryQuery,
+      targetDailyQuery,
     ]);
 
     const agg          = summaryRows[0] ?? {};
@@ -634,13 +663,22 @@ router.get("/overview", authenticate, async (req, res) => {
       if (date) { dailyCvMap[date] = (dailyCvMap[date] ?? 0) + cv; totalAdRevenue += cv; }
     }
 
-    // Daily series combining MONARCH_DAILY_SUMMARY revenue/spend with ad conversion value
-    const dailySeries = dailySummaryRows.map(row => {
+    // Daily series — MONARCH or TARGET_DAILY_SUMMARY depending on store selection
+    let dailySeries = dailySummaryRows.map(row => {
       const date    = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
       const revenue = Number(row["TOTAL_REVENUE"] ?? row["total_revenue"] ?? 0);
       const spend   = Number(row["AD_SPEND"]      ?? row["ad_spend"]      ?? 0);
       return { date, revenue, spend, adRevenue: dailyCvMap[date] ?? 0 };
     });
+    if (includesTarget && !isTargetOnly) {
+      const targetDailyMap: Record<string, number> = {};
+      for (const row of targetDailyRows) {
+        const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+        const rev  = Number(row["TOTAL_REVENUE"]  ?? row["total_revenue"]  ?? 0);
+        if (date) targetDailyMap[date] = rev;
+      }
+      dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (targetDailyMap[d.date] ?? 0) }));
+    }
 
     // Channel breakdown with metadata mapping
     const channelBreakdown = channelRows
@@ -665,9 +703,19 @@ router.get("/overview", authenticate, async (req, res) => {
     const roas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
     const aov  = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    const storeBreakdown = totalRevenue > 0
-      ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }]
-      : [];
+    const targetSummaryAgg = (targetSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const targetRev = isTargetOnly
+      ? Math.round(totalRevenue * 100) / 100
+      : Math.round(Number(targetSummaryAgg["TARGET_REVENUE"] ?? targetSummaryAgg["target_revenue"] ?? 0) * 100) / 100;
+
+    const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
+      ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
+      : includesTarget
+        ? [
+            ...(totalRevenue - targetRev > 0 ? [{ storeId: "shopify", revenue: Math.round((totalRevenue - targetRev) * 100) / 100 }] : []),
+            ...(targetRev > 0               ? [{ storeId: "target",  revenue: targetRev }] : []),
+          ]
+        : (totalRevenue > 0 ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }] : []);
 
     const isEmpty = totalRevenue === 0 && totalSpend === 0;
 
@@ -1035,6 +1083,37 @@ router.get("/target/fulfillment", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/target/fulfillment] Error:", e);
     res.status(500).json({ error: "Failed to query Target fulfillment data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/target/geographic ─────────────────────────────────────────
+
+router.get("/target/geographic", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        location_id,
+        SUM(revenue) AS revenue
+      FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'
+      GROUP BY location_id
+      ORDER BY revenue DESC
+    `);
+
+    const locations = rows.map(row => ({
+      locationId: String(row["LOCATION_ID"] ?? row["location_id"] ?? ""),
+      revenue:    Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+    }));
+
+    res.json({ locations, isEmpty: locations.length === 0 });
+  } catch (e) {
+    console.error("[data/target/geographic] Error:", e);
+    res.status(500).json({ error: "Failed to query Target geographic data", detail: String(e) });
   }
 });
 

@@ -50,6 +50,7 @@ export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
+  const includesTarget = selectedIds.includes("target");
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
@@ -86,10 +87,10 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: isTargetOnly,
+    enabled: includesTarget,
   });
 
-  const effectiveIsLoading = isLoading || (isTargetOnly && isTargetLoading);
+  const effectiveIsLoading = isLoading || (includesTarget && isTargetLoading);
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
@@ -105,8 +106,29 @@ export default function Traffic() {
     ];
 
     // ── Products ──────────────────────────────────────────────────────────────
-    const products: ProductRow[] = isTargetOnly
-      ? (targetProductData?.products ?? []).map((p, i) => ({
+    const shopifyRows = (selectedIds.length === 0 || selectedIds.includes("shopify"))
+      ? apiData.products.map(p => ({
+          id:              p.id,
+          productName:     p.productName,
+          storeId:         "shopify",
+          storeName:       "Shopify",
+          storeColor:      "#96BF48",
+          sales:           p.revenue,
+          formattedSales:  fmtCurrency(p.revenue),
+          salesPrior:      0,
+          units:           p.units,
+          unitsPrior:      0,
+          avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
+          changeInSales:   0,
+          conversionRate:  0,
+          pctSalesOnline:  100,
+          pageViews:       0,
+          isTop10:         false,
+        }))
+      : [];
+
+    const targetRows = includesTarget
+      ? (targetProductData?.products ?? []).map(p => ({
           id:             p.itemDescription,
           productName:    p.itemDescription,
           storeId:        "target",
@@ -123,28 +145,13 @@ export default function Traffic() {
           pctSalesOnline: 0,
           pageViews:      0,
           storeCount:     p.storeCount,
-          isTop10:        i < 10,
+          isTop10:        false,
         }))
-      : (selectedIds.length === 0 || selectedIds.includes("shopify"))
-        ? apiData.products.map((p, i) => ({
-            id:              p.id,
-            productName:     p.productName,
-            storeId:         "shopify",
-            storeName:       "Shopify",
-            storeColor:      "#96BF48",
-            sales:           p.revenue,
-            formattedSales:  fmtCurrency(p.revenue),
-            salesPrior:      0,
-            units:           p.units,
-            unitsPrior:      0,
-            avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
-            changeInSales:   0,
-            conversionRate:  0,
-            pctSalesOnline:  100,
-            pageViews:       0,
-            isTop10:         i < 10,
-          }))
-        : [];
+      : [];
+
+    const products: ProductRow[] = [...shopifyRows, ...targetRows]
+      .sort((a, b) => b.sales - a.sales)
+      .map((p, i) => ({ ...p, isTop10: i < 10 }));
     console.log("[Traffic memo] products resolved:", products.length, "rows | first storeId:", products[0]?.storeId ?? "empty");
 
     // ── State Revenue ─────────────────────────────────────────────────────────
