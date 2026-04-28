@@ -22,7 +22,7 @@ const STATE_NAMES: Record<string, string> = {
   WI:"Wisconsin",WY:"Wyoming",DC:"Washington D.C.",
 };
 
-// ─── API Response Type ─────────────────────────────────────────────────────────
+// ─── API Response Types ────────────────────────────────────────────────────────
 
 interface TrafficApiResponse {
   revenue: number;
@@ -35,6 +35,11 @@ interface TrafficApiResponse {
   isEmpty: boolean;
 }
 
+interface TargetProductsApiResponse {
+  products: Array<{ itemDescription: string; revenue: number; unitsSold: number; storeCount: number }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -44,6 +49,8 @@ function fmtCurrency(v: number): string {
 export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
+  const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
+  console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
     queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate],
@@ -62,6 +69,27 @@ export default function Traffic() {
     retry: false,
   });
 
+  const { data: targetProductData, isLoading: isTargetLoading } = useQuery<TargetProductsApiResponse>({
+    queryKey: ["target-products", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      console.log("[Traffic] target/products queryFn fired");
+      const res = await fetch(
+        `${API_BASE}/api/data/target/products?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<TargetProductsApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isTargetOnly,
+  });
+
+  const effectiveIsLoading = isLoading || (isTargetOnly && isTargetLoading);
+
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
 
@@ -75,25 +103,44 @@ export default function Traffic() {
     ];
 
     // ── Products ──────────────────────────────────────────────────────────────
-    const totalRevenue = apiData.products.reduce((s, p) => s + p.revenue, 0);
-    const products: ProductRow[] = apiData.products.map((p, i) => ({
-      id:              p.id,
-      productName:     p.productName,
-      storeId:         "shopify",
-      storeName:       "Shopify",
-      storeColor:      "#96BF48",
-      sales:           p.revenue,
-      formattedSales:  fmtCurrency(p.revenue),
-      salesPrior:      0,
-      units:           p.units,
-      unitsPrior:      0,
-      avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
-      changeInSales:   0,
-      conversionRate:  0,
-      pctSalesOnline:  100,
-      pageViews:       0,
-      isTop10:         i < 10,
-    }));
+    const products: ProductRow[] = isTargetOnly
+      ? (targetProductData?.products ?? []).map((p, i) => ({
+          id:             p.itemDescription,
+          productName:    p.itemDescription,
+          storeId:        "target",
+          storeName:      "Target",
+          storeColor:     "#CC0000",
+          sales:          p.revenue,
+          formattedSales: fmtCurrency(p.revenue),
+          salesPrior:     0,
+          units:          p.unitsSold,
+          unitsPrior:     0,
+          avgSellPrice:   p.unitsSold > 0 ? p.revenue / p.unitsSold : 0,
+          changeInSales:  0,
+          conversionRate: 0,
+          pctSalesOnline: 0,
+          pageViews:      0,
+          storeCount:     p.storeCount,
+          isTop10:        i < 10,
+        }))
+      : apiData.products.map((p, i) => ({
+          id:              p.id,
+          productName:     p.productName,
+          storeId:         "shopify",
+          storeName:       "Shopify",
+          storeColor:      "#96BF48",
+          sales:           p.revenue,
+          formattedSales:  fmtCurrency(p.revenue),
+          salesPrior:      0,
+          units:           p.units,
+          unitsPrior:      0,
+          avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
+          changeInSales:   0,
+          conversionRate:  0,
+          pctSalesOnline:  100,
+          pageViews:       0,
+          isTop10:         i < 10,
+        }));
 
     // ── State Revenue ─────────────────────────────────────────────────────────
     const totalStateRevenue = apiData.stateRevenue.reduce((s, x) => s + x.revenue, 0);
@@ -112,9 +159,9 @@ export default function Traffic() {
     });
 
     return { kpis, products, stateRevenue, storeLocations: [] };
-  }, [apiData]);
+  }, [apiData, isTargetOnly, targetProductData]);
 
-  const isEmpty = !isLoading && (!apiData || apiData.isEmpty || !data);
+  const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
   return (
     <DashboardLayout
@@ -136,7 +183,7 @@ export default function Traffic() {
           </div>
         )}
 
-        {isLoading && (
+        {effectiveIsLoading && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (

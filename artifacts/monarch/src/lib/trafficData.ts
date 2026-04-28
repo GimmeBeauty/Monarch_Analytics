@@ -90,6 +90,7 @@ export interface ProductRow {
   conversionRate: number;  // %
   pctSalesOnline: number;  // %
   pageViews: number;
+  storeCount?: number;
   isTop10: boolean;
 }
 

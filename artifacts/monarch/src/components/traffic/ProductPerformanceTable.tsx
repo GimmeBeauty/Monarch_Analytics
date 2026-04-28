@@ -5,7 +5,7 @@ import { STORES } from "@/lib/storeData";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortKey = "productName"|"storeName"|"sales"|"units"|"avgSellPrice"|"conversionRate"|"pctSalesOnline"|"pageViews";
+type SortKey = "productName"|"storeName"|"sales"|"units"|"storeCount"|"avgSellPrice"|"conversionRate"|"pctSalesOnline"|"pageViews";
 type SortDir = "asc"|"desc";
 
 interface Filters {
@@ -84,6 +84,8 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
       return key;
     });
   }, []);
+
+  const hasStoreCount = useMemo(() => products.some(p => p.storeCount !== undefined), [products]);
 
   // Derive store options from data (only stores present in current products)
   const storeOptions = useMemo(() => {
@@ -263,6 +265,7 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
               <Th col="storeName"   label="Store"/>
               <Th col="sales"       label="Sales"/>
               <Th col="units"       label="Units"/>
+              {hasStoreCount         && <Th col="storeCount"     label="Store Count"/>}
               {visibleCols.avgSellPrice  && <Th col="avgSellPrice"   label="Avg Price"/>}
               {visibleCols.conversionRate && <Th col="conversionRate" label="CVR"/>}
               {visibleCols.pctSalesOnline && <Th col="pctSalesOnline" label="Online %"/>}
@@ -320,6 +323,13 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
                       </div>
                     </div>
                   </td>
+
+                  {/* Store Count (Target only) */}
+                  {hasStoreCount && (
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                      {row.storeCount !== undefined ? fmtNum(row.storeCount) : "—"}
+                    </td>
+                  )}
 
                   {/* Optional columns */}
                   {visibleCols.avgSellPrice && (
