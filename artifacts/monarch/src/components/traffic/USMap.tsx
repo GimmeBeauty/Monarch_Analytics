@@ -28,6 +28,12 @@ function fmtNum(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
+function fmtRevenue(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
+}
+
 
 // ─── Component ────────────────────────────────────────────────────────────────
 interface Props {
@@ -73,7 +79,7 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Geographic Revenue Distribution</h2>
           <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
             {selectedStateData
-              ? `${selectedStateData.name} · $${(selectedStateData.revenue / 1_000_000).toFixed(1)}M revenue (${selectedStateData.contribution.toFixed(1)}% of total)`
+              ? `${selectedStateData.name} · ${fmtRevenue(selectedStateData.revenue)} revenue (${selectedStateData.contribution.toFixed(1)}% of total)`
               : "Click any state to drill down"}
           </p>
         </div>
@@ -94,8 +100,9 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
                     const code = FIPS_TO_STATE[fips];
                     if (!code) return null;
 
-                    const sr        = revenueByCode[code];
-                    const band      = sr?.band ?? 5;
+                    const sr         = revenueByCode[code];
+                    const hasData    = !!sr;
+                    const band       = sr?.band ?? 0;
                     const isHovered  = hoveredState === code;
                     const isSelected = selectedState === code;
                     const isDimmed   = !!selectedState && !isSelected;
@@ -103,6 +110,8 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
                     let fill: string;
                     if (isDimmed) {
                       fill = "#CBD5E1";
+                    } else if (!hasData) {
+                      fill = isSelected || isHovered ? "#94A3B8" : "#CBD5E1";
                     } else if (isSelected || isHovered) {
                       fill = BAND_FILL_HOVER[band];
                     } else {
@@ -178,7 +187,7 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
                 <div className="font-semibold mb-1.5">{sr.name}</div>
                 <div className="flex justify-between gap-4">
                   <span className="opacity-60">Revenue</span>
-                  <span className="font-mono">${(sr.revenue / 1_000_000).toFixed(1)}M</span>
+                  <span className="font-mono">{fmtRevenue(sr.revenue)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
                   <span className="opacity-60">Share</span>
@@ -216,7 +225,7 @@ export default function USMap({ stateRevenue, storeLocations }: Props) {
               </h3>
               <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
                 {selectedStateLocs.length} location{selectedStateLocs.length !== 1 ? "s" : ""} ·{" "}
-                State revenue ${(selectedStateData.revenue / 1_000_000).toFixed(1)}M ({selectedStateData.contribution.toFixed(1)}% of total)
+                State revenue {fmtRevenue(selectedStateData.revenue)} ({selectedStateData.contribution.toFixed(1)}% of total)
               </p>
             </div>
           </div>

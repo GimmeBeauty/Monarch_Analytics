@@ -708,19 +708,21 @@ router.get("/overview", authenticate, async (req, res) => {
       ? Math.round(totalRevenue * 100) / 100
       : Math.round(Number(targetSummaryAgg["TARGET_REVENUE"] ?? targetSummaryAgg["target_revenue"] ?? 0) * 100) / 100;
 
+    const effectiveTotalRevenue = (includesTarget && !isTargetOnly) ? totalRevenue + targetRev : totalRevenue;
+
     const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
       ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
       : includesTarget
         ? [
-            ...(totalRevenue - targetRev > 0 ? [{ storeId: "shopify", revenue: Math.round((totalRevenue - targetRev) * 100) / 100 }] : []),
-            ...(targetRev > 0               ? [{ storeId: "target",  revenue: targetRev }] : []),
+            ...(totalRevenue > 0 ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }] : []),
+            ...(targetRev > 0    ? [{ storeId: "target",  revenue: targetRev }] : []),
           ]
         : (totalRevenue > 0 ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }] : []);
 
-    const isEmpty = totalRevenue === 0 && totalSpend === 0;
+    const isEmpty = effectiveTotalRevenue === 0 && totalSpend === 0;
 
     res.json({
-      revenue:   Math.round(totalRevenue   * 100) / 100,
+      revenue:   Math.round(effectiveTotalRevenue * 100) / 100,
       orders:    totalOrders,
       units:     totalUnits,
       aov:       Math.round(aov            * 100) / 100,
@@ -831,8 +833,17 @@ router.get("/traffic", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
   const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
+  const includesTarget = storeIds.includes("target");
 
   try {
+    const targetTrafficSummaryQuery = (includesTarget && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS target_revenue
+          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     const summaryQuery = isTargetOnly
       ? querySnowflake(`
           SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders
@@ -845,7 +856,7 @@ router.get("/traffic", authenticate, async (req, res) => {
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `);
 
-    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows] = await Promise.all([
+    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
@@ -884,12 +895,17 @@ router.get("/traffic", authenticate, async (req, res) => {
         AND raw_data:financial_status::STRING IN ('paid','partially_paid')
         AND raw_data:source_name::STRING = 'web'
       `),
+      targetTrafficSummaryQuery,
     ]);
 
     const summaryAgg   = summaryRows[0] ?? {};
     const totalRevenue = Number(summaryAgg["TOTAL_REVENUE"] ?? summaryAgg["total_revenue"] ?? 0);
     const totalOrders  = Number(summaryAgg["TOTAL_ORDERS"]  ?? summaryAgg["total_orders"]  ?? 0);
     const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    const targetTrafficAgg = (targetTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const targetTrafficRev = Math.round(Number(targetTrafficAgg["TARGET_REVENUE"] ?? targetTrafficAgg["target_revenue"] ?? 0) * 100) / 100;
+    const effectiveRevenue = (includesTarget && !isTargetOnly) ? totalRevenue + targetTrafficRev : totalRevenue;
 
     const ga4Agg        = ga4Rows[0] ?? {};
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
@@ -912,10 +928,10 @@ router.get("/traffic", authenticate, async (req, res) => {
       orders:    Number(row["ORDER_COUNT"] ?? row["order_count"] ?? 0),
     }));
 
-    const isEmpty = totalRevenue === 0 && products.length === 0;
+    const isEmpty = effectiveRevenue === 0 && products.length === 0;
 
     res.json({
-      revenue:     Math.round(totalRevenue * 100) / 100,
+      revenue:     Math.round(effectiveRevenue * 100) / 100,
       orders:      totalOrders,
       aov:         Math.round(aov * 100) / 100,
       sessions:    totalSessions,
@@ -1097,17 +1113,21 @@ router.get("/target/geographic", authenticate, async (req, res) => {
   try {
     const rows = await querySnowflake(`
       SELECT
-        location_id,
-        SUM(revenue) AS revenue
-      FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+        state,
+        SUM(revenue)     AS revenue,
+        SUM(units_sold)  AS units_sold,
+        SUM(store_count) AS store_count
+      FROM ${DB_NAME}.RETAIL.TARGET_STATE_DAILY
       WHERE summary_date BETWEEN '${start}' AND '${end}'
-      GROUP BY location_id
+      GROUP BY state
       ORDER BY revenue DESC
     `);
 
     const locations = rows.map(row => ({
-      locationId: String(row["LOCATION_ID"] ?? row["location_id"] ?? ""),
-      revenue:    Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+      stateCode:  String(row["STATE"]       ?? row["state"]       ?? "").toUpperCase(),
+      revenue:    Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      unitsSold:  Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+      storeCount: Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
     }));
 
     res.json({ locations, isEmpty: locations.length === 0 });

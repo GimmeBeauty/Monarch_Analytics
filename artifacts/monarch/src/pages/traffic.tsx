@@ -40,6 +40,11 @@ interface TargetProductsApiResponse {
   isEmpty: boolean;
 }
 
+interface TargetGeographicApiResponse {
+  locations: Array<{ stateCode: string; revenue: number; unitsSold: number; storeCount: number }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -90,7 +95,25 @@ export default function Traffic() {
     enabled: includesTarget,
   });
 
-  const effectiveIsLoading = isLoading || (includesTarget && isTargetLoading);
+  const { data: targetGeoData, isLoading: isTargetGeoLoading } = useQuery<TargetGeographicApiResponse>({
+    queryKey: ["target-geographic", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/target/geographic?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<TargetGeographicApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: includesTarget,
+  });
+
+  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading));
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
@@ -155,23 +178,38 @@ export default function Traffic() {
     console.log("[Traffic memo] products resolved:", products.length, "rows | first storeId:", products[0]?.storeId ?? "empty");
 
     // ── State Revenue ─────────────────────────────────────────────────────────
-    const totalStateRevenue = apiData.stateRevenue.reduce((s, x) => s + x.revenue, 0);
-    const stateRevenue: StateRevenue[] = apiData.stateRevenue.map(s => {
-      const contrib = totalStateRevenue > 0 ? (s.revenue / totalStateRevenue) * 100 : 0;
+    const geoMap: Record<string, { revenue: number; orders: number }> = {};
+    if (!isTargetOnly) {
+      for (const s of apiData.stateRevenue) {
+        if (!geoMap[s.stateCode]) geoMap[s.stateCode] = { revenue: 0, orders: 0 };
+        geoMap[s.stateCode].revenue += s.revenue;
+        geoMap[s.stateCode].orders  += s.orders;
+      }
+    }
+    if (includesTarget && targetGeoData?.locations) {
+      for (const loc of targetGeoData.locations) {
+        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0 };
+        geoMap[loc.stateCode].revenue += loc.revenue;
+        geoMap[loc.stateCode].orders  += loc.unitsSold;
+      }
+    }
+    const totalStateRevenue = Object.values(geoMap).reduce((s, x) => s + x.revenue, 0);
+    const stateRevenue: StateRevenue[] = Object.entries(geoMap).map(([code, d]) => {
+      const contrib = totalStateRevenue > 0 ? (d.revenue / totalStateRevenue) * 100 : 0;
       const band: 0|1|2|3|4|5 =
         contrib > 20 ? 0 : contrib > 12 ? 1 : contrib > 6 ? 2 : contrib > 2 ? 3 : contrib > 0.5 ? 4 : 5;
       return {
-        code:         s.stateCode,
-        name:         STATE_NAMES[s.stateCode] ?? s.stateCode,
-        revenue:      s.revenue,
-        units:        s.orders,
+        code:         code,
+        name:         STATE_NAMES[code] ?? code,
+        revenue:      d.revenue,
+        units:        d.orders,
         contribution: Math.round(contrib * 10) / 10,
         band,
       };
     });
 
     return { kpis, products, stateRevenue, storeLocations: [] };
-  }, [apiData, selectedIds, targetProductData]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
