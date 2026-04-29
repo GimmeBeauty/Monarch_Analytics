@@ -21,6 +21,17 @@ jobs:
         run: |
           echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY_B64 }}" | base64 -d > monarch_private_key.pem
           chmod 600 monarch_private_key.pem
+      - name: Debug private key
+        run: |
+          echo "Key file size:"
+          wc -c monarch_private_key.pem
+          echo "First line:"
+          head -1 monarch_private_key.pem
+          echo "Last line:"
+          tail -1 monarch_private_key.pem
+          echo "Line count:"
+          wc -l monarch_private_key.pem
+
       - name: Run daily scheduler
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
