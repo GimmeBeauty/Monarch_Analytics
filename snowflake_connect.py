@@ -9,19 +9,12 @@ def get_private_key():
     if os.path.exists(key_path):
         with open(key_path, "rb") as f:
             pem_data = f.read()
-    elif os.environ.get("SNOWFLAKE_PRIVATE_KEY_B64"):
-        b64 = os.environ["SNOWFLAKE_PRIVATE_KEY_B64"]
-        b64 += "=" * (4 - len(b64) % 4) if len(b64) % 4 else ""
-        pem_data = base64.b64decode(b64)
-    else:
-        return None
-    try:
-        private_key = serialization.load_pem_private_key(pem_data, password=None, backend=default_backend())
-        return private_key.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
-    except Exception:
-        # Already in DER/PKCS8 format
-        from cryptography.hazmat.primitives.serialization import load_der_private_key
-        return load_der_private_key(pem_data, password=None, backend=default_backend()).private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+        try:
+            private_key = serialization.load_pem_private_key(pem_data, password=None, backend=default_backend())
+            return private_key.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+        except Exception:
+            return None
+    return None
 
 def get_connection(schema=None):
     params = dict(
