@@ -43,7 +43,7 @@ print("Connected to Snowflake")
 print("Pulling GA4 data Jan 2025 to today...")
 request = RunReportRequest(
     property=f"properties/{property_id}",
-    date_ranges=[DateRange(start_date="2025-01-01", end_date="2026-04-21")],
+    date_ranges=[DateRange(start_date="2025-01-01", end_date="2026-04-29")],
     metrics=[
         Metric(name="sessions"),
         Metric(name="totalUsers"),
