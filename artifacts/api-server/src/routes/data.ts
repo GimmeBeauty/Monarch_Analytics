@@ -556,7 +556,7 @@ router.get("/overview", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
   const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
-  const includesTarget = storeIds.includes("target");
+  const includesTarget = storeIds.length === 0 || storeIds.includes("target");
 
   try {
     const aggregateQuery = isTargetOnly
@@ -611,7 +611,15 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, targetDailyRows] = await Promise.all([
+    const shopifySummaryQuery = !isTargetOnly
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS shopify_revenue
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, targetDailyRows, shopifySummaryRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value from DAILY_AD_SUMMARY (for adRevenue per day)
@@ -646,6 +654,7 @@ router.get("/overview", authenticate, async (req, res) => {
       `),
       targetSummaryQuery,
       targetDailyQuery,
+      shopifySummaryQuery,
     ]);
 
     const agg          = summaryRows[0] ?? {};
@@ -708,16 +717,19 @@ router.get("/overview", authenticate, async (req, res) => {
       ? Math.round(totalRevenue * 100) / 100
       : Math.round(Number(targetSummaryAgg["TARGET_REVENUE"] ?? targetSummaryAgg["target_revenue"] ?? 0) * 100) / 100;
 
-    const effectiveTotalRevenue = (includesTarget && !isTargetOnly) ? totalRevenue + targetRev : totalRevenue;
+    const shopifySummaryAgg = (shopifySummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const shopifyRev = !isTargetOnly
+      ? Math.round(Number(shopifySummaryAgg["SHOPIFY_REVENUE"] ?? shopifySummaryAgg["shopify_revenue"] ?? 0) * 100) / 100
+      : 0;
+
+    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev;
 
     const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
       ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
-      : includesTarget
-        ? [
-            ...(totalRevenue > 0 ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }] : []),
-            ...(targetRev > 0    ? [{ storeId: "target",  revenue: targetRev }] : []),
-          ]
-        : (totalRevenue > 0 ? [{ storeId: "shopify", revenue: Math.round(totalRevenue * 100) / 100 }] : []);
+      : [
+          ...(shopifyRev > 0 ? [{ storeId: "shopify", revenue: shopifyRev }] : []),
+          ...(targetRev > 0  ? [{ storeId: "target",  revenue: targetRev }] : []),
+        ];
 
     const isEmpty = effectiveTotalRevenue === 0 && totalSpend === 0;
 
@@ -833,7 +845,7 @@ router.get("/traffic", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
   const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
-  const includesTarget = storeIds.includes("target");
+  const includesTarget = storeIds.length === 0 || storeIds.includes("target");
 
   try {
     const targetTrafficSummaryQuery = (includesTarget && !isTargetOnly)
@@ -901,11 +913,12 @@ router.get("/traffic", authenticate, async (req, res) => {
     const summaryAgg   = summaryRows[0] ?? {};
     const totalRevenue = Number(summaryAgg["TOTAL_REVENUE"] ?? summaryAgg["total_revenue"] ?? 0);
     const totalOrders  = Number(summaryAgg["TOTAL_ORDERS"]  ?? summaryAgg["total_orders"]  ?? 0);
-    const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
     const targetTrafficAgg = (targetTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
     const targetTrafficRev = Math.round(Number(targetTrafficAgg["TARGET_REVENUE"] ?? targetTrafficAgg["target_revenue"] ?? 0) * 100) / 100;
     const effectiveRevenue = (includesTarget && !isTargetOnly) ? totalRevenue + targetTrafficRev : totalRevenue;
+
+    const aov = totalOrders > 0 ? effectiveRevenue / totalOrders : 0;
 
     const ga4Agg        = ga4Rows[0] ?? {};
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
@@ -928,7 +941,7 @@ router.get("/traffic", authenticate, async (req, res) => {
       orders:    Number(row["ORDER_COUNT"] ?? row["order_count"] ?? 0),
     }));
 
-    const isEmpty = effectiveRevenue === 0 && products.length === 0;
+    const isEmpty = effectiveRevenue === 0 && products.length === 0 && totalSessions === 0;
 
     res.json({
       revenue:     Math.round(effectiveRevenue * 100) / 100,
@@ -1134,6 +1147,38 @@ router.get("/target/geographic", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/target/geographic] Error:", e);
     res.status(500).json({ error: "Failed to query Target geographic data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/target/locations ──────────────────────────────────────────
+
+router.get("/target/locations", authenticate, async (req, res) => {
+  const { state: stateParam } = req.query as Record<string, string>;
+
+  try {
+    const whereClause = stateParam
+      ? `WHERE state = '${stateParam.toUpperCase().replace(/[^A-Z]/g, "")}'`
+      : "";
+
+    const rows = await querySnowflake(`
+      SELECT location_id, location_name, city, state, zip_code
+      FROM ${DB_NAME}.RETAIL.TARGET_LOCATION_MASTER
+      ${whereClause}
+      ORDER BY state, city
+    `);
+
+    const locations = rows.map(row => ({
+      locationId:   String(row["LOCATION_ID"]   ?? row["location_id"]   ?? ""),
+      locationName: String(row["LOCATION_NAME"] ?? row["location_name"] ?? ""),
+      city:         String(row["CITY"]          ?? row["city"]          ?? ""),
+      stateCode:    String(row["STATE"]         ?? row["state"]         ?? "").toUpperCase(),
+      zipCode:      String(row["ZIP_CODE"]      ?? row["zip_code"]      ?? ""),
+    }));
+
+    res.json({ locations, isEmpty: locations.length === 0 });
+  } catch (e) {
+    console.error("[data/target/locations] Error:", e);
+    res.status(500).json({ error: "Failed to query Target location data", detail: String(e) });
   }
 });
 

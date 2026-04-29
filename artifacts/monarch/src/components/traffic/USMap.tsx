@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { MapPin } from "lucide-react";
 import type { StateRevenue, StoreLocation } from "@/lib/trafficData";
@@ -39,13 +39,18 @@ function fmtRevenue(v: number): string {
 interface Props {
   stateRevenue: StateRevenue[];
   storeLocations: StoreLocation[];
+  onStateChange?: (code: string | null) => void;
 }
 
-export default function USMap({ stateRevenue, storeLocations }: Props) {
+export default function USMap({ stateRevenue, storeLocations, onStateChange }: Props) {
   const [hoveredState, setHoveredState]   = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedPin, setSelectedPin]     = useState<string | null>(null);
   const [tooltip, setTooltip]             = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    onStateChange?.(selectedState);
+  }, [selectedState, onStateChange]);
 
   const revenueByCode = useMemo(() => {
     const m: Record<string, StateRevenue> = {};

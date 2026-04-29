@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useDateRange } from "@/context/DateRangeContext";
@@ -45,6 +45,11 @@ interface TargetGeographicApiResponse {
   isEmpty: boolean;
 }
 
+interface TargetLocationsApiResponse {
+  locations: Array<{ locationId: string; locationName: string; city: string; stateCode: string; zipCode: string }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -55,7 +60,7 @@ export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
-  const includesTarget = selectedIds.includes("target");
+  const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
@@ -111,6 +116,26 @@ export default function Traffic() {
     staleTime: 1000 * 60 * 15,
     retry: false,
     enabled: includesTarget,
+  });
+
+  const [selectedMapState, setSelectedMapState] = useState<string | null>(null);
+
+  const { data: targetLocationsData } = useQuery<TargetLocationsApiResponse>({
+    queryKey: ["target-locations", selectedMapState],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/target/locations?state=${selectedMapState}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<TargetLocationsApiResponse>;
+    },
+    staleTime: 1000 * 60 * 60,
+    retry: false,
+    enabled: includesTarget && !!selectedMapState,
   });
 
   const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading));
@@ -194,22 +219,48 @@ export default function Traffic() {
       }
     }
     const totalStateRevenue = Object.values(geoMap).reduce((s, x) => s + x.revenue, 0);
-    const stateRevenue: StateRevenue[] = Object.entries(geoMap).map(([code, d]) => {
+    const stateEntries = Object.entries(geoMap).map(([code, d]) => {
       const contrib = totalStateRevenue > 0 ? (d.revenue / totalStateRevenue) * 100 : 0;
-      const band: 0|1|2|3|4|5 =
-        contrib > 20 ? 0 : contrib > 12 ? 1 : contrib > 6 ? 2 : contrib > 2 ? 3 : contrib > 0.5 ? 4 : 5;
       return {
-        code:         code,
+        code,
         name:         STATE_NAMES[code] ?? code,
         revenue:      d.revenue,
         units:        d.orders,
         contribution: Math.round(contrib * 10) / 10,
-        band,
+        band:         5 as 0|1|2|3|4|5,
       };
     });
+    const n = stateEntries.length;
+    [...stateEntries]
+      .sort((a, b) => b.revenue - a.revenue)
+      .forEach((entry, i) => {
+        const pct = i / n;
+        entry.band = (pct < 1/6 ? 0 : pct < 2/6 ? 1 : pct < 3/6 ? 2 : pct < 4/6 ? 3 : pct < 5/6 ? 4 : 5) as 0|1|2|3|4|5;
+      });
+    const stateRevenue: StateRevenue[] = stateEntries;
 
-    return { kpis, products, stateRevenue, storeLocations: [] };
-  }, [apiData, selectedIds, targetProductData, targetGeoData]);
+    const storeLocations: StoreLocation[] = (includesTarget && !!selectedMapState)
+      ? (targetLocationsData?.locations ?? [])
+          .filter(loc => loc.stateCode === selectedMapState)
+          .map(loc => ({
+            id:             loc.locationId,
+            storeId:        "target",
+            storeName:      "Target",
+            storeColor:     "#CC0000",
+            sales:          0,
+            formattedSales: "—",
+            units:          0,
+            address:        loc.locationName,
+            city:           loc.city,
+            stateCode:      loc.stateCode,
+            zipCode:        loc.zipCode,
+            lat:            0,
+            lon:            0,
+          }))
+      : [];
+
+    return { kpis, products, stateRevenue, storeLocations };
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
@@ -256,6 +307,7 @@ export default function Traffic() {
             <USMap
               stateRevenue={data.stateRevenue}
               storeLocations={data.storeLocations}
+              onStateChange={setSelectedMapState}
             />
           </>
         )}
