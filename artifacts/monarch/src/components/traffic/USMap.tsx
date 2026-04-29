@@ -157,7 +157,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
               </Geographies>
 
               {/* ── Store pin markers (shown for selected state) ── */}
-              {selectedStateLocs.map(loc => {
+              {selectedStateLocs.filter(loc => loc.lon !== 0 || loc.lat !== 0).map(loc => {
                 const isActive = selectedPin === loc.id;
                 return (
                   <Marker key={loc.id} coordinates={[loc.lon, loc.lat]}>
