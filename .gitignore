@@ -55,3 +55,6 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/
+github_private_key.pem
+monarch_private_key.pem
+.env
