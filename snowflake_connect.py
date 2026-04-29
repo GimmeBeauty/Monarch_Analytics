@@ -10,7 +10,9 @@ def get_private_key():
         with open(key_path, "rb") as f:
             pem_data = f.read()
     elif os.environ.get("SNOWFLAKE_PRIVATE_KEY_B64"):
-        pem_data = base64.b64decode(os.environ["SNOWFLAKE_PRIVATE_KEY_B64"] + "==")
+        b64 = os.environ["SNOWFLAKE_PRIVATE_KEY_B64"]
+        b64 += "=" * (4 - len(b64) % 4) if len(b64) % 4 else ""
+        pem_data = base64.b64decode(b64)
     else:
         return None
     private_key = serialization.load_pem_private_key(pem_data, password=None, backend=default_backend())
