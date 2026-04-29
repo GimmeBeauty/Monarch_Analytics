@@ -15,23 +15,14 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: |
-          pip install snowflake-connector-python requests python-dotenv cryptography google-ads google-analytics-data google-auth google-auth-oauthlib
+        run: pip install snowflake-connector-python requests python-dotenv cryptography google-ads google-analytics-data google-auth google-auth-oauthlib
       - name: Create private key file
+        env:
+          GH_PRIVATE_KEY_B64: ${{ secrets.GH_PRIVATE_KEY_B64 }}
         run: |
-          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY_B64 }}" | base64 -d > monarch_private_key.pem
-          chmod 600 monarch_private_key.pem
-      - name: Debug private key
-        run: |
-          echo "Key file size:"
-          wc -c monarch_private_key.pem
-          echo "First line:"
-          head -1 monarch_private_key.pem
-          echo "Last line:"
-          tail -1 monarch_private_key.pem
-          echo "Line count:"
-          wc -l monarch_private_key.pem
-
+          echo "$GH_PRIVATE_KEY_B64" | base64 -d > github_private_key.pem
+          chmod 600 github_private_key.pem
+          wc -c github_private_key.pem
       - name: Run daily scheduler
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -39,8 +30,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-          SNOWFLAKE_PRIVATE_KEY_PATH: monarch_private_key.pem
-          SNOWFLAKE_PRIVATE_KEY_B64: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_B64 }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: github_private_key.pem
           SHOPIFY_SHOP_DOMAIN: ${{ secrets.SHOPIFY_SHOP_DOMAIN }}
           SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
