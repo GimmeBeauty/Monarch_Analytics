@@ -15,8 +15,13 @@ def get_private_key():
         pem_data = base64.b64decode(b64)
     else:
         return None
-    private_key = serialization.load_pem_private_key(pem_data, password=None, backend=default_backend())
-    return private_key.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+    try:
+        private_key = serialization.load_pem_private_key(pem_data, password=None, backend=default_backend())
+        return private_key.private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+    except Exception:
+        # Already in DER/PKCS8 format
+        from cryptography.hazmat.primitives.serialization import load_der_private_key
+        return load_der_private_key(pem_data, password=None, backend=default_backend()).private_bytes(encoding=serialization.Encoding.DER, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
 
 def get_connection(schema=None):
     params = dict(
