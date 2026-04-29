@@ -24,6 +24,11 @@ interface OverviewApiResponse {
   roas: number;
   sessions: number;
   cvr: number;
+  revenueChange: number;
+  ordersChange: number;
+  aovChange: number;
+  sessionsChange: number;
+  cvrChange: number;
   storeBreakdown: Array<{ storeId: string; revenue: number }>;
   channelBreakdown: Array<{ channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[]; spend: number; revenue: number }>;
   dailySeries: Array<{ date: string; revenue: number; spend: number; adRevenue: number }>;
@@ -51,12 +56,14 @@ export default function Overview() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
 
+  const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
+
   const { data: apiData, isLoading, error } = useQuery<OverviewApiResponse>({
-    queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/overview?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        `${API_BASE}/api/data/overview?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -74,14 +81,14 @@ export default function Overview() {
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
     const kpis: KPIMetric[] = [
-      { id: "revenue", label: "Total Revenue",     value: apiData.revenue,  formatted: fmtCurrency(apiData.revenue),  change: 0, positive: true,  format: "currency", description: "Aggregate revenue across all selected stores" },
+      { id: "revenue", label: "Total Revenue",     value: apiData.revenue,  formatted: fmtCurrency(apiData.revenue),  change: apiData.revenueChange  ?? 0, positive: true,  format: "currency", description: "Aggregate revenue across all selected stores" },
       { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrency(apiData.spend),    change: 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
       { id: "mer",     label: "MER",               value: apiData.mer,      formatted: fmtRatio(apiData.mer),         change: 0, positive: true,  format: "ratio",    description: "Marketing Efficiency Ratio — Total Revenue ÷ Total Ad Spend" },
       { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
-      { id: "orders",  label: "Orders",             value: apiData.orders ?? 0,   formatted: (apiData.orders ?? 0).toLocaleString(), change: 0, positive: true, format: "number",  description: "Total orders from all selected stores" },
-      { id: "aov",     label: "AOV",               value: apiData.aov,      formatted: fmtCurrency(apiData.aov),      change: 0, positive: true,  format: "currency", description: "Average Order Value — Total Revenue ÷ Total Orders" },
-      { id: "sessions", label: "Sessions / Views", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(),         change: 0, positive: true, format: "number",  description: "Total GA4 sessions in period" },
-      { id: "cvr",      label: "Conversion Rate",  value: apiData.cvr     ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`,        change: 0, positive: true, format: "percent", description: "Web orders ÷ GA4 sessions" },
+      { id: "orders",  label: "Orders",             value: apiData.orders ?? 0,   formatted: (apiData.orders ?? 0).toLocaleString(), change: apiData.ordersChange   ?? 0, positive: true, format: "number",  description: "Total orders from all selected stores" },
+      { id: "aov",     label: "AOV",               value: apiData.aov,      formatted: isTargetOnly ? "—" : fmtCurrency(apiData.aov), change: apiData.aovChange     ?? 0, positive: true,  format: "currency", description: "Average Order Value — Total Revenue ÷ Total Orders" },
+      { id: "sessions", label: "Sessions / Views", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(),         change: apiData.sessionsChange ?? 0, positive: true, format: "number",  description: "Total GA4 sessions in period" },
+      { id: "cvr",      label: "Conversion Rate",  value: apiData.cvr     ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`,        change: apiData.cvrChange     ?? 0, positive: true, format: "percent", description: "Web orders ÷ GA4 sessions" },
     ];
 
     // ── Trend Series ─────────────────────────────────────────────────────────

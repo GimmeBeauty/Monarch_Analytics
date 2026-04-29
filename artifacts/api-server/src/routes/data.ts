@@ -550,7 +550,7 @@ router.get("/meta", authenticate, async (req, res) => {
 // ─── GET /api/data/overview ───────────────────────────────────────────────────
 
 router.get("/overview", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, priorStart: priorStartRaw, priorEnd: priorEndRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
@@ -558,6 +558,9 @@ router.get("/overview", authenticate, async (req, res) => {
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
+  const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
+  const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
+  const hasPrior   = !!(priorStart && priorEnd);
 
   try {
     const aggregateQuery = isTargetOnly
@@ -620,7 +623,41 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, targetDailyRows, shopifySummaryRows] = await Promise.all([
+    const priorShopifyQuery = (hasPrior && isShopifySelected && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS shopify_revenue, SUM(order_count) AS shopify_orders
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorTargetQuery = (hasPrior && includesTarget)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS target_revenue
+          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorGa4Query = hasPrior
+      ? querySnowflake(`
+          SELECT SUM(sessions) AS total_sessions
+          FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorWebOrdersQuery = (hasPrior && isShopifySelected)
+      ? querySnowflake(`
+          SELECT COUNT(*) AS web_orders
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+          WHERE ingestion_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          AND raw_data:financial_status::STRING IN ('paid','partially_paid')
+          AND raw_data:source_name::STRING = 'web'
+        `)
+      : Promise.resolve([]);
+
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value from DAILY_AD_SUMMARY (for adRevenue per day)
@@ -656,6 +693,10 @@ router.get("/overview", authenticate, async (req, res) => {
       targetSummaryQuery,
       targetDailyQuery,
       shopifySummaryQuery,
+      priorShopifyQuery,
+      priorTargetQuery,
+      priorGa4Query,
+      priorWebOrdersQuery,
     ]);
 
     const agg          = summaryRows[0] ?? {};
@@ -736,6 +777,27 @@ router.get("/overview", authenticate, async (req, res) => {
     const effectiveUnits  = (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0);
     const aov = effectiveOrders > 0 ? effectiveTotalRevenue / effectiveOrders : 0;
 
+    const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
+    const priorShopifyAgg = (priorShopifyRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorShopifyRev = (hasPrior && isShopifySelected && !isTargetOnly)
+      ? Math.round(Number(priorShopifyAgg["SHOPIFY_REVENUE"] ?? priorShopifyAgg["shopify_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const priorShopifyOrders = (hasPrior && isShopifySelected && !isTargetOnly)
+      ? Number(priorShopifyAgg["SHOPIFY_ORDERS"] ?? priorShopifyAgg["shopify_orders"] ?? 0)
+      : 0;
+    const priorTargetAgg = (priorTargetRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorTargetRev = (hasPrior && includesTarget)
+      ? Math.round(Number(priorTargetAgg["TARGET_REVENUE"] ?? priorTargetAgg["target_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const priorRevenue = isTargetOnly ? priorTargetRev : priorShopifyRev + priorTargetRev;
+    const priorOrders  = isShopifySelected ? priorShopifyOrders : 0;
+    const priorAov     = priorOrders > 0 ? priorRevenue / priorOrders : 0;
+    const priorGa4Agg  = (priorGa4Rows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorSessions = Number(priorGa4Agg["TOTAL_SESSIONS"] ?? priorGa4Agg["total_sessions"] ?? 0);
+    const priorWebOrdersAgg = (priorWebOrdersRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorWebOrders = Number(priorWebOrdersAgg["WEB_ORDERS"] ?? priorWebOrdersAgg["web_orders"] ?? 0);
+    const priorCvr = (isShopifySelected && priorSessions > 0) ? priorWebOrders / priorSessions : 0;
+
     const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
       ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
       : [
@@ -756,6 +818,11 @@ router.get("/overview", authenticate, async (req, res) => {
       roas:      Math.round(roas           * 1000) / 1000,
       sessions:  totalSessions,
       cvr:       Math.round(cvr * 10000) / 10000,
+      revenueChange: hasPrior ? pct(effectiveTotalRevenue, priorRevenue) : 0,
+      ordersChange:  hasPrior ? pct(effectiveOrders, priorOrders) : 0,
+      aovChange:     hasPrior ? pct(aov, priorAov) : 0,
+      sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
+      cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
       storeBreakdown,
       channelBreakdown,
       dailySeries,
@@ -851,7 +918,7 @@ router.get("/attribution", authenticate, async (req, res) => {
 // ─── GET /api/data/traffic ────────────────────────────────────────────────────
 
 router.get("/traffic", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, priorStart: priorStartRaw, priorEnd: priorEndRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
@@ -859,6 +926,9 @@ router.get("/traffic", authenticate, async (req, res) => {
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
+  const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
+  const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
+  const hasPrior   = !!(priorStart && priorEnd);
 
   try {
     const targetTrafficSummaryQuery = (includesTarget && !isTargetOnly)
@@ -866,6 +936,46 @@ router.get("/traffic", authenticate, async (req, res) => {
           SELECT SUM(revenue) AS target_revenue
           FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
+    const priorSummaryQuery = hasPrior
+      ? (isTargetOnly
+        ? querySnowflake(`
+            SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders
+            FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+            WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          `)
+        : querySnowflake(`
+            SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
+            FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+            WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          `))
+      : Promise.resolve([]);
+
+    const priorTrafficTargetQuery = (hasPrior && includesTarget && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS target_revenue
+          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorTrafficGa4Query = hasPrior
+      ? querySnowflake(`
+          SELECT SUM(sessions) AS total_sessions
+          FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorTrafficWebOrdersQuery = (hasPrior && isShopifySelected)
+      ? querySnowflake(`
+          SELECT COUNT(*) AS web_orders
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+          WHERE ingestion_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          AND raw_data:financial_status::STRING IN ('paid','partially_paid')
+          AND raw_data:source_name::STRING = 'web'
         `)
       : Promise.resolve([]);
 
@@ -881,7 +991,7 @@ router.get("/traffic", authenticate, async (req, res) => {
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `);
 
-    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows] = await Promise.all([
+    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
@@ -921,6 +1031,10 @@ router.get("/traffic", authenticate, async (req, res) => {
         AND raw_data:source_name::STRING = 'web'
       `),
       targetTrafficSummaryQuery,
+      priorSummaryQuery,
+      priorTrafficTargetQuery,
+      priorTrafficGa4Query,
+      priorTrafficWebOrdersQuery,
     ]);
 
     const summaryAgg   = summaryRows[0] ?? {};
@@ -944,6 +1058,24 @@ router.get("/traffic", authenticate, async (req, res) => {
     const cvr           = (isShopifySelected && totalSessions > 0) ? webOrders / totalSessions : 0;
     console.log("[data/traffic] totalSessions:", totalSessions);
 
+    const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
+    const priorSummaryAgg   = (priorSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorTotalRevenue = Number(priorSummaryAgg["TOTAL_REVENUE"] ?? priorSummaryAgg["total_revenue"] ?? 0);
+    const priorTotalOrders  = Number(priorSummaryAgg["TOTAL_ORDERS"]  ?? priorSummaryAgg["total_orders"]  ?? 0);
+    const priorTargetAgg    = (priorTrafficTargetRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorTargetRev    = Math.round(Number(priorTargetAgg["TARGET_REVENUE"] ?? priorTargetAgg["target_revenue"] ?? 0) * 100) / 100;
+    const priorShopifyRev   = isShopifySelected && !isTargetOnly ? priorTotalRevenue : 0;
+    const priorEffectiveRevenue = isTargetOnly
+      ? priorTotalRevenue
+      : priorShopifyRev + (includesTarget ? priorTargetRev : 0);
+    const priorEffectiveOrders = isShopifySelected ? priorTotalOrders : 0;
+    const priorAov = (isShopifySelected && priorEffectiveOrders > 0) ? priorEffectiveRevenue / priorEffectiveOrders : 0;
+    const priorGa4Agg       = (priorTrafficGa4Rows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorSessions     = Number(priorGa4Agg["TOTAL_SESSIONS"] ?? priorGa4Agg["total_sessions"] ?? 0);
+    const priorWebOrdersAgg = (priorTrafficWebOrdersRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorWebOrders    = Number(priorWebOrdersAgg["WEB_ORDERS"] ?? priorWebOrdersAgg["web_orders"] ?? 0);
+    const priorCvr = (isShopifySelected && priorSessions > 0) ? priorWebOrders / priorSessions : 0;
+
     const products = productRows.map(row => ({
       id:          String(row["PRODUCT_ID"]  ?? row["product_id"]  ?? ""),
       productName: String(row["TITLE"]       ?? row["title"]       ?? "Unknown Product"),
@@ -966,6 +1098,11 @@ router.get("/traffic", authenticate, async (req, res) => {
       aov:         Math.round(aov * 100) / 100,
       sessions:    totalSessions,
       cvr:         Math.round(cvr * 10000) / 10000,
+      revenueChange: hasPrior ? pct(effectiveRevenue, priorEffectiveRevenue) : 0,
+      ordersChange:  hasPrior ? pct(effectiveOrders, priorEffectiveOrders) : 0,
+      aovChange:     hasPrior ? pct(aov, priorAov) : 0,
+      sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
+      cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
       products,
       stateRevenue,
       isEmpty,

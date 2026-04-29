@@ -30,6 +30,11 @@ interface TrafficApiResponse {
   aov: number;
   sessions: number;
   cvr: number;
+  revenueChange: number;
+  ordersChange: number;
+  aovChange: number;
+  sessionsChange: number;
+  cvrChange: number;
   products: Array<{ id: string; productName: string; revenue: number; orders: number; units: number }>;
   stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
   isEmpty: boolean;
@@ -56,6 +61,10 @@ function fmtCurrency(v: number): string {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
+function fmtCurrencyFull(v: number): string {
+  return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
 export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
@@ -64,11 +73,11 @@ export default function Traffic() {
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
-    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -146,11 +155,11 @@ export default function Traffic() {
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const kpis: TrafficKPI[] = [
-      { id: "revenue",  label: "Revenue",  value: apiData.revenue  ?? 0, formatted: fmtCurrency(apiData.revenue  ?? 0), change: 0, positive: true, description: "Total Shopify revenue in period" },
-      { id: "orders",   label: "Orders",   value: apiData.orders   ?? 0, formatted: (apiData.orders   ?? 0).toLocaleString(), change: 0, positive: true, description: "Total orders placed" },
-      { id: "aov",      label: "AOV",      value: apiData.aov      ?? 0, formatted: fmtCurrency(apiData.aov      ?? 0), change: 0, positive: true, description: "Average Order Value" },
-      { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: 0, positive: true, description: "Total GA4 sessions in period" },
-      { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: 0, positive: true, description: "Orders ÷ Sessions" },
+      { id: "revenue",  label: "Revenue",  value: apiData.revenue  ?? 0, formatted: fmtCurrency(apiData.revenue  ?? 0), change: apiData.revenueChange  ?? 0, positive: true, description: "Total Shopify revenue in period" },
+      { id: "orders",   label: "Orders",   value: apiData.orders   ?? 0, formatted: (apiData.orders   ?? 0).toLocaleString(), change: apiData.ordersChange   ?? 0, positive: true, description: "Total orders placed" },
+      { id: "aov",      label: "AOV",      value: apiData.aov      ?? 0, formatted: isTargetOnly ? "—" : fmtCurrency(apiData.aov ?? 0), change: apiData.aovChange     ?? 0, positive: true, description: "Average Order Value" },
+      { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: apiData.sessionsChange ?? 0, positive: true, description: "Total GA4 sessions in period" },
+      { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange     ?? 0, positive: true, description: "Orders ÷ Sessions" },
     ];
 
     // ── Products ──────────────────────────────────────────────────────────────
@@ -248,7 +257,7 @@ export default function Traffic() {
             storeName:      "Target",
             storeColor:     "#CC0000",
             sales:          loc.revenue,
-            formattedSales: fmtCurrency(loc.revenue),
+            formattedSales: fmtCurrencyFull(loc.revenue),
             units:          loc.unitsSold,
             address:        loc.locationName,
             city:           loc.city,
