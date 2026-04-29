@@ -557,6 +557,7 @@ router.get("/overview", authenticate, async (req, res) => {
   const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
+  const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
 
   try {
     const aggregateQuery = isTargetOnly
@@ -595,7 +596,7 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const targetSummaryQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue
+          SELECT SUM(revenue) AS target_revenue, SUM(units_sold) AS target_units
           FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
@@ -611,9 +612,9 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const shopifySummaryQuery = !isTargetOnly
+    const shopifySummaryQuery = (isShopifySelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS shopify_revenue
+          SELECT SUM(revenue) AS shopify_revenue, SUM(order_count) AS shopify_orders, SUM(units_sold) AS shopify_units
           FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
@@ -706,23 +707,34 @@ router.get("/overview", authenticate, async (req, res) => {
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
     const webOrderAgg   = webOrderRows[0] ?? {};
     const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
-    const cvr           = totalSessions > 0 ? webOrders / totalSessions : 0;
+    const cvr           = (isShopifySelected && totalSessions > 0) ? webOrders / totalSessions : 0;
 
-    const mer = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+    const mer  = totalSpend > 0 ? totalRevenue / totalSpend : 0;
     const roas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
-    const aov  = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
     const targetSummaryAgg = (targetSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
-    const targetRev = isTargetOnly
+    const targetRev   = isTargetOnly
       ? Math.round(totalRevenue * 100) / 100
       : Math.round(Number(targetSummaryAgg["TARGET_REVENUE"] ?? targetSummaryAgg["target_revenue"] ?? 0) * 100) / 100;
+    const targetUnits = isTargetOnly
+      ? totalUnits
+      : Number(targetSummaryAgg["TARGET_UNITS"] ?? targetSummaryAgg["target_units"] ?? 0);
 
     const shopifySummaryAgg = (shopifySummaryRows as Array<Record<string, unknown>>)[0] ?? {};
-    const shopifyRev = !isTargetOnly
+    const shopifyRev    = (isShopifySelected && !isTargetOnly)
       ? Math.round(Number(shopifySummaryAgg["SHOPIFY_REVENUE"] ?? shopifySummaryAgg["shopify_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const shopifyOrders = (isShopifySelected && !isTargetOnly)
+      ? Number(shopifySummaryAgg["SHOPIFY_ORDERS"] ?? shopifySummaryAgg["shopify_orders"] ?? totalOrders)
+      : (isTargetOnly ? 0 : totalOrders);
+    const shopifyUnits  = (isShopifySelected && !isTargetOnly)
+      ? Number(shopifySummaryAgg["SHOPIFY_UNITS"] ?? shopifySummaryAgg["shopify_units"] ?? 0)
       : 0;
 
     const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev;
+    const effectiveOrders = isShopifySelected ? shopifyOrders : 0;
+    const effectiveUnits  = (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0);
+    const aov = effectiveOrders > 0 ? effectiveTotalRevenue / effectiveOrders : 0;
 
     const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
       ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
@@ -735,8 +747,8 @@ router.get("/overview", authenticate, async (req, res) => {
 
     res.json({
       revenue:   Math.round(effectiveTotalRevenue * 100) / 100,
-      orders:    totalOrders,
-      units:     totalUnits,
+      orders:    effectiveOrders,
+      units:     effectiveUnits,
       aov:       Math.round(aov            * 100) / 100,
       spend:     Math.round(totalSpend     * 100) / 100,
       adRevenue: Math.round(totalAdRevenue * 100) / 100,
@@ -846,6 +858,7 @@ router.get("/traffic", authenticate, async (req, res) => {
   const storeIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim().toLowerCase()) : [];
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
+  const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
 
   try {
     const targetTrafficSummaryQuery = (includesTarget && !isTargetOnly)
@@ -916,15 +929,19 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const targetTrafficAgg = (targetTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
     const targetTrafficRev = Math.round(Number(targetTrafficAgg["TARGET_REVENUE"] ?? targetTrafficAgg["target_revenue"] ?? 0) * 100) / 100;
-    const effectiveRevenue = (includesTarget && !isTargetOnly) ? totalRevenue + targetTrafficRev : totalRevenue;
+    const shopifyTrafficRev = isShopifySelected && !isTargetOnly ? totalRevenue : 0;
+    const effectiveRevenue = isTargetOnly
+      ? totalRevenue
+      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0);
 
-    const aov = totalOrders > 0 ? effectiveRevenue / totalOrders : 0;
+    const effectiveOrders = isShopifySelected ? totalOrders : 0;
+    const aov = (isShopifySelected && effectiveOrders > 0) ? effectiveRevenue / effectiveOrders : 0;
 
     const ga4Agg        = ga4Rows[0] ?? {};
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
     const webOrderAgg   = webOrderRows[0] ?? {};
     const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
-    const cvr           = totalSessions > 0 ? webOrders / totalSessions : 0;
+    const cvr           = (isShopifySelected && totalSessions > 0) ? webOrders / totalSessions : 0;
     console.log("[data/traffic] totalSessions:", totalSessions);
 
     const products = productRows.map(row => ({
@@ -945,7 +962,7 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     res.json({
       revenue:     Math.round(effectiveRevenue * 100) / 100,
-      orders:      totalOrders,
+      orders:      effectiveOrders,
       aov:         Math.round(aov * 100) / 100,
       sessions:    totalSessions,
       cvr:         Math.round(cvr * 10000) / 10000,
@@ -1153,18 +1170,27 @@ router.get("/target/geographic", authenticate, async (req, res) => {
 // ─── GET /api/data/target/locations ──────────────────────────────────────────
 
 router.get("/target/locations", authenticate, async (req, res) => {
-  const { state: stateParam } = req.query as Record<string, string>;
+  const { state: stateParam, start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const safeState = stateParam ? stateParam.toUpperCase().replace(/[^A-Z]/g, "") : null;
+  if (!safeState) { res.status(400).json({ error: "state parameter required" }); return; }
 
   try {
-    const whereClause = stateParam
-      ? `WHERE state = '${stateParam.toUpperCase().replace(/[^A-Z]/g, "")}'`
-      : "";
-
     const rows = await querySnowflake(`
-      SELECT location_id, location_name, city, state, zip_code
-      FROM ${DB_NAME}.RETAIL.TARGET_LOCATION_MASTER
-      ${whereClause}
-      ORDER BY state, city
+      SELECT
+        m.location_id, m.location_name, m.city, m.state, m.zip_code,
+        COALESCE(SUM(d.revenue), 0)    AS revenue,
+        COALESCE(SUM(d.units_sold), 0) AS units_sold
+      FROM ${DB_NAME}.RETAIL.TARGET_LOCATION_MASTER m
+      LEFT JOIN ${DB_NAME}.RETAIL.TARGET_STORE_DAILY d
+        ON d.location_id = m.location_id
+        AND d.summary_date BETWEEN '${start}' AND '${end}'
+      WHERE m.state = '${safeState}'
+      GROUP BY m.location_id, m.location_name, m.city, m.state, m.zip_code
+      ORDER BY revenue DESC
     `);
 
     const locations = rows.map(row => ({
@@ -1173,6 +1199,8 @@ router.get("/target/locations", authenticate, async (req, res) => {
       city:         String(row["CITY"]          ?? row["city"]          ?? ""),
       stateCode:    String(row["STATE"]         ?? row["state"]         ?? "").toUpperCase(),
       zipCode:      String(row["ZIP_CODE"]      ?? row["zip_code"]      ?? ""),
+      revenue:      Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100,
+      unitsSold:    Number(row["UNITS_SOLD"] ?? row["units_sold"] ?? 0),
     }));
 
     res.json({ locations, isEmpty: locations.length === 0 });

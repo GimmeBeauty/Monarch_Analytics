@@ -7,7 +7,7 @@ import TrafficKPISection from "@/components/traffic/TrafficKPISection";
 import ProductPerformanceTable from "@/components/traffic/ProductPerformanceTable";
 import USMap from "@/components/traffic/USMap";
 import { API_BASE } from "@/lib/apiBase";
-import type { TrafficKPI, ProductRow, StateRevenue } from "@/lib/trafficData";
+import type { TrafficKPI, ProductRow, StateRevenue, StoreLocation } from "@/lib/trafficData";
 
 // ─── State Name Lookup ────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ interface TargetGeographicApiResponse {
 }
 
 interface TargetLocationsApiResponse {
-  locations: Array<{ locationId: string; locationName: string; city: string; stateCode: string; zipCode: string }>;
+  locations: Array<{ locationId: string; locationName: string; city: string; stateCode: string; zipCode: string; revenue: number; unitsSold: number }>;
   isEmpty: boolean;
 }
 
@@ -121,10 +121,10 @@ export default function Traffic() {
   const [selectedMapState, setSelectedMapState] = useState<string | null>(null);
 
   const { data: targetLocationsData } = useQuery<TargetLocationsApiResponse>({
-    queryKey: ["target-locations", selectedMapState],
+    queryKey: ["target-locations", selectedMapState, dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       const res = await fetch(
-        `${API_BASE}/api/data/target/locations?state=${selectedMapState}`,
+        `${API_BASE}/api/data/target/locations?state=${selectedMapState}&start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -247,9 +247,9 @@ export default function Traffic() {
             storeId:        "target",
             storeName:      "Target",
             storeColor:     "#CC0000",
-            sales:          0,
-            formattedSales: "—",
-            units:          0,
+            sales:          loc.revenue,
+            formattedSales: fmtCurrency(loc.revenue),
+            units:          loc.unitsSold,
             address:        loc.locationName,
             city:           loc.city,
             stateCode:      loc.stateCode,
