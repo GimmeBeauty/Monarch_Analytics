@@ -95,7 +95,7 @@ export default function PricingSettings() {
         `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
-      if (!res.ok) return { totals: { revenue: 0, units: 0 }, byStore: [], products: [], lastSync: "", isEmpty: true, source: "error" };
+      if (!res.ok) return { totals: { revenue: 0, units: 0 }, byStore: [], products: [], dailySeries: [], lastSync: "", isEmpty: true, source: "error" } as NetSuiteSalesResponse;
       return res.json() as Promise<NetSuiteSalesResponse>;
     },
     staleTime: 1000 * 60 * 30,

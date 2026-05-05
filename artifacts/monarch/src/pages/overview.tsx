@@ -95,11 +95,10 @@ export default function Overview() {
   });
 
   const { data: wholesaleData } = useQuery<NetSuiteSalesResponse>({
-    queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&store=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -117,9 +116,17 @@ export default function Overview() {
     if (!apiData || apiData.isEmpty) return null;
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
-    const wsActive   = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
-    const wsRevenue  = wsActive ? wholesaleData!.totals.revenue : null;
-    const wsUnits    = wsActive ? wholesaleData!.totals.units   : null;
+    const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
+    const wsStores = wsActive
+      ? (selectedIds.length > 0
+          ? wholesaleData!.byStore.filter(s => {
+              const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
+              return selectedIds.includes(sid);
+            })
+          : wholesaleData!.byStore)
+      : [];
+    const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
+    const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
     const displayRevenue = wsRevenue  ?? apiData.revenue;
     const displayUnits   = wsUnits    ?? apiData.units ?? 0;
     const revenueLabel   = isWholesale ? "Wholesale Revenue" : "Total Revenue";
@@ -159,7 +166,7 @@ export default function Overview() {
 
     // ── Store Breakdown ───────────────────────────────────────────────────────
     const rawStoreBreakdown = wsActive
-      ? wholesaleData!.byStore.map(s => ({
+      ? wsStores.map(s => ({
           storeId: NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-"),
           revenue: s.revenue,
         }))
@@ -209,7 +216,7 @@ export default function Overview() {
     const activityFeed: ActivityEvent[] = [];
 
     return { kpis, trendSeries, storeBreakdown, channelBreakdown, contributionByStore, contributionByChannel, activityFeed };
-  }, [apiData, isWholesale, wholesaleData]);
+  }, [apiData, isWholesale, wholesaleData, selectedIds]);
 
   const isEmpty = !isLoading && (!apiData || apiData.isEmpty || !data);
 

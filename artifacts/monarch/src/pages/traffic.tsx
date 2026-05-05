@@ -202,11 +202,10 @@ export default function Traffic() {
   });
 
   const { data: wholesaleData, isLoading: isWholesaleLoading } = useQuery<NetSuiteSalesResponse>({
-    queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&store=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -226,9 +225,17 @@ export default function Traffic() {
     if (!apiData || apiData.isEmpty) return null;
     console.log("[Traffic memo] isTargetOnly:", isTargetOnly, "| targetProductData:", targetProductData ? `${targetProductData.products.length} products` : "undefined");
 
-    const wsActive   = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
-    const wsRevenue  = wsActive ? wholesaleData!.totals.revenue : null;
-    const wsUnits    = wsActive ? wholesaleData!.totals.units   : null;
+    const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
+    const wsStores = wsActive
+      ? (selectedIds.length > 0
+          ? wholesaleData!.byStore.filter(s => {
+              const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
+              return selectedIds.includes(sid);
+            })
+          : wholesaleData!.byStore)
+      : [];
+    const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
+    const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const displayRevenue = wsRevenue ?? apiData.revenue ?? 0;
