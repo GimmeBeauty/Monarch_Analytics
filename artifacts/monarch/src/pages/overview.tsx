@@ -24,7 +24,6 @@ const NS_STORE_ID: Record<string, string> = {
   "Walgreens":         "walgreens",
   "Shopify":           "shopify",
   "Amazon (Pattern)":  "amazon",
-  "Walmart Canada":    "walmart-canada",
 };
 
 // ─── API Response Type ─────────────────────────────────────────────────────────
@@ -117,6 +116,7 @@ export default function Overview() {
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
+    console.log("[Overview ws] isWholesale:", isWholesale, "| wholesaleData:", wholesaleData ? `isEmpty=${wholesaleData.isEmpty} byStore=${wholesaleData.byStore.length}` : "undefined");
     const wsStores = wsActive
       ? (selectedIds.length > 0
           ? wholesaleData!.byStore.filter(s => {
@@ -127,6 +127,7 @@ export default function Overview() {
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
+    console.log("[Overview ws] wsActive:", wsActive, "| wsStores:", wsStores.length, "| wsRevenue:", wsRevenue, "| wsUnits:", wsUnits);
     const displayRevenue = wsRevenue  ?? apiData.revenue;
     const displayUnits   = wsUnits    ?? apiData.units ?? 0;
     const revenueLabel   = isWholesale ? "Wholesale Revenue" : "Total Revenue";

@@ -84,7 +84,6 @@ const NS_STORE_ID: Record<string, string> = {
   "Walgreens":         "walgreens",
   "Shopify":           "shopify",
   "Amazon (Pattern)":  "amazon",
-  "Walmart Canada":    "walmart",
 };
 
 const NS_STORE_COLOR: Record<string, string> = {
@@ -226,6 +225,7 @@ export default function Traffic() {
     console.log("[Traffic memo] isTargetOnly:", isTargetOnly, "| targetProductData:", targetProductData ? `${targetProductData.products.length} products` : "undefined");
 
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
+    console.log("[Traffic ws] isWholesale:", isWholesale, "| wholesaleData:", wholesaleData ? `isEmpty=${wholesaleData.isEmpty} byStore=${wholesaleData.byStore.length}` : "undefined");
     const wsStores = wsActive
       ? (selectedIds.length > 0
           ? wholesaleData!.byStore.filter(s => {
@@ -236,6 +236,7 @@ export default function Traffic() {
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
+    console.log("[Traffic ws] wsActive:", wsActive, "| wsStores:", wsStores.length, "| wsRevenue:", wsRevenue, "| wsUnits:", wsUnits);
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const displayRevenue = wsRevenue ?? apiData.revenue ?? 0;
