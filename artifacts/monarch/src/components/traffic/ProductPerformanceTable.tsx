@@ -5,7 +5,7 @@ import { STORES } from "@/lib/storeData";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortKey = "productName"|"storeName"|"sales"|"units"|"storeCount"|"avgSellPrice"|"conversionRate"|"pctSalesOnline"|"pageViews";
+type SortKey = "productName"|"storeName"|"sales"|"units"|"storeCount"|"avgSellPrice"|"pctSalesOnline";
 type SortDir = "asc"|"desc";
 
 interface Filters {
@@ -63,9 +63,10 @@ const PAGE_SIZE = 20;
 interface Props {
   products: ProductRow[];
   selectedStoreIds: string[];
+  isWholesale?: boolean;
 }
 
-export default function ProductPerformanceTable({ products, selectedStoreIds }: Props) {
+export default function ProductPerformanceTable({ products, selectedStoreIds, isWholesale = false }: Props) {
   const [sortKey, setSortKey]         = useState<SortKey>("sales");
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
   const [filters, setFilters]         = useState<Filters>(defaultFilters);
@@ -73,8 +74,8 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
   const [showCols, setShowCols]       = useState(false);
   const [limit, setLimit]             = useState(PAGE_SIZE);
   const [visibleCols, setVisibleCols] = useState({
-    avgSellPrice: true, conversionRate: false,
-    pctSalesOnline: false, pageViews: false,
+    avgSellPrice: true,
+    pctSalesOnline: false,
   });
 
   const toggleSort = useCallback((key: SortKey) => {
@@ -182,7 +183,7 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
                 {(Object.keys(visibleCols) as (keyof typeof visibleCols)[]).map(key => {
                   const labels: Record<string,string> = {
                     avgSellPrice:"Avg Sell Price",
-                    conversionRate:"Conversion Rate", pctSalesOnline:"% of Sales Online", pageViews:"Page Views",
+                    pctSalesOnline:"% of Sales Online",
                   };
                   return (
                     <label key={key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#FFBC80]/10 cursor-pointer">
@@ -262,14 +263,20 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
             <tr className="border-b border-[#FFBC80]/15 bg-[#FFBC80]/5 dark:bg-[#FFBC80]/5">
               <th className="px-3 py-2.5 w-8"></th>
               <Th col="productName" label="Product"/>
+              <th className="px-3 py-2.5 text-left">
+                <span className="text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">SKU</span>
+              </th>
+              {isWholesale && (
+                <th className="px-3 py-2.5 text-left">
+                  <span className="text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">UPC</span>
+                </th>
+              )}
               <Th col="storeName"   label="Store"/>
               <Th col="sales"       label="Sales"/>
               <Th col="units"       label="Units"/>
-              {hasStoreCount         && <Th col="storeCount"     label="Store Count"/>}
+              {hasStoreCount && !isWholesale && <Th col="storeCount" label="Store Count"/>}
               {visibleCols.avgSellPrice  && <Th col="avgSellPrice"   label="Avg Price"/>}
-              {visibleCols.conversionRate && <Th col="conversionRate" label="CVR"/>}
               {visibleCols.pctSalesOnline && <Th col="pctSalesOnline" label="Online %"/>}
-              {visibleCols.pageViews     && <Th col="pageViews"      label="Page Views"/>}
             </tr>
           </thead>
           <tbody>
@@ -295,6 +302,18 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
                   <td className="px-3 py-2.5 max-w-[220px]">
                     <span className="text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2] line-clamp-1">{row.productName}</span>
                   </td>
+
+                  {/* SKU */}
+                  <td className="px-3 py-2.5">
+                    <span className="text-xs font-mono text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">{row.sku || "—"}</span>
+                  </td>
+
+                  {/* UPC — wholesale mode only */}
+                  {isWholesale && (
+                    <td className="px-3 py-2.5">
+                      <span className="text-xs font-mono text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">{row.upc || "—"}</span>
+                    </td>
+                  )}
 
                   {/* Store */}
                   <td className="px-3 py-2.5">
@@ -324,8 +343,8 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
                     </div>
                   </td>
 
-                  {/* Store Count (Target only) */}
-                  {hasStoreCount && (
+                  {/* Store Count — hidden in wholesale mode */}
+                  {hasStoreCount && !isWholesale && (
                     <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
                       {row.storeCount !== undefined ? fmtNum(row.storeCount) : "—"}
                     </td>
@@ -337,11 +356,6 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
                       ${row.avgSellPrice.toFixed(2)}
                     </td>
                   )}
-                  {visibleCols.conversionRate && (
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
-                      {row.conversionRate.toFixed(1)}%
-                    </td>
-                  )}
                   {visibleCols.pctSalesOnline && (
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5">
@@ -350,11 +364,6 @@ export default function ProductPerformanceTable({ products, selectedStoreIds }: 
                         </div>
                         <span className="text-xs tabular-nums text-[#3A3A3A]/65 dark:text-[#FFF9F2]/50">{row.pctSalesOnline.toFixed(0)}%</span>
                       </div>
-                    </td>
-                  )}
-                  {visibleCols.pageViews && (
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
-                      {fmtNum(row.pageViews)}
                     </td>
                   )}
                 </tr>

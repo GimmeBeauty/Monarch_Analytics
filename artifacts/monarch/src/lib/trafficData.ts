@@ -77,6 +77,8 @@ export interface TrafficKPI {
 export interface ProductRow {
   id: string;
   productName: string;
+  sku: string;
+  upc?: string;
   storeId: string;
   storeName: string;
   storeColor: string;
@@ -218,6 +220,7 @@ function buildProducts(
       rows.push({
         id: `${storeId}|${pid}`,
         productName: product.name,
+        sku: "",
         storeId,
         storeName: store.label,
         storeColor: store.color,

@@ -118,32 +118,56 @@ export const DEFAULT_PRODUCT_MAPPINGS: ProductMapping[] = [
   { id: "pm-10", netSuiteSku: "NS-SKU-010", platformSku: "p10", productName: "Vitamin D3 + K2 Softgels 5000 IU", wholesalePrice: 11.00, msrpPrice: 22.99, storeIds: ["amazon","walmart","kroger","cvs","publix","walgreens"],                      confirmed: true  },
 ];
 
-// ─── NetSuite Simulated Ingestion Records ─────────────────────────────────────
+// ─── NetSuite API Types ───────────────────────────────────────────────────────
 
-export type NetSuiteGranularity = "weekly" | "monthly";
-
-export interface NetSuiteRecord {
-  id: string;
-  storeId: string;           // Resolved platform store ID
-  granularity: NetSuiteGranularity;
-  periodStart: string;       // YYYY-MM-DD
-  periodEnd: string;         // YYYY-MM-DD
-  wholesaleRevenue: number;
-  units: number;
-  status: "synced" | "pending" | "delayed";
+export interface NetSuiteStoreSummary {
+  storeName:  string;
+  storeType:  string;
+  revenue:    number;
+  units:      number;
+  lastDate:   string;
+  status:     "synced" | "pending" | "delayed";
 }
 
-/** Simulated latest NetSuite sync records per store. */
-export const NETSUITE_SAMPLE_RECORDS: NetSuiteRecord[] = [
-  { id: "ns-1",  storeId: "amazon",    granularity: "weekly",  periodStart: "2026-04-07", periodEnd: "2026-04-13", wholesaleRevenue: 312_400, units: 5_680, status: "synced"  },
-  { id: "ns-2",  storeId: "walmart",   granularity: "weekly",  periodStart: "2026-04-07", periodEnd: "2026-04-13", wholesaleRevenue: 168_200, units: 3_504, status: "synced"  },
-  { id: "ns-3",  storeId: "target",    granularity: "monthly", periodStart: "2026-03-01", periodEnd: "2026-03-31", wholesaleRevenue: 218_900, units: 4_378, status: "delayed" },
-  { id: "ns-4",  storeId: "kroger",    granularity: "monthly", periodStart: "2026-03-01", periodEnd: "2026-03-31", wholesaleRevenue: 130_500, units: 2_510, status: "synced"  },
-  { id: "ns-5",  storeId: "cvs",       granularity: "weekly",  periodStart: "2026-04-07", periodEnd: "2026-04-13", wholesaleRevenue:  95_800, units: 1_916, status: "synced"  },
-  { id: "ns-6",  storeId: "publix",    granularity: "monthly", periodStart: "2026-03-01", periodEnd: "2026-03-31", wholesaleRevenue:  84_200, units: 1_619, status: "pending" },
-  { id: "ns-7",  storeId: "ulta",      granularity: "weekly",  periodStart: "2026-04-07", periodEnd: "2026-04-13", wholesaleRevenue:  71_500, units: 1_300, status: "synced"  },
-  { id: "ns-8",  storeId: "walgreens", granularity: "weekly",  periodStart: "2026-04-07", periodEnd: "2026-04-13", wholesaleRevenue:  44_100, units:   882, status: "synced"  },
-];
+export interface NetSuiteProductRow {
+  sku:         string;
+  productName: string;
+  upc:         string;
+  storeName:   string;
+  revenue:     number;
+  units:       number;
+}
 
-/** Last full sync timestamp (simulated). */
-export const NETSUITE_LAST_SYNC = "2026-04-14T18:30:00Z";
+export interface NetSuiteSalesResponse {
+  totals:      { revenue: number; units: number };
+  byStore:     NetSuiteStoreSummary[];
+  products:    NetSuiteProductRow[];
+  dailySeries: Array<{ date: string; revenue: number; units: number }>;
+  lastSync:    string;
+  isEmpty:     boolean;
+  source:      string;
+}
+
+export interface NetSuiteSalesParams {
+  start:    string;
+  end:      string;
+  store?:   string;
+  storeIds?: string[];
+}
+
+/** Fetch NetSuite sales data from the API for a given date range. */
+export async function fetchNetSuiteSales(
+  params: NetSuiteSalesParams,
+  apiBase: string,
+): Promise<NetSuiteSalesResponse> {
+  const url = new URL(`${apiBase}/api/data/netsuite/sales`);
+  url.searchParams.set("start", params.start);
+  url.searchParams.set("end",   params.end);
+  if (params.store) url.searchParams.set("store", params.store);
+  const res = await fetch(url.toString(), { credentials: "include" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? `NetSuite API error: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<NetSuiteSalesResponse>;
+}

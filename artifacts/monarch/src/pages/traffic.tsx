@@ -3,11 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useDateRange } from "@/context/DateRangeContext";
 import { useStoreFilter } from "@/context/StoreFilterContext";
+import { usePricingMode } from "@/context/PricingModeContext";
 import TrafficKPISection from "@/components/traffic/TrafficKPISection";
 import ProductPerformanceTable from "@/components/traffic/ProductPerformanceTable";
 import USMap from "@/components/traffic/USMap";
 import { API_BASE } from "@/lib/apiBase";
 import type { TrafficKPI, ProductRow, StateRevenue, StoreLocation } from "@/lib/trafficData";
+import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
 
 // ─── State Name Lookup ────────────────────────────────────────────────────────
 
@@ -27,21 +29,22 @@ const STATE_NAMES: Record<string, string> = {
 interface TrafficApiResponse {
   revenue: number;
   orders: number;
-  aov: number;
+  units: number;
+  asp: number;
   sessions: number;
   cvr: number;
   revenueChange: number;
   ordersChange: number;
-  aovChange: number;
+  aspChange: number;
   sessionsChange: number;
   cvrChange: number;
-  products: Array<{ id: string; productName: string; revenue: number; orders: number; units: number }>;
+  products: Array<{ id: string; productName: string; sku?: string; revenue: number; orders: number; units: number }>;
   stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
   isEmpty: boolean;
 }
 
 interface TargetProductsApiResponse {
-  products: Array<{ itemDescription: string; revenue: number; unitsSold: number; storeCount: number }>;
+  products: Array<{ itemDescription: string; sku?: string; revenue: number; unitsSold: number; storeCount: number }>;
   isEmpty: boolean;
 }
 
@@ -55,6 +58,11 @@ interface TargetLocationsApiResponse {
   isEmpty: boolean;
 }
 
+interface WalmartProductsApiResponse {
+  products: Array<{ productDescription: string; sku?: string; revenue: number; unitsSold: number; storeCount: number }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -65,11 +73,39 @@ function fmtCurrencyFull(v: number): string {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+// Maps NetSuite STORE_NAME values to platform store IDs
+const NS_STORE_ID: Record<string, string> = {
+  "Target":            "target",
+  "Walmart":           "walmart",
+  "CVS":               "cvs",
+  "Ulta Beauty":       "ulta",
+  "Kroger":            "kroger",
+  "Publix":            "publix",
+  "Walgreens":         "walgreens",
+  "Shopify":           "shopify",
+  "Amazon (Pattern)":  "amazon",
+  "Walmart Canada":    "walmart",
+};
+
+const NS_STORE_COLOR: Record<string, string> = {
+  target:    "#CC0000",
+  walmart:   "#0071CE",
+  cvs:       "#CC0000",
+  ulta:      "#000000",
+  kroger:    "#004B8D",
+  publix:    "#007749",
+  walgreens: "#F5A623",
+  shopify:   "#96BF48",
+  amazon:    "#FF9900",
+};
+
 export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
+  const { isWholesale } = usePricingMode();
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
   const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
+  const isWalmartSelected = selectedIds.length === 0 || selectedIds.includes("walmart");
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
@@ -147,68 +183,176 @@ export default function Traffic() {
     enabled: includesTarget && !!selectedMapState,
   });
 
-  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading));
+  const { data: walmartProductData, isLoading: isWalmartLoading } = useQuery<WalmartProductsApiResponse>({
+    queryKey: ["walmart-products", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/walmart/products?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<WalmartProductsApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isWalmartSelected,
+  });
+
+  const { data: wholesaleData, isLoading: isWholesaleLoading } = useQuery<NetSuiteSalesResponse>({
+    queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryFn: async () => {
+      const storeParam = selectedIds.length ? `&store=${selectedIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<NetSuiteSalesResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isWholesale,
+  });
+
+  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && isWalmartLoading) || (isWholesale && isWholesaleLoading);
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
     console.log("[Traffic memo] isTargetOnly:", isTargetOnly, "| targetProductData:", targetProductData ? `${targetProductData.products.length} products` : "undefined");
 
+    const wsActive   = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
+    const wsRevenue  = wsActive ? wholesaleData!.totals.revenue : null;
+    const wsUnits    = wsActive ? wholesaleData!.totals.units   : null;
+
     // ── KPIs ──────────────────────────────────────────────────────────────────
+    const displayRevenue = wsRevenue ?? apiData.revenue ?? 0;
+    const displayUnits   = wsUnits   ?? apiData.units   ?? 0;
+
+    const wsAsp = wsRevenue != null && displayUnits > 0 ? wsRevenue / displayUnits : (apiData.asp ?? 0);
+
     const kpis: TrafficKPI[] = [
-      { id: "revenue",  label: "Revenue",  value: apiData.revenue  ?? 0, formatted: fmtCurrency(apiData.revenue  ?? 0), change: apiData.revenueChange  ?? 0, positive: true, description: "Total Shopify revenue in period" },
-      { id: "orders",   label: "Orders",   value: apiData.orders   ?? 0, formatted: (apiData.orders   ?? 0).toLocaleString(), change: apiData.ordersChange   ?? 0, positive: true, description: "Total orders placed" },
-      { id: "aov",      label: "AOV",      value: apiData.aov      ?? 0, formatted: isTargetOnly ? "—" : fmtCurrency(apiData.aov ?? 0), change: apiData.aovChange     ?? 0, positive: true, description: "Average Order Value" },
+      { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
+      { id: "units",    label: "Units",    value: displayUnits, formatted: displayUnits.toLocaleString(), change: 0, positive: true, description: "Total units sold across all selected stores" },
+      { id: "asp",      label: "ASP",      value: wsAsp,        formatted: fmtCurrency(wsAsp),           change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
       { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: apiData.sessionsChange ?? 0, positive: true, description: "Total GA4 sessions in period" },
       { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange     ?? 0, positive: true, description: "Orders ÷ Sessions" },
     ];
 
     // ── Products ──────────────────────────────────────────────────────────────
-    const shopifyRows = (selectedIds.length === 0 || selectedIds.includes("shopify"))
-      ? apiData.products.map(p => ({
-          id:              p.id,
-          productName:     p.productName,
-          storeId:         "shopify",
-          storeName:       "Shopify",
-          storeColor:      "#96BF48",
-          sales:           p.revenue,
-          formattedSales:  fmtCurrency(p.revenue),
-          salesPrior:      0,
-          units:           p.units,
-          unitsPrior:      0,
-          avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
-          changeInSales:   0,
-          conversionRate:  0,
-          pctSalesOnline:  100,
-          pageViews:       0,
-          isTop10:         false,
-        }))
-      : [];
+    let products: ProductRow[];
 
-    const targetRows = includesTarget
-      ? (targetProductData?.products ?? []).map(p => ({
-          id:             p.itemDescription,
-          productName:    p.itemDescription,
-          storeId:        "target",
-          storeName:      "Target",
-          storeColor:     "#CC0000",
+    if (wsActive) {
+      const storeIdSet = selectedIds.length > 0 ? new Set(selectedIds) : null;
+      const filteredWsProducts = storeIdSet
+        ? wholesaleData!.products.filter(p => {
+            const sid = NS_STORE_ID[p.storeName] ?? p.storeName.toLowerCase().replace(/\s+/g, "-");
+            return storeIdSet.has(sid);
+          })
+        : wholesaleData!.products;
+
+      products = filteredWsProducts.map((p, i) => {
+        const storeId = NS_STORE_ID[p.storeName] ?? p.storeName.toLowerCase().replace(/\s+/g, "-");
+        const color   = NS_STORE_COLOR[storeId] ?? "#9CA3AF";
+        return {
+          id:             `${p.sku}-${p.storeName}`,
+          productName:    p.productName || p.sku,
+          sku:            p.sku,
+          upc:            p.upc,
+          storeId,
+          storeName:      p.storeName,
+          storeColor:     color,
           sales:          p.revenue,
           formattedSales: fmtCurrency(p.revenue),
           salesPrior:     0,
-          units:          p.unitsSold,
+          units:          p.units,
           unitsPrior:     0,
-          avgSellPrice:   p.unitsSold > 0 ? p.revenue / p.unitsSold : 0,
+          avgSellPrice:   p.units > 0 ? p.revenue / p.units : 0,
           changeInSales:  0,
           conversionRate: 0,
           pctSalesOnline: 0,
           pageViews:      0,
-          storeCount:     p.storeCount,
-          isTop10:        false,
-        }))
-      : [];
+          isTop10:        i < 10,
+        };
+      });
+    } else {
+      const shopifyRows = (selectedIds.length === 0 || selectedIds.includes("shopify"))
+        ? apiData.products.map((p, i) => ({
+            id:              `shopify-${p.id || p.sku || i}`,
+            productName:     p.productName,
+            sku:             p.sku ?? "",
+            storeId:         "shopify",
+            storeName:       "Shopify",
+            storeColor:      "#96BF48",
+            sales:           p.revenue,
+            formattedSales:  fmtCurrency(p.revenue),
+            salesPrior:      0,
+            units:           p.units,
+            unitsPrior:      0,
+            avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
+            changeInSales:   0,
+            conversionRate:  0,
+            pctSalesOnline:  100,
+            pageViews:       0,
+            isTop10:         false,
+          }))
+        : [];
 
-    const products: ProductRow[] = [...shopifyRows, ...targetRows]
-      .sort((a, b) => b.sales - a.sales)
-      .map((p, i) => ({ ...p, isTop10: i < 10 }));
+      const targetRows = includesTarget
+        ? (targetProductData?.products ?? []).map((p, i) => ({
+            id:             `target-${p.sku || i}-${p.itemDescription}`,
+            productName:    p.itemDescription,
+            sku:            p.sku ?? "",
+            storeId:        "target",
+            storeName:      "Target",
+            storeColor:     "#CC0000",
+            sales:          p.revenue,
+            formattedSales: fmtCurrency(p.revenue),
+            salesPrior:     0,
+            units:          p.unitsSold,
+            unitsPrior:     0,
+            avgSellPrice:   p.unitsSold > 0 ? p.revenue / p.unitsSold : 0,
+            changeInSales:  0,
+            conversionRate: 0,
+            pctSalesOnline: 0,
+            pageViews:      0,
+            storeCount:     p.storeCount,
+            isTop10:        false,
+          }))
+        : [];
+
+      const walmartRows = isWalmartSelected
+        ? (walmartProductData?.products ?? []).map((p, i) => ({
+            id:             `walmart-${p.sku || i}-${p.productDescription}`,
+            productName:    p.productDescription,
+            sku:            p.sku ?? "",
+            storeId:        "walmart",
+            storeName:      "Walmart",
+            storeColor:     "#0071CE",
+            sales:          p.revenue,
+            formattedSales: fmtCurrency(p.revenue),
+            salesPrior:     0,
+            units:          p.unitsSold,
+            unitsPrior:     0,
+            avgSellPrice:   p.unitsSold > 0 ? p.revenue / p.unitsSold : 0,
+            changeInSales:  0,
+            conversionRate: 0,
+            pctSalesOnline: 0,
+            pageViews:      0,
+            storeCount:     p.storeCount,
+            isTop10:        false,
+          }))
+        : [];
+
+      products = [...shopifyRows, ...targetRows, ...walmartRows]
+        .sort((a, b) => b.sales - a.sales)
+        .map((p, i) => ({ ...p, isTop10: i < 10 }));
+    }
     console.log("[Traffic memo] products resolved:", products.length, "rows | first storeId:", products[0]?.storeId ?? "empty");
 
     // ── State Revenue ─────────────────────────────────────────────────────────
@@ -269,7 +413,7 @@ export default function Traffic() {
       : [];
 
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, isWalmartSelected, isWholesale, wholesaleData]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
@@ -311,6 +455,7 @@ export default function Traffic() {
               <ProductPerformanceTable
                 products={data.products}
                 selectedStoreIds={selectedIds}
+                isWholesale={isWholesale}
               />
             )}
             <USMap

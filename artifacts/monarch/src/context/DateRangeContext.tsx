@@ -12,7 +12,10 @@ export interface DateRange {
 }
 
 export function fmt(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function today(): Date {
@@ -43,8 +46,10 @@ export function currentQuarter(): { year: number; q: number } {
 }
 
 function getCompareRange(startDate: string, endDate: string) {
-  const s = new Date(startDate);
-  const e = new Date(endDate);
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const s = new Date(sy, sm - 1, sd);
+  const e = new Date(ey, em - 1, ed);
   const diff = e.getTime() - s.getTime();
   const cEnd = subDays(s, 1);
   const cStart = new Date(cEnd.getTime() - diff);

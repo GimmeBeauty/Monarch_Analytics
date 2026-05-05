@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Tag, Store, Package, RefreshCw, Clock, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { usePricingMode } from "@/context/PricingModeContext";
 import {
@@ -6,10 +7,11 @@ import {
   WHOLESALE_ELIGIBLE_STORE_IDS,
   DEFAULT_STORE_MAPPINGS,
   DEFAULT_PRODUCT_MAPPINGS,
-  NETSUITE_SAMPLE_RECORDS,
-  NETSUITE_LAST_SYNC,
 } from "@/lib/wholesaleData";
+import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
 import { STORES } from "@/lib/storeData";
+import { useDateRange } from "@/context/DateRangeContext";
+import { API_BASE } from "@/lib/apiBase";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,8 +84,23 @@ function ModeCard({
 
 export default function PricingSettings() {
   const { mode, setMode } = usePricingMode();
+  const { dateRange } = useDateRange();
   const [storeMappingOpen, setStoreMappingOpen] = useState(false);
   const [productMappingOpen, setProductMappingOpen] = useState(false);
+
+  const { data: netsuiteData, isLoading: netsuiteLoading } = useQuery<NetSuiteSalesResponse>({
+    queryKey: ["netsuite-sales-settings", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return { totals: { revenue: 0, units: 0 }, byStore: [], products: [], lastSync: "", isEmpty: true, source: "error" };
+      return res.json() as Promise<NetSuiteSalesResponse>;
+    },
+    staleTime: 1000 * 60 * 30,
+    retry: false,
+  });
 
   return (
     <div className="space-y-5">
@@ -168,36 +185,50 @@ export default function PricingSettings() {
 
       {/* ── NetSuite Sync Status ─────────────────────────────────────────── */}
       <Section title="NetSuite Data Sync" subtitle="Latest ingestion status by store. Wholesale revenue data flows from NetSuite into the platform.">
-        <div className="flex items-center gap-2 mb-3 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
-          <RefreshCw size={11} />
-          <span>Last full sync: {fmtSyncTime(NETSUITE_LAST_SYNC)}</span>
-        </div>
-        <div className="space-y-2">
-          {NETSUITE_SAMPLE_RECORDS.map((rec) => {
-            const store = STORES.find(s => s.id === rec.storeId);
-            return (
-              <div key={rec.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#1a1208]/60 border border-[#FFBC80]/15">
-                <div className="flex items-center gap-2.5">
-                  {store && <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: store.color }} />}
-                  <div>
-                    <span className="font-medium text-xs text-[#3A3A3A] dark:text-[#FFF9F2]">{store?.label ?? rec.storeId}</span>
-                    <span className="ml-2 text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 capitalize">{rec.granularity}</span>
+        {netsuiteLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-12 rounded-lg bg-[#FFBC80]/8 animate-pulse" />
+            ))}
+          </div>
+        ) : netsuiteData && !netsuiteData.isEmpty ? (
+          <>
+            <div className="flex items-center gap-2 mb-3 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+              <RefreshCw size={11} />
+              <span>Last data: {netsuiteData.lastSync ? netsuiteData.lastSync.slice(0, 10) : "—"} · {dateRange.startDate} – {dateRange.endDate}</span>
+            </div>
+            <div className="space-y-2">
+              {netsuiteData.byStore.map((rec) => {
+                const store = STORES.find(s => s.label.toLowerCase() === rec.storeName.toLowerCase() || s.id === rec.storeName.toLowerCase().replace(/\s+/g, ""));
+                return (
+                  <div key={rec.storeName} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#1a1208]/60 border border-[#FFBC80]/15">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: store?.color ?? "#9CA3AF" }} />
+                      <div>
+                        <span className="font-medium text-xs text-[#3A3A3A] dark:text-[#FFF9F2]">{rec.storeName}</span>
+                        <span className="ml-2 text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{rec.storeType}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-right">
+                      <div>
+                        <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{fmtCurrency(rec.revenue)}</p>
+                        <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{rec.units.toLocaleString()} units · last {rec.lastDate}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${STATUS_COLORS[rec.status]}`}>
+                        {rec.status === "delayed" && <Clock size={9} className="inline mr-1" />}
+                        {rec.status}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 text-right">
-                  <div>
-                    <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{fmtCurrency(rec.wholesaleRevenue)}</p>
-                    <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{rec.periodStart} – {rec.periodEnd}</p>
-                  </div>
-                  <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${STATUS_COLORS[rec.status]}`}>
-                    {rec.status === "delayed" && <Clock size={9} className="inline mr-1" />}
-                    {rec.status}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 py-3 text-center">
+            No NetSuite data found for the selected date range.
+          </p>
+        )}
       </Section>
 
       {/* ── Store Name Mapping ───────────────────────────────────────────── */}

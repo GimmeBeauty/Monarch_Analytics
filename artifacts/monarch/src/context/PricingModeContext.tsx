@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { PricingMode } from "@/lib/wholesaleData";
 
 interface PricingModeContextType {
@@ -12,6 +13,7 @@ const PricingModeContext = createContext<PricingModeContextType | null>(null);
 const STORAGE_KEY = "monarch-pricing-mode";
 
 export function PricingModeProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [mode, setModeState] = useState<PricingMode>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -24,7 +26,8 @@ export function PricingModeProvider({ children }: { children: ReactNode }) {
   const setMode = useCallback((next: PricingMode) => {
     setModeState(next);
     try { localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
-  }, []);
+    queryClient.invalidateQueries({ queryKey: ["netsuite-sales"] });
+  }, [queryClient]);
 
   return (
     <PricingModeContext.Provider value={{ mode, setMode, isWholesale: mode === "wholesale" }}>

@@ -5,7 +5,8 @@ export type IntegrationProvider =
   | "google_ads"
   | "google_analytics"
   | "meta"
-  | "tiktok";
+  | "tiktok"
+  | "netsuite";
 
 export const integrationsTable = pgTable("integrations", {
   id:          uuid("id").primaryKey().defaultRandom(),

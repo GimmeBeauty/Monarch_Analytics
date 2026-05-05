@@ -251,7 +251,7 @@ router.get("/shopify", authenticate, async (req, res) => {
       res.json({
         revenue:     Math.round(totalRevenue * 100) / 100,
         orders:      totalOrders,
-        aov:         totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
+        asp:         totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
         dailySeries,
         source:      "snowflake",
       });
@@ -328,7 +328,7 @@ router.get("/shopify", authenticate, async (req, res) => {
   res.json({
     revenue:     totalRevenue,
     orders:      orders.length,
-    aov:         orders.length > 0 ? totalRevenue / orders.length : 0,
+    asp:         orders.length > 0 ? totalRevenue / orders.length : 0,
     dailySeries,
     source:      "shopify-live",
   });
@@ -558,6 +558,7 @@ router.get("/overview", authenticate, async (req, res) => {
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
+  const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
   const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
   const hasPrior   = !!(priorStart && priorEnd);
@@ -605,6 +606,14 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    const walmartSummaryQuery = (isWalmartSelected && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE week_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     const targetDailyQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
           SELECT summary_date, SUM(sale_amount) AS total_revenue
@@ -625,7 +634,7 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const priorShopifyQuery = (hasPrior && isShopifySelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS shopify_revenue, SUM(order_count) AS shopify_orders
+          SELECT SUM(revenue) AS shopify_revenue, SUM(order_count) AS shopify_orders, SUM(units_sold) AS shopify_units
           FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
@@ -633,7 +642,7 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const priorTargetQuery = (hasPrior && includesTarget)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue
+          SELECT SUM(revenue) AS target_revenue, SUM(units_sold) AS target_units
           FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
           WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
@@ -657,12 +666,12 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
-      // Daily conversion value from DAILY_AD_SUMMARY (for adRevenue per day)
+      // Daily conversion value and spend from DAILY_AD_SUMMARY
       querySnowflake(`
-        SELECT summary_date, SUM(conversion_value) AS cv
+        SELECT summary_date, SUM(conversion_value) AS cv, SUM(spend) AS ad_spend
         FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
         WHERE summary_date BETWEEN '${start}' AND '${end}'
         GROUP BY summary_date
@@ -691,6 +700,7 @@ router.get("/overview", authenticate, async (req, res) => {
         AND raw_data:source_name::STRING = 'web'
       `),
       targetSummaryQuery,
+      walmartSummaryQuery,
       targetDailyQuery,
       shopifySummaryQuery,
       priorShopifyQuery,
@@ -705,13 +715,21 @@ router.get("/overview", authenticate, async (req, res) => {
     const totalOrders  = Number(agg["TOTAL_ORDERS"]  ?? agg["total_orders"]  ?? 0);
     const totalUnits   = Number(agg["TOTAL_UNITS"]   ?? agg["total_units"]   ?? 0);
 
-    // Build daily conversion-value map for adRevenue per day
+    // Build daily conversion-value and spend maps from DAILY_AD_SUMMARY
     const dailyCvMap: Record<string, number> = {};
+    const dailyAdSpendMap: Record<string, number> = {};
     let totalAdRevenue = 0;
+    let totalDailyAdSpend = 0;
     for (const row of adDailyRows) {
       const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
       const cv   = Number(row["CV"] ?? row["cv"] ?? 0);
-      if (date) { dailyCvMap[date] = (dailyCvMap[date] ?? 0) + cv; totalAdRevenue += cv; }
+      const ads  = Number(row["AD_SPEND"] ?? row["ad_spend"] ?? 0);
+      if (date) {
+        dailyCvMap[date] = (dailyCvMap[date] ?? 0) + cv;
+        dailyAdSpendMap[date] = (dailyAdSpendMap[date] ?? 0) + ads;
+        totalAdRevenue += cv;
+        totalDailyAdSpend += ads;
+      }
     }
 
     // Daily series — MONARCH or TARGET_DAILY_SUMMARY depending on store selection
@@ -719,14 +737,15 @@ router.get("/overview", authenticate, async (req, res) => {
       const date    = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
       const revenue = Number(row["TOTAL_REVENUE"] ?? row["total_revenue"] ?? 0);
       const spend   = Number(row["AD_SPEND"]      ?? row["ad_spend"]      ?? 0);
-      return { date, revenue, spend, adRevenue: dailyCvMap[date] ?? 0 };
+      return { date, revenue, spend, adRevenue: dailyCvMap[date] ?? 0, adSpend: dailyAdSpendMap[date] ?? 0 };
     });
+    let totalTargetRevForMer = 0;
     if (includesTarget && !isTargetOnly) {
       const targetDailyMap: Record<string, number> = {};
       for (const row of targetDailyRows) {
         const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
         const rev  = Number(row["TOTAL_REVENUE"]  ?? row["total_revenue"]  ?? 0);
-        if (date) targetDailyMap[date] = rev;
+        if (date) { targetDailyMap[date] = rev; totalTargetRevForMer += rev; }
       }
       dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (targetDailyMap[d.date] ?? 0) }));
     }
@@ -750,7 +769,6 @@ router.get("/overview", authenticate, async (req, res) => {
     const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
     const cvr           = (isShopifySelected && totalSessions > 0) ? webOrders / totalSessions : 0;
 
-    const mer  = totalSpend > 0 ? totalRevenue / totalSpend : 0;
     const roas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
 
     const targetSummaryAgg = (targetSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
@@ -772,10 +790,17 @@ router.get("/overview", authenticate, async (req, res) => {
       ? Number(shopifySummaryAgg["SHOPIFY_UNITS"] ?? shopifySummaryAgg["shopify_units"] ?? 0)
       : 0;
 
-    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev;
+    const walmartSummaryAgg = (walmartSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const walmartRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartSummaryAgg["WALMART_REVENUE"] ?? walmartSummaryAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
+    const walmartUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartSummaryAgg["WALMART_UNITS"] ?? walmartSummaryAgg["walmart_units"] ?? 0) : 0;
+
+    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev + walmartRev;
+    const mer = totalDailyAdSpend > 0 ? effectiveTotalRevenue / totalDailyAdSpend : 0;
     const effectiveOrders = isShopifySelected ? shopifyOrders : 0;
-    const effectiveUnits  = (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0);
-    const aov = effectiveOrders > 0 ? effectiveTotalRevenue / effectiveOrders : 0;
+    const effectiveUnits  = isTargetOnly
+      ? totalUnits
+      : (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0) + (isWalmartSelected ? walmartUnits : 0);
+    const asp = effectiveUnits > 0 ? effectiveTotalRevenue / effectiveUnits : 0;
 
     const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
     const priorShopifyAgg = (priorShopifyRows as Array<Record<string, unknown>>)[0] ?? {};
@@ -791,7 +816,14 @@ router.get("/overview", authenticate, async (req, res) => {
       : 0;
     const priorRevenue = isTargetOnly ? priorTargetRev : priorShopifyRev + priorTargetRev;
     const priorOrders  = isShopifySelected ? priorShopifyOrders : 0;
-    const priorAov     = priorOrders > 0 ? priorRevenue / priorOrders : 0;
+    const priorShopifyUnits = (hasPrior && isShopifySelected && !isTargetOnly)
+      ? Number(priorShopifyAgg["SHOPIFY_UNITS"] ?? priorShopifyAgg["shopify_units"] ?? 0)
+      : 0;
+    const priorTargetUnits = (hasPrior && includesTarget)
+      ? Number(priorTargetAgg["TARGET_UNITS"] ?? priorTargetAgg["target_units"] ?? 0)
+      : 0;
+    const priorUnits = (isShopifySelected ? priorShopifyUnits : 0) + (includesTarget ? priorTargetUnits : 0);
+    const priorAsp   = priorUnits > 0 ? priorRevenue / priorUnits : 0;
     const priorGa4Agg  = (priorGa4Rows as Array<Record<string, unknown>>)[0] ?? {};
     const priorSessions = Number(priorGa4Agg["TOTAL_SESSIONS"] ?? priorGa4Agg["total_sessions"] ?? 0);
     const priorWebOrdersAgg = (priorWebOrdersRows as Array<Record<string, unknown>>)[0] ?? {};
@@ -801,8 +833,9 @@ router.get("/overview", authenticate, async (req, res) => {
     const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
       ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
       : [
-          ...(shopifyRev > 0 ? [{ storeId: "shopify", revenue: shopifyRev }] : []),
-          ...(targetRev > 0  ? [{ storeId: "target",  revenue: targetRev }] : []),
+          ...(shopifyRev  > 0 ? [{ storeId: "shopify",  revenue: shopifyRev  }] : []),
+          ...(targetRev   > 0 ? [{ storeId: "target",   revenue: targetRev   }] : []),
+          ...(walmartRev  > 0 ? [{ storeId: "walmart",  revenue: walmartRev  }] : []),
         ];
 
     const isEmpty = effectiveTotalRevenue === 0 && totalSpend === 0;
@@ -811,7 +844,7 @@ router.get("/overview", authenticate, async (req, res) => {
       revenue:   Math.round(effectiveTotalRevenue * 100) / 100,
       orders:    effectiveOrders,
       units:     effectiveUnits,
-      aov:       Math.round(aov            * 100) / 100,
+      asp:       Math.round(asp            * 100) / 100,
       spend:     Math.round(totalSpend     * 100) / 100,
       adRevenue: Math.round(totalAdRevenue * 100) / 100,
       mer:       Math.round(mer            * 1000) / 1000,
@@ -820,7 +853,7 @@ router.get("/overview", authenticate, async (req, res) => {
       cvr:       Math.round(cvr * 10000) / 10000,
       revenueChange: hasPrior ? pct(effectiveTotalRevenue, priorRevenue) : 0,
       ordersChange:  hasPrior ? pct(effectiveOrders, priorOrders) : 0,
-      aovChange:     hasPrior ? pct(aov, priorAov) : 0,
+      aspChange:     hasPrior ? pct(asp, priorAsp) : 0,
       sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
       cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
       storeBreakdown,
@@ -926,6 +959,7 @@ router.get("/traffic", authenticate, async (req, res) => {
   const isTargetOnly = storeIds.length === 1 && storeIds[0] === "target";
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
+  const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
   const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
   const hasPrior   = !!(priorStart && priorEnd);
@@ -933,21 +967,29 @@ router.get("/traffic", authenticate, async (req, res) => {
   try {
     const targetTrafficSummaryQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue
+          SELECT SUM(revenue) AS target_revenue, SUM(units_sold) AS target_units
           FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
+    const walmartTrafficSummaryQuery = (isWalmartSelected && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE week_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
 
     const priorSummaryQuery = hasPrior
       ? (isTargetOnly
         ? querySnowflake(`
-            SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders
+            SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders, SUM(units_sold) AS total_units
             FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
             WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
           `)
         : querySnowflake(`
-            SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
+            SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders, SUM(units_sold) AS total_units
             FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
             WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
           `))
@@ -981,30 +1023,31 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const summaryQuery = isTargetOnly
       ? querySnowflake(`
-          SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders
+          SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders, SUM(units_sold) AS total_units
           FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
       : querySnowflake(`
-          SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders
+          SELECT SUM(revenue) AS total_revenue, SUM(order_count) AS total_orders, SUM(units_sold) AS total_units
           FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `);
 
-    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows] = await Promise.all([
+    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
         SELECT
           product_id,
           title,
+          sku,
           SUM(revenue)     AS revenue,
           SUM(units_sold)  AS units_sold,
           SUM(order_count) AS order_count,
           AVG(avg_price)   AS avg_price
         FROM ${DB_NAME}.COMMERCE.SHOPIFY_PRODUCT_DAILY
         WHERE summary_date BETWEEN '${start}' AND '${end}'
-        GROUP BY product_id, title
+        GROUP BY product_id, title, sku
         ORDER BY revenue DESC
         LIMIT 50
       `),
@@ -1031,6 +1074,7 @@ router.get("/traffic", authenticate, async (req, res) => {
         AND raw_data:source_name::STRING = 'web'
       `),
       targetTrafficSummaryQuery,
+      walmartTrafficSummaryQuery,
       priorSummaryQuery,
       priorTrafficTargetQuery,
       priorTrafficGa4Query,
@@ -1040,16 +1084,24 @@ router.get("/traffic", authenticate, async (req, res) => {
     const summaryAgg   = summaryRows[0] ?? {};
     const totalRevenue = Number(summaryAgg["TOTAL_REVENUE"] ?? summaryAgg["total_revenue"] ?? 0);
     const totalOrders  = Number(summaryAgg["TOTAL_ORDERS"]  ?? summaryAgg["total_orders"]  ?? 0);
+    const totalUnits   = Number(summaryAgg["TOTAL_UNITS"]   ?? summaryAgg["total_units"]   ?? 0);
 
     const targetTrafficAgg = (targetTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
-    const targetTrafficRev = Math.round(Number(targetTrafficAgg["TARGET_REVENUE"] ?? targetTrafficAgg["target_revenue"] ?? 0) * 100) / 100;
+    const targetTrafficRev   = Math.round(Number(targetTrafficAgg["TARGET_REVENUE"] ?? targetTrafficAgg["target_revenue"] ?? 0) * 100) / 100;
+    const targetTrafficUnits = Number(targetTrafficAgg["TARGET_UNITS"] ?? targetTrafficAgg["target_units"] ?? 0);
+    const walmartTrafficAgg = (walmartTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const walmartTrafficRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartTrafficAgg["WALMART_REVENUE"] ?? walmartTrafficAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
+    const walmartTrafficUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartTrafficAgg["WALMART_UNITS"] ?? walmartTrafficAgg["walmart_units"] ?? 0) : 0;
     const shopifyTrafficRev = isShopifySelected && !isTargetOnly ? totalRevenue : 0;
     const effectiveRevenue = isTargetOnly
       ? totalRevenue
-      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0);
+      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0) + (isWalmartSelected ? walmartTrafficRev : 0);
 
     const effectiveOrders = isShopifySelected ? totalOrders : 0;
-    const aov = (isShopifySelected && effectiveOrders > 0) ? effectiveRevenue / effectiveOrders : 0;
+    const effectiveUnits  = isTargetOnly
+      ? totalOrders
+      : (isShopifySelected ? totalUnits : 0) + (includesTarget ? targetTrafficUnits : 0) + (isWalmartSelected ? walmartTrafficUnits : 0);
+    const asp = effectiveUnits > 0 ? effectiveRevenue / effectiveUnits : 0;
 
     const ga4Agg        = ga4Rows[0] ?? {};
     const totalSessions = Number(ga4Agg["TOTAL_SESSIONS"] ?? ga4Agg["total_sessions"] ?? 0);
@@ -1062,6 +1114,7 @@ router.get("/traffic", authenticate, async (req, res) => {
     const priorSummaryAgg   = (priorSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
     const priorTotalRevenue = Number(priorSummaryAgg["TOTAL_REVENUE"] ?? priorSummaryAgg["total_revenue"] ?? 0);
     const priorTotalOrders  = Number(priorSummaryAgg["TOTAL_ORDERS"]  ?? priorSummaryAgg["total_orders"]  ?? 0);
+    const priorTotalUnits   = Number(priorSummaryAgg["TOTAL_UNITS"]   ?? priorSummaryAgg["total_units"]   ?? 0);
     const priorTargetAgg    = (priorTrafficTargetRows as Array<Record<string, unknown>>)[0] ?? {};
     const priorTargetRev    = Math.round(Number(priorTargetAgg["TARGET_REVENUE"] ?? priorTargetAgg["target_revenue"] ?? 0) * 100) / 100;
     const priorShopifyRev   = isShopifySelected && !isTargetOnly ? priorTotalRevenue : 0;
@@ -1069,7 +1122,8 @@ router.get("/traffic", authenticate, async (req, res) => {
       ? priorTotalRevenue
       : priorShopifyRev + (includesTarget ? priorTargetRev : 0);
     const priorEffectiveOrders = isShopifySelected ? priorTotalOrders : 0;
-    const priorAov = (isShopifySelected && priorEffectiveOrders > 0) ? priorEffectiveRevenue / priorEffectiveOrders : 0;
+    const priorEffectiveUnits = isTargetOnly ? priorTotalOrders : (isShopifySelected ? priorTotalUnits : 0);
+    const priorAsp = priorEffectiveUnits > 0 ? priorEffectiveRevenue / priorEffectiveUnits : 0;
     const priorGa4Agg       = (priorTrafficGa4Rows as Array<Record<string, unknown>>)[0] ?? {};
     const priorSessions     = Number(priorGa4Agg["TOTAL_SESSIONS"] ?? priorGa4Agg["total_sessions"] ?? 0);
     const priorWebOrdersAgg = (priorTrafficWebOrdersRows as Array<Record<string, unknown>>)[0] ?? {};
@@ -1079,6 +1133,7 @@ router.get("/traffic", authenticate, async (req, res) => {
     const products = productRows.map(row => ({
       id:          String(row["PRODUCT_ID"]  ?? row["product_id"]  ?? ""),
       productName: String(row["TITLE"]       ?? row["title"]       ?? "Unknown Product"),
+      sku:         String(row["SKU"]         ?? row["sku"]         ?? ""),
       revenue:     Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
       orders:      Number(row["ORDER_COUNT"] ?? row["order_count"] ?? 0),
       units:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
@@ -1095,12 +1150,13 @@ router.get("/traffic", authenticate, async (req, res) => {
     res.json({
       revenue:     Math.round(effectiveRevenue * 100) / 100,
       orders:      effectiveOrders,
-      aov:         Math.round(aov * 100) / 100,
+      units:       effectiveUnits,
+      asp:         Math.round(asp * 100) / 100,
       sessions:    totalSessions,
       cvr:         Math.round(cvr * 10000) / 10000,
       revenueChange: hasPrior ? pct(effectiveRevenue, priorEffectiveRevenue) : 0,
       ordersChange:  hasPrior ? pct(effectiveOrders, priorEffectiveOrders) : 0,
-      aovChange:     hasPrior ? pct(aov, priorAov) : 0,
+      aspChange:     hasPrior ? pct(asp, priorAsp) : 0,
       sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
       cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
       products,
@@ -1213,18 +1269,21 @@ router.get("/target/products", authenticate, async (req, res) => {
     const rows = await querySnowflake(`
       SELECT
         item_description,
+        barcode,
+        tcin,
         SUM(revenue)     AS revenue,
         SUM(units_sold)  AS units_sold,
         SUM(store_count) AS store_count
       FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
       WHERE summary_date BETWEEN '${start}' AND '${end}'
-      GROUP BY item_description
+      GROUP BY item_description, barcode, tcin
       ORDER BY revenue DESC
       LIMIT 50
     `);
 
     const products = rows.map(row => ({
       itemDescription: String(row["ITEM_DESCRIPTION"] ?? row["item_description"] ?? ""),
+      sku:             String(row["BARCODE"] ?? row["barcode"] ?? row["TCIN"] ?? row["tcin"] ?? ""),
       revenue:         Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
       unitsSold:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
       storeCount:      Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
@@ -1344,6 +1403,199 @@ router.get("/target/locations", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/target/locations] Error:", e);
     res.status(500).json({ error: "Failed to query Target location data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/walmart/summary ────────────────────────────────────────────
+
+router.get("/walmart/summary", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        SUM(revenue)    AS walmart_revenue,
+        SUM(units_sold) AS walmart_units,
+        MAX(store_count) AS store_count,
+        SUM(cogs)       AS walmart_cogs
+      FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+      WHERE week_date BETWEEN '${start}' AND '${end}'
+    `);
+
+    const agg = rows[0] ?? {};
+    const revenue    = Math.round(Number(agg["WALMART_REVENUE"] ?? agg["walmart_revenue"] ?? 0) * 100) / 100;
+    const unitsSold  = Number(agg["WALMART_UNITS"] ?? agg["walmart_units"] ?? 0);
+    const storeCount = Number(agg["STORE_COUNT"]   ?? agg["store_count"]   ?? 0);
+    const cogs       = Math.round(Number(agg["WALMART_COGS"] ?? agg["walmart_cogs"] ?? 0) * 100) / 100;
+
+    res.json({ revenue, unitsSold, storeCount, cogs, isEmpty: revenue === 0 && unitsSold === 0 });
+  } catch (e) {
+    console.error("[data/walmart/summary] Error:", e);
+    res.status(500).json({ error: "Failed to query Walmart summary data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/walmart/products ───────────────────────────────────────────
+
+router.get("/walmart/products", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        product_description,
+        walmart_upc,
+        SUM(revenue)     AS revenue,
+        SUM(units_sold)  AS units_sold,
+        SUM(store_count) AS store_count
+      FROM ${DB_NAME}.RETAIL.WALMART_PRODUCT_WEEKLY
+      WHERE week_date BETWEEN '${start}' AND '${end}'
+      GROUP BY product_description, walmart_upc
+      ORDER BY revenue DESC
+      LIMIT 50
+    `);
+
+    const products = rows.map(row => ({
+      productDescription: String(row["PRODUCT_DESCRIPTION"] ?? row["product_description"] ?? ""),
+      sku:                String(row["WALMART_UPC"] ?? row["walmart_upc"] ?? ""),
+      revenue:            Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      unitsSold:          Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+      storeCount:         Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
+    }));
+
+    res.json({ products, isEmpty: products.length === 0 });
+  } catch (e) {
+    console.error("[data/walmart/products] Error:", e);
+    res.status(500).json({ error: "Failed to query Walmart product data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/netsuite/sales ────────────────────────────────────────────
+
+router.get("/netsuite/sales", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw, store: storeRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const storeFilter = storeRaw ? storeRaw.trim() : null;
+  const storeWhere  = storeFilter ? `AND STORE_NAME = '${storeFilter.replace(/'/g, "''")}'` : "";
+
+  try {
+    const [totalsRows, byStoreRows, productRows, dailyRows] = await Promise.all([
+      querySnowflake(`
+        SELECT
+          SUM(REVENUE) AS total_revenue,
+          SUM(UNITS)   AS total_units
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+        ${storeWhere}
+      `),
+      querySnowflake(`
+        SELECT
+          STORE_NAME,
+          STORE_TYPE,
+          SUM(REVENUE)    AS revenue,
+          SUM(UNITS)      AS units,
+          MAX(TRANDATE)   AS last_date,
+          COUNT(DISTINCT TRANDATE) AS day_count
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+        ${storeWhere}
+        GROUP BY STORE_NAME, STORE_TYPE
+        ORDER BY revenue DESC
+      `),
+      querySnowflake(`
+        SELECT
+          SKU,
+          PRODUCT_NAME,
+          UPCCODE,
+          STORE_NAME,
+          SUM(REVENUE)   AS revenue,
+          SUM(UNITS)     AS units
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+        ${storeWhere}
+        GROUP BY SKU, PRODUCT_NAME, UPCCODE, STORE_NAME
+        ORDER BY revenue DESC
+        LIMIT 50
+      `),
+      querySnowflake(`
+        SELECT
+          TRANDATE,
+          SUM(REVENUE) AS daily_revenue,
+          SUM(UNITS)   AS daily_units
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+        ${storeWhere}
+        GROUP BY TRANDATE
+        ORDER BY TRANDATE ASC
+      `),
+    ]);
+
+    const totalsAgg    = totalsRows[0] ?? {};
+    const totalRevenue = Math.round(Number(totalsAgg["TOTAL_REVENUE"] ?? totalsAgg["total_revenue"] ?? 0) * 100) / 100;
+    const totalUnits   = Number(totalsAgg["TOTAL_UNITS"] ?? totalsAgg["total_units"] ?? 0);
+
+    const today = new Date();
+    const byStore = byStoreRows.map(row => {
+      const lastDateVal = row["LAST_DATE"] ?? row["last_date"];
+      const lastDate    = lastDateVal instanceof Date ? lastDateVal.toISOString().slice(0, 10) : String(lastDateVal ?? "").slice(0, 10);
+      const daysSinceLast = lastDate
+        ? Math.floor((today.getTime() - new Date(lastDate).getTime()) / 86_400_000)
+        : 999;
+      const status = daysSinceLast <= 7 ? "synced" : daysSinceLast <= 14 ? "pending" : "delayed";
+      return {
+        storeName:  String(row["STORE_NAME"]  ?? row["store_name"]  ?? ""),
+        storeType:  String(row["STORE_TYPE"]  ?? row["store_type"]  ?? ""),
+        revenue:    Math.round(Number(row["REVENUE"]   ?? row["revenue"]   ?? 0) * 100) / 100,
+        units:      Number(row["UNITS"]     ?? row["units"]     ?? 0),
+        lastDate,
+        status,
+      };
+    });
+
+    const products = productRows.map(row => ({
+      sku:         String(row["SKU"]          ?? row["sku"]          ?? ""),
+      productName: String(row["PRODUCT_NAME"] ?? row["product_name"] ?? ""),
+      upc:         String(row["UPCCODE"]      ?? row["upccode"]      ?? ""),
+      storeName:   String(row["STORE_NAME"]   ?? row["store_name"]   ?? ""),
+      revenue:     Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+      units:       Number(row["UNITS"] ?? row["units"] ?? 0),
+    }));
+
+    const lastSync = byStore.length > 0
+      ? byStore.map(s => s.lastDate).filter(Boolean).sort().at(-1) ?? ""
+      : "";
+
+    const dailySeries = dailyRows.map(row => {
+      const dateVal = row["TRANDATE"] ?? row["trandate"];
+      const date    = dateVal instanceof Date ? dateVal.toISOString().slice(0, 10) : String(dateVal ?? "").slice(0, 10);
+      return {
+        date,
+        revenue: Math.round(Number(row["DAILY_REVENUE"] ?? row["daily_revenue"] ?? 0) * 100) / 100,
+        units:   Number(row["DAILY_UNITS"] ?? row["daily_units"] ?? 0),
+      };
+    });
+
+    res.json({
+      totals:   { revenue: totalRevenue, units: totalUnits },
+      byStore,
+      products,
+      dailySeries,
+      lastSync,
+      isEmpty:  totalRevenue === 0 && totalUnits === 0,
+      source:   "snowflake-netsuite",
+    });
+  } catch (e) {
+    console.error("[data/netsuite/sales] Error:", e);
+    res.status(500).json({ error: "Failed to query NetSuite sales data", detail: String(e) });
   }
 });
 

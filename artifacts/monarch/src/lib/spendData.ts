@@ -653,7 +653,7 @@ export function generateSpendData(params: SpendParams): SpendData {
       const expectedRevenueDelta = recRevenue - attributedRevenue;
 
       const incrementalRevenue = attributedRevenue * incrementalityFactor;
-      const iroas = ch.baseRoas * incrementalityFactor;
+      const iroas = nominalSpend > 0 ? incrementalRevenue / nominalSpend : 0;
 
       // 95% CI on iROAS — wider for low confidence
       const ciHalf = cfg.pValue < 0.01 ? 0.15 : cfg.pValue < 0.05 ? 0.28 : 0.50;
@@ -674,7 +674,7 @@ export function generateSpendData(params: SpendParams): SpendData {
         cfg.rSquared > 0.85 && cfg.pValue < 0.01 ? "high" :
         cfg.rSquared > 0.75 && cfg.pValue < 0.05 ? "medium" : "low";
 
-      const orders = Math.round(attributedRevenue / 85); // ~$85 AOV assumption
+      const orders = Math.round(attributedRevenue / 85); // ~$85 ASP assumption
       const cpa = orders > 0 ? nominalSpend / orders : 0;
       const iCpa = orders * incrementalityFactor > 0 ? nominalSpend / (orders * incrementalityFactor) : 0;
 
@@ -693,7 +693,7 @@ export function generateSpendData(params: SpendParams): SpendData {
 
         spend: nominalSpend,
         attributedRevenue,
-        roas: ch.baseRoas,
+        roas: nominalSpend > 0 ? attributedRevenue / nominalSpend : 0,
         cpa,
 
         baseRevenue: attributedRevenue * (1 - incrementalityFactor),
