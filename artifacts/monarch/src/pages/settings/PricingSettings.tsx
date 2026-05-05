@@ -10,7 +10,6 @@ import {
 } from "@/lib/wholesaleData";
 import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
 import { STORES } from "@/lib/storeData";
-import { useDateRange } from "@/context/DateRangeContext";
 import { API_BASE } from "@/lib/apiBase";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,15 +83,14 @@ function ModeCard({
 
 export default function PricingSettings() {
   const { mode, setMode } = usePricingMode();
-  const { dateRange } = useDateRange();
   const [storeMappingOpen, setStoreMappingOpen] = useState(false);
   const [productMappingOpen, setProductMappingOpen] = useState(false);
 
   const { data: netsuiteData, isLoading: netsuiteLoading } = useQuery<NetSuiteSalesResponse>({
-    queryKey: ["netsuite-sales-settings", dateRange.startDate, dateRange.endDate],
+    queryKey: ["netsuite-sync-status"],
     queryFn: async () => {
       const res = await fetch(
-        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        `${API_BASE}/api/data/netsuite/sync-status`,
         { credentials: "include" },
       );
       if (!res.ok) return { totals: { revenue: 0, units: 0 }, byStore: [], products: [], dailySeries: [], lastSync: "", isEmpty: true, source: "error" } as NetSuiteSalesResponse;
@@ -195,7 +193,7 @@ export default function PricingSettings() {
           <>
             <div className="flex items-center gap-2 mb-3 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
               <RefreshCw size={11} />
-              <span>Last data: {netsuiteData.lastSync ? netsuiteData.lastSync.slice(0, 10) : "—"} · {dateRange.startDate} – {dateRange.endDate}</span>
+              <span>Last sync: {netsuiteData.lastSync ? netsuiteData.lastSync.slice(0, 10) : "—"}</span>
             </div>
             <div className="space-y-2">
               {netsuiteData.byStore.map((rec) => {
@@ -226,7 +224,7 @@ export default function PricingSettings() {
           </>
         ) : (
           <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 py-3 text-center">
-            No NetSuite data found for the selected date range.
+            No NetSuite data found.
           </p>
         )}
       </Section>

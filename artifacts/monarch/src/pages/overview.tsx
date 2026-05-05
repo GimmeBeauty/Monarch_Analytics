@@ -147,15 +147,20 @@ export default function Overview() {
     ];
 
     // ── Trend Series ─────────────────────────────────────────────────────────
-    const trendSeries: TrendPoint[] = wsActive && wholesaleData!.dailySeries?.length
-      ? wholesaleData!.dailySeries.map(d => ({
-          date:    d.date,
-          label:   fmtAxisDate(d.date),
-          revenue: d.revenue,
-          spend:   0,
-          mer:     0,
-          roas:    0,
-        }))
+    // In wholesale mode, map wholesale revenue onto the full date range from apiData
+    // so the chart always has a point for every day (days with no NetSuite transactions = 0).
+    const trendSeries: TrendPoint[] = wsActive
+      ? (() => {
+          const wsRevByDate = new Map((wholesaleData!.dailySeries ?? []).map(d => [d.date, d.revenue]));
+          return apiData.dailySeries.map(d => ({
+            date:    d.date,
+            label:   fmtAxisDate(d.date),
+            revenue: wsRevByDate.get(d.date) ?? 0,
+            spend:   0,
+            mer:     0,
+            roas:    0,
+          }));
+        })()
       : apiData.dailySeries.map(d => ({
           date:    d.date,
           label:   fmtAxisDate(d.date),

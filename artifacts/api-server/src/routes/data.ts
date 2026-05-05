@@ -1550,7 +1550,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
       const daysSinceLast = lastDate
         ? Math.floor((today.getTime() - new Date(lastDate).getTime()) / 86_400_000)
         : 999;
-      const status = daysSinceLast <= 7 ? "synced" : daysSinceLast <= 14 ? "pending" : "delayed";
+      const status = daysSinceLast <= 7 ? "synced" : daysSinceLast <= 30 ? "delayed" : "pending";
       return {
         storeName:  String(row["STORE_NAME"]  ?? row["store_name"]  ?? ""),
         storeType:  String(row["STORE_TYPE"]  ?? row["store_type"]  ?? ""),
@@ -1596,6 +1596,57 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/netsuite/sales] Error:", e);
     res.status(500).json({ error: "Failed to query NetSuite sales data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/netsuite/sync-status ──────────────────────────────────────
+
+router.get("/netsuite/sync-status", authenticate, async (req, res) => {
+  try {
+    const byStoreRows = await querySnowflake(`
+      SELECT
+        STORE_NAME,
+        STORE_TYPE,
+        SUM(REVENUE)  AS revenue,
+        SUM(UNITS)    AS units,
+        MAX(TRANDATE) AS last_date
+      FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+      GROUP BY STORE_NAME, STORE_TYPE
+      ORDER BY revenue DESC
+    `);
+
+    const today = new Date();
+    const byStore = byStoreRows.map(row => {
+      const lastDateVal   = row["LAST_DATE"] ?? row["last_date"];
+      const lastDate      = lastDateVal instanceof Date ? lastDateVal.toISOString().slice(0, 10) : String(lastDateVal ?? "").slice(0, 10);
+      const daysSinceLast = lastDate ? Math.floor((today.getTime() - new Date(lastDate).getTime()) / 86_400_000) : 999;
+      const status        = daysSinceLast <= 7 ? "synced" : daysSinceLast <= 30 ? "delayed" : "pending";
+      return {
+        storeName: String(row["STORE_NAME"] ?? row["store_name"] ?? ""),
+        storeType: String(row["STORE_TYPE"] ?? row["store_type"] ?? ""),
+        revenue:   Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+        units:     Number(row["UNITS"] ?? row["units"] ?? 0),
+        lastDate,
+        status,
+      };
+    });
+
+    const lastSync = byStore.length > 0
+      ? byStore.map(s => s.lastDate).filter(Boolean).sort().at(-1) ?? ""
+      : "";
+
+    res.json({
+      totals:      { revenue: 0, units: 0 },
+      byStore,
+      products:    [],
+      dailySeries: [],
+      lastSync,
+      isEmpty:     byStore.length === 0,
+      source:      "snowflake-netsuite-sync",
+    });
+  } catch (e) {
+    console.error("[data/netsuite/sync-status] Error:", e);
+    res.status(500).json({ error: "Failed to query NetSuite sync status", detail: String(e) });
   }
 });
 
