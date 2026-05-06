@@ -1,0 +1,38 @@
+name: Monarch Weekly Scheduler
+
+on:
+  schedule:
+    - cron: '0 10 * * 0'  # Sunday 4am Mountain Time
+  workflow_dispatch:
+
+jobs:
+  run-weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install snowflake-connector-python requests python-dotenv cryptography python-dateutil
+      - name: Create private key file
+        env:
+          GH_PRIVATE_KEY_B64: ${{ secrets.GH_PRIVATE_KEY_B64 }}
+        run: |
+          echo "$GH_PRIVATE_KEY_B64" | base64 -d > github_private_key.pem
+          chmod 600 github_private_key.pem
+      - name: Run weekly scheduler
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: github_private_key.pem
+          NETSUITE_ACCOUNT_ID: ${{ secrets.NETSUITE_ACCOUNT_ID }}
+          NETSUITE_CLIENT_ID: ${{ secrets.NETSUITE_CLIENT_ID }}
+          NETSUITE_CLIENT_SECRET: ${{ secrets.NETSUITE_CLIENT_SECRET }}
+          NETSUITE_TOKEN_ID: ${{ secrets.NETSUITE_TOKEN_ID }}
+          NETSUITE_TOKEN_SECRET: ${{ secrets.NETSUITE_TOKEN_SECRET }}
+        run: python3 weekly_scheduler.py

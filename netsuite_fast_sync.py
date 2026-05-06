@@ -7,7 +7,8 @@ import snowflake.connector
 AID="1307706";CK=os.environ["NETSUITE_CLIENT_ID"];CS=os.environ["NETSUITE_CLIENT_SECRET"]
 TI=os.environ["NETSUITE_TOKEN_ID"];TS=os.environ["NETSUITE_TOKEN_SECRET"]
 STAGE="MONARCH_RAW.FINANCE.NETSUITE_STAGE";TABLE="MONARCH_RAW.FINANCE.NETSUITE_SALES_BY_PRODUCT"
-START_DATE="2025-01-01";END_DATE=date.today().isoformat()
+from datetime import timedelta
+START_DATE=(date.today()-timedelta(days=7)).isoformat();END_DATE=date.today().isoformat()
 
 def get_sf():
     key_path=os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH","/home/runner/workspace/monarch_private_key.pem")
@@ -65,6 +66,6 @@ if __name__=="__main__":
     print(f"NetSuite Fast Sync — {date.today()}",flush=True)
     conn=get_sf()
     cur=conn.cursor();cur.execute(f"USE SCHEMA MONARCH_RAW.FINANCE");cur.close()
-    stores=[("49270","Amazon (Pattern)","Marketplace"),("633","Publix","Retail"),("228","Kroger","Retail"),("229","Target","Retail"),("231","Walmart","Retail")]
+    stores=[("222","CVS","Retail"),("230","Ulta Beauty","Retail"),("1068","Walgreens","Retail"),("49270","Amazon (Pattern)","Marketplace"),("633","Publix","Retail"),("228","Kroger","Retail"),("229","Target","Retail"),("231","Walmart","Retail")]
     total=sum(sync_entity(eid,sn,st,conn) for eid,sn,st in stores)
     conn.close();print(f"\n✅ Done! {total} total rows",flush=True)
