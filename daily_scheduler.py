@@ -163,3 +163,21 @@ def rebuild_ad_summaries():
     cur.close()
     conn.close()
     print("  ✅ Ad summaries done")
+
+def rebuild_target_summaries():
+    print("\n[6c/6] Rebuilding Target summaries...")
+    from snowflake_connect import get_connection
+    conn = get_connection(schema="RETAIL")
+    cur = conn.cursor()
+    cur.execute("DELETE FROM TARGET_DAILY_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE())")
+    cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_DAILY_SUMMARY (summary_date,sale_amount,sale_quantity,location_count,sku_count)
+SELECT ingestion_date,SUM(raw_data:SALE_AMOUNT::FLOAT),SUM(raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT raw_data:LOCATION_ID::STRING),COUNT(DISTINCT raw_data:BARCODE::STRING)
+FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW WHERE source='target_daily_sales' AND ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date""")
+    cur.execute("DELETE FROM TARGET_STATE_DAILY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE())")
+    cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_STATE_DAILY (summary_date,state,revenue,units_sold,store_count)
+SELECT s.ingestion_date,l.state,SUM(s.raw_data:SALE_AMOUNT::FLOAT),SUM(s.raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT s.raw_data:LOCATION_ID::STRING)
+FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW s JOIN MONARCH_RAW.RETAIL.TARGET_LOCATION_MASTER l ON s.raw_data:LOCATION_ID::STRING=l.location_id
+WHERE s.source='target_daily_sales' AND s.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY s.ingestion_date,l.state""")
+    cur.close()
+    conn.close()
+    print("  ✅ Target summaries done")
