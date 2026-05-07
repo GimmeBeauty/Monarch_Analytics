@@ -164,6 +164,22 @@ def rebuild_ad_summaries():
     conn.close()
     print("  ✅ Ad summaries done")
 
+def rebuild_shopify_products():
+    print("\n[6d/6] Rebuilding Shopify product daily...")
+    from snowflake_connect import get_connection
+    conn = get_connection(schema="COMMERCE")
+    cur = conn.cursor()
+    cur.execute("DELETE FROM SHOPIFY_PRODUCT_DAILY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE())")
+    cur.execute("""INSERT INTO MONARCH_RAW.COMMERCE.SHOPIFY_PRODUCT_DAILY (summary_date,product_id,title,sku,revenue,units_sold,order_count,avg_price)
+SELECT DATE(CONVERT_TIMEZONE('America/Denver',o.raw_data:created_at::TIMESTAMP_TZ)) as order_date,li.value:product_id::STRING,li.value:title::STRING,li.value:sku::STRING,SUM(li.value:price::FLOAT*li.value:quantity::INTEGER),SUM(li.value:quantity::INTEGER),COUNT(DISTINCT o.id),AVG(li.value:price::FLOAT)
+FROM MONARCH_RAW.COMMERCE.SHOPIFY_ORDERS_RAW o,LATERAL FLATTEN(input=>o.raw_data:line_items) li
+WHERE o.raw_data:financial_status::STRING IN ('paid','partially_paid','partially_refunded')
+AND DATE(CONVERT_TIMEZONE('America/Denver',o.raw_data:created_at::TIMESTAMP_TZ))>=DATEADD(day,-3,CURRENT_DATE())
+GROUP BY order_date,li.value:product_id::STRING,li.value:title::STRING,li.value:sku::STRING""")
+    cur.close()
+    conn.close()
+    print("  ✅ Shopify product daily done")
+
 def rebuild_target_summaries():
     print("\n[6c/6] Rebuilding Target summaries...")
     from snowflake_connect import get_connection
