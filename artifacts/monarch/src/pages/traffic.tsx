@@ -68,6 +68,11 @@ interface WalmartGeographicApiResponse {
   isEmpty: boolean;
 }
 
+interface WalmartStoresApiResponse {
+  stores: Array<{ storeNumber: string; storeName: string; streetAddress: string; city: string; stateCode: string; zipCode: string; revenue: number; unitsSold: number }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -185,6 +190,24 @@ export default function Traffic() {
     staleTime: 1000 * 60 * 60,
     retry: false,
     enabled: includesTarget && !!selectedMapState,
+  });
+
+  const { data: walmartStoresData } = useQuery<WalmartStoresApiResponse>({
+    queryKey: ["walmart-stores", selectedMapState, dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/walmart/stores?state=${selectedMapState}&start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<WalmartStoresApiResponse>;
+    },
+    staleTime: 1000 * 60 * 60,
+    retry: false,
+    enabled: isWalmartSelected && !!selectedMapState,
   });
 
   const { data: walmartProductData, isLoading: isWalmartLoading } = useQuery<WalmartProductsApiResponse>({
@@ -430,7 +453,7 @@ export default function Traffic() {
       });
     const stateRevenue: StateRevenue[] = stateEntries;
 
-    const storeLocations: StoreLocation[] = (includesTarget && !!selectedMapState)
+    const targetLocs: StoreLocation[] = (includesTarget && !!selectedMapState)
       ? (targetLocationsData?.locations ?? [])
           .filter(loc => loc.stateCode === selectedMapState)
           .map(loc => ({
@@ -450,8 +473,29 @@ export default function Traffic() {
           }))
       : [];
 
+    const walmartLocs: StoreLocation[] = (isWalmartSelected && !!selectedMapState)
+      ? (walmartStoresData?.stores ?? [])
+          .map(s => ({
+            id:             s.storeNumber,
+            storeId:        "walmart",
+            storeName:      s.storeName,
+            storeColor:     "#0071CE",
+            sales:          s.revenue,
+            formattedSales: fmtCurrencyFull(s.revenue),
+            units:          s.unitsSold,
+            address:        s.streetAddress,
+            city:           s.city,
+            stateCode:      s.stateCode,
+            zipCode:        s.zipCode,
+            lat:            0,
+            lon:            0,
+          }))
+      : [];
+
+    const storeLocations: StoreLocation[] = [...targetLocs, ...walmartLocs];
+
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, isWalmartSelected, isWholesale, wholesaleData]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
