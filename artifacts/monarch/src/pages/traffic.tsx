@@ -63,6 +63,11 @@ interface WalmartProductsApiResponse {
   isEmpty: boolean;
 }
 
+interface WalmartGeographicApiResponse {
+  locations: Array<{ stateCode: string; revenue: number; unitsSold: number; storeCount: number }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -200,6 +205,24 @@ export default function Traffic() {
     enabled: isWalmartSelected,
   });
 
+  const { data: walmartGeoData, isLoading: isWalmartGeoLoading } = useQuery<WalmartGeographicApiResponse>({
+    queryKey: ["walmart-geographic", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/walmart/geographic?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<WalmartGeographicApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isWalmartSelected,
+  });
+
   const { data: wholesaleData, isLoading: isWholesaleLoading } = useQuery<NetSuiteSalesResponse>({
     queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
@@ -218,7 +241,7 @@ export default function Traffic() {
     enabled: isWholesale,
   });
 
-  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && isWalmartLoading) || (isWholesale && isWholesaleLoading);
+  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && (isWalmartLoading || isWalmartGeoLoading)) || (isWholesale && isWholesaleLoading);
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
@@ -247,7 +270,7 @@ export default function Traffic() {
     const kpis: TrafficKPI[] = [
       { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
       { id: "units",    label: "Units",    value: displayUnits, formatted: displayUnits.toLocaleString(), change: 0, positive: true, description: "Total units sold across all selected stores" },
-      { id: "asp",      label: "ASP",      value: wsAsp,        formatted: fmtCurrency(wsAsp),           change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
+      { id: "asp",      label: "ASP",      value: wsAsp,        formatted: fmtCurrencyFull(wsAsp),       change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
       { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: apiData.sessionsChange ?? 0, positive: true, description: "Total GA4 sessions in period" },
       { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange     ?? 0, positive: true, description: "Orders ÷ Sessions" },
     ];
@@ -379,6 +402,13 @@ export default function Traffic() {
         geoMap[loc.stateCode].orders  += loc.unitsSold;
       }
     }
+    if (isWalmartSelected && walmartGeoData?.locations) {
+      for (const loc of walmartGeoData.locations) {
+        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0 };
+        geoMap[loc.stateCode].revenue += loc.revenue;
+        geoMap[loc.stateCode].orders  += loc.unitsSold;
+      }
+    }
     const totalStateRevenue = Object.values(geoMap).reduce((s, x) => s + x.revenue, 0);
     const stateEntries = Object.entries(geoMap).map(([code, d]) => {
       const contrib = totalStateRevenue > 0 ? (d.revenue / totalStateRevenue) * 100 : 0;
@@ -421,7 +451,7 @@ export default function Traffic() {
       : [];
 
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, isWalmartSelected, isWholesale, wholesaleData]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, isWalmartSelected, isWholesale, wholesaleData]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 

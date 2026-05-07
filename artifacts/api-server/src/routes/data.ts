@@ -1476,6 +1476,89 @@ router.get("/walmart/products", authenticate, async (req, res) => {
   }
 });
 
+// ─── GET /api/data/walmart/geographic ────────────────────────────────────────
+
+router.get("/walmart/geographic", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        state,
+        SUM(revenue)     AS revenue,
+        SUM(units_sold)  AS units_sold,
+        SUM(store_count) AS store_count
+      FROM ${DB_NAME}.RETAIL.WALMART_STATE_DAILY
+      WHERE week_date BETWEEN '${start}' AND '${end}'
+      GROUP BY state
+      ORDER BY revenue DESC
+    `);
+
+    const locations = rows.map(row => ({
+      stateCode:  String(row["STATE"]       ?? row["state"]       ?? "").toUpperCase(),
+      revenue:    Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      unitsSold:  Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+      storeCount: Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
+    }));
+
+    res.json({ locations, isEmpty: locations.length === 0 });
+  } catch (e) {
+    console.error("[data/walmart/geographic] Error:", e);
+    res.status(500).json({ error: "Failed to query Walmart geographic data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/walmart/stores ────────────────────────────────────────────
+
+router.get("/walmart/stores", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw, state: stateParam } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const safeState = stateParam ? stateParam.toUpperCase().replace(/[^A-Z]/g, "") : null;
+  const stateWhere = safeState ? `AND state = '${safeState}'` : "";
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        loc.store_number,
+        loc.store_name,
+        loc.street_address,
+        loc.city,
+        loc.state,
+        loc.zip_code,
+        SUM(sd.revenue)    AS revenue,
+        SUM(sd.units_sold) AS units_sold
+      FROM MONARCH_RAW.RETAIL.WALMART_LOCATION_MASTER loc
+      JOIN MONARCH_RAW.RETAIL.WALMART_STATE_DAILY sd ON sd.state = loc.state
+      WHERE sd.week_date BETWEEN '${start}' AND '${end}'
+      ${stateWhere}
+      GROUP BY loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code
+      ORDER BY revenue DESC
+    `);
+
+    const stores = rows.map(row => ({
+      storeNumber:   String(row["STORE_NUMBER"]   ?? row["store_number"]   ?? ""),
+      storeName:     String(row["STORE_NAME"]     ?? row["store_name"]     ?? ""),
+      streetAddress: String(row["STREET_ADDRESS"] ?? row["street_address"] ?? ""),
+      city:          String(row["CITY"]           ?? row["city"]           ?? ""),
+      stateCode:     String(row["STATE"]          ?? row["state"]          ?? "").toUpperCase(),
+      zipCode:       String(row["ZIP_CODE"]       ?? row["zip_code"]       ?? ""),
+      revenue:       Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100,
+      unitsSold:     Number(row["UNITS_SOLD"] ?? row["units_sold"] ?? 0),
+    }));
+
+    res.json({ stores, isEmpty: stores.length === 0 });
+  } catch (e) {
+    console.error("[data/walmart/stores] Error:", e);
+    res.status(500).json({ error: "Failed to query Walmart store data", detail: String(e) });
+  }
+});
+
 // ─── GET /api/data/netsuite/sales ────────────────────────────────────────────
 
 router.get("/netsuite/sales", authenticate, async (req, res) => {
