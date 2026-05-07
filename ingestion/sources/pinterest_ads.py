@@ -21,7 +21,7 @@ def run_pinterest_ingestion(start_date=None, end_date=None):
         params={
             "start_date": start_date,
             "end_date": end_date,
-            "columns": "SPEND_IN_DOLLAR,IMPRESSION_1,CLICKTHROUGH_1,TOTAL_CONVERSIONS,TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR,TOTAL_ENGAGEMENT",
+            "columns": "SPEND_IN_DOLLAR,IMPRESSION_1,CLICKTHROUGH_1,TOTAL_CONVERSIONS,TOTAL_CHECKOUT,TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR,TOTAL_WEB_CHECKOUT,TOTAL_WEB_CHECKOUT_VALUE_IN_MICRO_DOLLAR,TOTAL_ENGAGEMENT",
             "granularity": "DAY"
         }
     )
