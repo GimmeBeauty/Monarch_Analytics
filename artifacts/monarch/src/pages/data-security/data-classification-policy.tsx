@@ -15,7 +15,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Scope",
-        text: "This policy applies to all data created, processed, stored, or transmitted through the Monarch Analytics platform — including customer analytics data, integration credentials, internal business records, and this policy document itself. It applies to all Durham Brands employees, contractors, and systems that handle such data.",
+        text: "This policy applies to all data created, processed, stored, or transmitted through the Monarch Analytics platform — including Gimme Beauty consumer analytics data (purchase, advertising performance, and behavioral data from retail channels), integration credentials, internal business records, and this policy document itself. It applies to all Durham Brands and Gimme Beauty employees, contractors, and systems that handle such data.",
       },
     ],
   },
@@ -36,7 +36,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Confidential",
-        text: "Sensitive business or customer information that requires controlled access. Unauthorised disclosure could cause material harm to customers, Durham Brands, or its partners.",
+        text: "Sensitive business information or Gimme Beauty consumer data that requires controlled access. Unauthorised disclosure could cause material harm to Gimme Beauty, Durham Brands, or its partners.",
       },
       {
         heading: "Restricted",
@@ -88,19 +88,19 @@ const SECTIONS: Section[] = [
       {
         heading: "Examples",
         list: [
-          "Customer advertising performance data pulled from Meta Ads, Google Ads, and Pinterest integrations (campaign spend, impressions, conversions, ROAS)",
+          "Gimme Beauty consumer advertising performance data pulled from Meta Ads, Google Ads, and Pinterest integrations (campaign spend, impressions, conversions, ROAS)",
           "Snowflake query results, reports, and data exports generated from the Monarch Analytics platform",
           "NetSuite financial data synced to Monarch, including wholesale revenue, order volumes, and store-level sales figures",
           "Sales and inventory data from Shopify, Target, and Walmart integrations",
-          "Customer workspace configurations, store filter settings, and dashboard customisations",
+          "Internal user workspace configurations, store filter settings, and dashboard customisations",
           "API credentials (client IDs and secrets) for connected platform integrations",
           "Business contracts, legal agreements, and pricing negotiations",
-          "Customer support tickets and communications containing account-specific details",
+          "Internal user support tickets and communications containing account-specific details",
         ],
       },
       {
         heading: "Handling requirements",
-        text: "Accessible on a strict need-to-know basis. Must be encrypted at rest (AES-256) and in transit (TLS 1.2+). Access is controlled via role-based permissions within Monarch Analytics and logged. Must not be transmitted via unencrypted email. Documents shared externally (e.g., report exports sent to clients) should be marked 'Confidential — Durham Brands' in the header or footer. Must not be stored on personal devices or unapproved cloud storage services.",
+        text: "Accessible on a strict need-to-know basis. Must be encrypted at rest (AES-256) and in transit (TLS 1.2+). Access is controlled via role-based permissions within Monarch Analytics and logged. Must not be transmitted via unencrypted email. Documents shared internally (e.g., report exports distributed to Durham Brands or Gimme Beauty stakeholders) should be marked 'Confidential — Durham Brands' in the header or footer. Must not be stored on personal devices or unapproved cloud storage services.",
       },
     ],
   },

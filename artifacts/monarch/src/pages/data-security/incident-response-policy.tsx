@@ -11,11 +11,11 @@ const SECTIONS: Section[] = [
     body: [
       {
         heading: "Purpose",
-        text: "This Incident Response Policy establishes Durham Brands' procedures for detecting, containing, investigating, and recovering from security incidents that affect the Monarch Analytics platform, its infrastructure, or the customer data it holds. A consistent and well-practised response minimises the impact of incidents and fulfils Durham Brands' obligations to customers, regulators, and the public.",
+        text: "This Incident Response Policy establishes Durham Brands' procedures for detecting, containing, investigating, and recovering from security incidents that affect the Monarch Analytics platform, its infrastructure, or the Gimme Beauty consumer data and internal user data it holds. A consistent and well-practised response minimises the impact of incidents and fulfils Durham Brands' obligations to customers, regulators, and the public.",
       },
       {
         heading: "Scope",
-        text: "This policy applies to all systems, data, personnel, and third-party integrations involved in delivering the Monarch Analytics service. It covers incidents affecting customer data (advertising performance data from Meta, Google, Pinterest, Shopify, Target, Walmart, and NetSuite), user account information, Snowflake data warehouse access, platform availability, and Durham Brands internal systems.",
+        text: "This policy applies to all systems, data, personnel, and third-party integrations involved in delivering the Monarch Analytics service. It covers incidents affecting Gimme Beauty consumer data (advertising performance data from Meta, Google, and Pinterest, and purchase/sales data from Shopify, Target, Walmart, and NetSuite), internal user account information for authorized Durham Brands and Gimme Beauty personnel, Snowflake data warehouse access, platform availability, and Durham Brands internal systems.",
       },
     ],
   },
@@ -25,9 +25,9 @@ const SECTIONS: Section[] = [
       {
         heading: "P1 — Critical",
         list: [
-          "Confirmed unauthorised access to customer data in any volume",
+          "Confirmed unauthorised access to Gimme Beauty consumer data or internal user data in any volume",
           "Confirmed exfiltration of Restricted data — including OAuth tokens for connected integrations, Snowflake credentials, or user PII",
-          "Platform-wide outage exceeding one hour affecting all or most customers",
+          "Platform-wide outage exceeding one hour affecting all or most internal users",
           "Active ransomware, destructive malware, or denial-of-service attack with material service impact",
           "Compromise of Durham Brands' core authentication or secrets management infrastructure",
         ],
@@ -35,11 +35,11 @@ const SECTIONS: Section[] = [
       {
         heading: "P2 — High",
         list: [
-          "Suspected (unconfirmed) unauthorised access to customer or internal systems",
+          "Suspected (unconfirmed) unauthorised access to Gimme Beauty consumer data or internal systems",
           "Significant unintended exposure of Confidential data to internal or external parties",
           "Compromise of a single integration credential (e.g., a Meta Ads or Shopify OAuth token for one workspace)",
           "Account takeover of a Monarch Analytics Admin, Owner, or Durham Brands internal user",
-          "Breach of a third-party sub-processor that processes Monarch Analytics customer data",
+          "Breach of a third-party sub-processor that processes Monarch Analytics data (Gimme Beauty consumer data or internal user data)",
         ],
       },
       {
@@ -151,8 +151,8 @@ const SECTIONS: Section[] = [
         text: "The Incident Commander and technical response team are notified within one hour of initial detection for all classified incidents. Durham Brands leadership is notified within two hours for P1 incidents and within four hours for P2 incidents.",
       },
       {
-        heading: "Customer notification — P1 and P2 affecting customer data",
-        text: "Where a P1 or P2 incident involves confirmed or likely unauthorised access to customer data, affected customers are notified within 72 hours of Durham Brands confirming the scope of the incident. Notifications include: the nature of the incident; the categories of data involved; the likely consequences for the affected workspace; the measures Durham Brands has taken in response; and a contact for further questions (support@durhambrands.com).",
+        heading: "Stakeholder notification — P1 and P2 affecting consumer data",
+        text: "Where a P1 or P2 incident involves confirmed or likely unauthorised access to Gimme Beauty consumer data or internal user account data, Durham Brands leadership and relevant Gimme Beauty stakeholders are notified within 72 hours of confirming the scope of the incident. Notifications include: the nature of the incident; the categories of data involved; the likely consequences; the measures Durham Brands has taken in response; and a contact for further questions (support@durhambrands.com).",
       },
       {
         heading: "Regulatory notification — GDPR",
@@ -182,7 +182,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "PIR content",
-        text: "The post-incident review report covers: a full timeline of events from detection to closure; root cause analysis; scope and impact assessment (systems affected, data exposed, customers impacted); immediate actions taken during the response; recommended remediation items to prevent recurrence; and any relevant improvements to detection, containment, or response procedures.",
+        text: "The post-incident review report covers: a full timeline of events from detection to closure; root cause analysis; scope and impact assessment (systems affected, Gimme Beauty consumer data exposed, internal users impacted); immediate actions taken during the response; recommended remediation items to prevent recurrence; and any relevant improvements to detection, containment, or response procedures.",
       },
       {
         heading: "Remediation tracking",
@@ -260,7 +260,7 @@ export default function IncidentResponsePolicyPage() {
           <h1 className="text-3xl font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">Incident Response Policy</h1>
           <p className="text-sm text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Last updated: May 2026 · Durham Brands</p>
           <p className="text-sm text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 mt-4 leading-relaxed">
-            This policy defines how Durham Brands detects, responds to, and recovers from security incidents affecting Monarch Analytics — including incident classification, response team roles, step-by-step procedures, customer and regulatory notification timelines, and post-incident review requirements.
+            This policy defines how Durham Brands detects, responds to, and recovers from security incidents affecting Monarch Analytics — including incident classification, response team roles, step-by-step procedures, stakeholder and regulatory notification timelines, and post-incident review requirements.
           </p>
         </div>
 

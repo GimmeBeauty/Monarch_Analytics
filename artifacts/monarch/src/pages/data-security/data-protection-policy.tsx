@@ -15,7 +15,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Scope",
-        text: "This policy applies to all data created, processed, stored, or transmitted by the Monarch Analytics platform — including customer analytics data pulled from third-party integrations, user account information, financial data from NetSuite, and Durham Brands operational data. It applies to all Durham Brands employees, contractors, and systems that handle such data.",
+        text: "This policy applies to all data created, processed, stored, or transmitted by the Monarch Analytics platform — including Gimme Beauty consumer analytics data pulled from third-party integrations (purchase history from Shopify, Target, and Walmart, and advertising performance from Meta, Google, and Pinterest), internal user account information for authorized Durham Brands and Gimme Beauty personnel, financial data from NetSuite, and Durham Brands operational data. It applies to all Durham Brands and Gimme Beauty employees, contractors, and systems that handle such data.",
       },
     ],
   },
@@ -36,7 +36,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Export and report data",
-        text: "Customer-facing data exports (CSV, Excel, PDF) are generated in-memory and delivered directly to the requesting user. Exports are not stored on Durham Brands servers after delivery. If an export must be temporarily cached (e.g., for large report generation), it is stored encrypted and deleted within 24 hours of generation.",
+        text: "Data exports (CSV, Excel, PDF) requested by internal users are generated in-memory and delivered directly to the requesting user. Exports are not stored on Durham Brands servers after delivery. If an export must be temporarily cached (e.g., for large report generation), it is stored encrypted and deleted within 24 hours of generation.",
       },
     ],
   },
@@ -52,13 +52,13 @@ const SECTIONS: Section[] = [
           "Financial data from NetSuite (wholesale revenue, order volumes, store-level sales): retained for 36 months from the date of collection.",
           "Platform audit logs (login events, integration changes, data access, settings modifications): retained for 24 months.",
           "Session data and authentication tokens: purged after 90 days of inactivity.",
-          "Support ticket records and customer communications: retained for 36 months from ticket closure.",
+          "Support ticket records and internal user communications: retained for 36 months from ticket closure.",
           "Billing and payment records: retained for 7 years to satisfy financial regulatory requirements.",
         ],
       },
       {
         heading: "Retention overrides",
-        text: "Legal holds, regulatory investigations, or contractual obligations may require data to be retained beyond the standard schedules above. In such cases, the standard deletion procedure is suspended for the affected data until the hold is lifted. Durham Brands will notify affected customers where legally permitted.",
+        text: "Legal holds, regulatory investigations, or contractual obligations may require data to be retained beyond the standard schedules above. In such cases, the standard deletion procedure is suspended for the affected data until the hold is lifted. Durham Brands will notify relevant stakeholders where legally permitted.",
       },
     ],
   },
@@ -75,7 +75,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Integration disconnection",
-        text: "When a customer disconnects a third-party integration (Meta, Google, Pinterest, Shopify, Target, Walmart, NetSuite), associated OAuth tokens are immediately revoked and deleted from Durham Brands systems. Historical performance data collected through that integration remains available in the workspace for the standard 36-month retention period unless the customer explicitly requests earlier deletion.",
+        text: "When an authorized user disconnects a third-party integration (Meta, Google, Pinterest, Shopify, Target, Walmart, NetSuite), associated OAuth tokens are immediately revoked and deleted from Durham Brands systems. Historical Gimme Beauty consumer performance data collected through that integration remains available in the workspace for the standard 36-month retention period unless the user explicitly requests earlier deletion.",
       },
       {
         heading: "End-of-retention deletion",
@@ -83,7 +83,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Requesting deletion",
-        text: "Customers may request deletion of specific data or their entire workspace by contacting support@durhambrands.com. Durham Brands will confirm receipt within two business days and confirm completion of deletion within 30 days, or inform the customer if any legal or regulatory obligation prevents full deletion.",
+        text: "Authorized users (Durham Brands or Gimme Beauty personnel) may request deletion of specific data or their entire workspace by contacting support@durhambrands.com. Durham Brands will confirm receipt within two business days and confirm completion of deletion within 30 days, or inform the requestor if any legal or regulatory obligation prevents full deletion.",
       },
     ],
   },
@@ -120,7 +120,7 @@ const SECTIONS: Section[] = [
     body: [
       {
         heading: "Roles under GDPR",
-        text: "Durham Brands acts as a data controller for information it collects about its own users (name, email, usage data). Durham Brands acts as a data processor on behalf of customers who are data controllers for their end users' data where applicable. All data processing activities are governed by a Data Processing Agreement (DPA) available upon request.",
+        text: "Durham Brands acts as a data controller for information it collects about its internal users (Durham Brands and Gimme Beauty personnel who access Monarch Analytics) and for Gimme Beauty consumer data (purchase, advertising performance, and behavioral data) analyzed within the platform. All data processing activities are governed by a Data Processing Agreement (DPA) available upon request.",
       },
       {
         heading: "Data subject rights",

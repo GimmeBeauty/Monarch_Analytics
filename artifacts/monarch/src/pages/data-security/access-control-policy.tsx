@@ -15,7 +15,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Scope",
-        text: "This policy applies to all Durham Brands employees and contractors who have access to production systems, and to all customer users of the Monarch Analytics platform. It covers authentication, role assignments, credential management, privileged access, and access review procedures.",
+        text: "This policy applies to all Durham Brands and Gimme Beauty employees and contractors who are authorized to access Monarch Analytics or its underlying production systems. Monarch Analytics is an internal tool — access is restricted exclusively to authorized Durham Brands and Gimme Beauty personnel. No external parties, vendors, or Gimme Beauty end consumers have login access to Monarch. This policy covers authentication, role assignments, credential management, privileged access, and access review procedures.",
       },
     ],
   },
@@ -48,8 +48,8 @@ const SECTIONS: Section[] = [
         text: "MFA is mandatory for all Durham Brands employee and contractor accounts with access to production systems, the Snowflake data warehouse, cloud management consoles, or customer workspace data. Access without MFA enabled is not permitted for these accounts.",
       },
       {
-        heading: "Customer accounts",
-        text: "Customer workspace Owners and Admins are strongly encouraged to enable MFA for their accounts. Workspace-level MFA enforcement (requiring all members of a workspace to use MFA) is a configurable setting available to workspace Owners. Durham Brands reserves the right to require MFA for all accounts in future platform updates.",
+        heading: "User accounts",
+        text: "All Monarch user account Owners and Admins are strongly encouraged to enable MFA for their accounts. Workspace-level MFA enforcement (requiring all members of a workspace to use MFA) is a configurable setting available to workspace Owners. Durham Brands reserves the right to require MFA for all accounts in future platform updates.",
       },
       {
         heading: "Supported methods",
@@ -65,7 +65,7 @@ const SECTIONS: Section[] = [
     title: "4. Role-Based Access Control (RBAC)",
     body: [
       {
-        heading: "Customer platform roles",
+        heading: "Monarch user roles",
         list: [
           "Owner — Full platform access including billing management, workspace deletion, and removal of any team member. One Owner per workspace. Owner status can be transferred to another admin by the current Owner.",
           "Admin — Full access to all analytics dashboards, reports, and integrations. Can invite new team members, assign and change roles (up to Admin), and deactivate members. Cannot manage billing or delete the workspace.",
@@ -74,7 +74,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Durham Brands internal roles",
-        text: "Internal engineering, support, and operations roles are managed separately from customer workspace roles. Internal access to customer workspace data is restricted to authorised personnel for support, debugging, and platform maintenance purposes. All such access is logged and reviewed. Internal roles follow a least-privilege model and are reviewed monthly.",
+        text: "Internal engineering, support, and operations roles are managed separately from standard Monarch user roles. Internal access to Monarch workspace data is restricted to authorised personnel for support, debugging, and platform maintenance purposes. All such access is logged and reviewed. Internal roles follow a least-privilege model and are reviewed monthly.",
       },
       {
         heading: "Role assignment",
@@ -99,7 +99,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "API key access to Monarch",
-        text: "Where Monarch Analytics provides API access to customers for data export or automation purposes, API keys are scoped to the issuing workspace, have configurable expiry, and can be revoked at any time by a workspace Owner or Admin.",
+        text: "Where Monarch Analytics provides API access to authorized internal users for data export or automation purposes, API keys are scoped to the issuing workspace, have configurable expiry, and can be revoked at any time by a workspace Owner or Admin.",
       },
     ],
   },
@@ -137,7 +137,7 @@ const SECTIONS: Section[] = [
     title: "8. Access Reviews and Revocation",
     body: [
       {
-        heading: "Customer workspace reviews",
+        heading: "Workspace access reviews",
         text: "Workspace Owners are responsible for reviewing their team's access quarterly. The review should confirm that each member's role reflects their current responsibilities and that no former employees or contractors retain active access.",
       },
       {
@@ -149,8 +149,8 @@ const SECTIONS: Section[] = [
         text: "When a Durham Brands employee or contractor leaves or changes role, all system access is revoked within one business day of the departure or role change. This includes production infrastructure access, internal tooling, and any access to customer workspace data granted for support or engineering purposes.",
       },
       {
-        heading: "Customer offboarding",
-        text: "Workspace Owners are responsible for deactivating team members who leave their organisation. Durham Brands provides workspace-level account management tools for this purpose. Deactivated accounts retain no access to the workspace and their sessions are invalidated immediately.",
+        heading: "User offboarding",
+        text: "Workspace Owners are responsible for deactivating internal users (Durham Brands or Gimme Beauty team members) who leave their organisation or no longer require Monarch access. Durham Brands provides workspace-level account management tools for this purpose. Deactivated accounts retain no access to the workspace and their sessions are invalidated immediately.",
       },
       {
         heading: "Stale accounts",

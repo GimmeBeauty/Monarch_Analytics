@@ -15,7 +15,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Scope",
-        text: "This policy applies to all Durham Brands employees, contractors, and third-party vendors who create, process, store, or transmit data in connection with the Monarch Analytics platform (monarch.durhambrands.com). It covers all information systems, cloud infrastructure, application code, and data integrations operated by or on behalf of Durham Brands.",
+        text: "This policy applies to all Durham Brands and Gimme Beauty employees, contractors, and third-party vendors who create, process, store, or transmit data in connection with the Monarch Analytics platform (monarch.durhambrands.com). Monarch Analytics is an internal business intelligence tool — access to the platform is restricted exclusively to authorized Durham Brands and Gimme Beauty personnel; no external parties, vendors, or Gimme Beauty end consumers have login access to Monarch. This policy covers all information systems, cloud infrastructure, application code, and data integrations operated by or on behalf of Durham Brands.",
       },
     ],
   },
@@ -53,7 +53,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Snowflake data warehouse",
-        text: "Customer analytics data is stored in Snowflake, which provides row-level security, network isolation via private endpoints, and AES-256 encryption at rest. Snowflake's enterprise key management is used for encryption key lifecycle management. Access to Snowflake is restricted to authorised Durham Brands engineering personnel and limited service accounts.",
+        text: "Gimme Beauty consumer analytics data — including purchase history, advertising performance, and retail sales data from Shopify, Target, Walmart, and other channels — is stored in Snowflake, which provides row-level security, network isolation via private endpoints, and AES-256 encryption at rest. Snowflake's enterprise key management is used for encryption key lifecycle management. Access to Snowflake is restricted to authorised Durham Brands engineering personnel and limited service accounts.",
       },
       {
         heading: "Data in transit",
@@ -95,7 +95,7 @@ const SECTIONS: Section[] = [
     body: [
       {
         heading: "Security awareness training",
-        text: "All Durham Brands employees with access to customer data or production systems must complete security awareness training annually. Training covers phishing recognition, secure credential handling, data classification, and incident reporting procedures.",
+        text: "All Durham Brands and Gimme Beauty employees with access to Gimme Beauty consumer data (purchase, advertising, and behavioral data analyzed within Monarch) or production systems must complete security awareness training annually. Training covers phishing recognition, secure credential handling, data classification, and incident reporting procedures.",
       },
       {
         heading: "Production access controls",
@@ -103,11 +103,11 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Offboarding",
-        text: "When an employee or contractor leaves Durham Brands or changes role, all associated system access is revoked within one business day. This includes Snowflake access, cloud console credentials, API key permissions, internal tooling accounts, and any access to customer workspace data.",
+        text: "When an employee or contractor leaves Durham Brands or changes role, all associated system access is revoked within one business day. This includes Snowflake access, cloud console credentials, API key permissions, internal tooling accounts, and any access to Gimme Beauty consumer data or workspace configurations.",
       },
       {
         heading: "Contractor agreements",
-        text: "Contractors who require access to customer data or production systems must agree to Durham Brands' data processing terms before access is provisioned. Contractor access is scoped to the minimum required for their engagement.",
+        text: "Contractors who require access to Gimme Beauty consumer data or production systems must agree to Durham Brands' data processing terms before access is provisioned. Contractor access is scoped to the minimum required for their engagement.",
       },
     ],
   },
@@ -116,7 +116,7 @@ const SECTIONS: Section[] = [
     body: [
       {
         heading: "Vendor assessment",
-        text: "All vendors who process or access customer data on behalf of Durham Brands are assessed before onboarding. The assessment reviews the vendor's security posture, certifications (such as SOC 2 Type II or ISO 27001), data handling practices, and sub-processor use. Vendor assessments are reviewed annually.",
+        text: "All vendors who process or access Gimme Beauty consumer data on behalf of Durham Brands are assessed before onboarding. The assessment reviews the vendor's security posture, certifications (such as SOC 2 Type II or ISO 27001), data handling practices, and sub-processor use. Vendor assessments are reviewed annually.",
       },
       {
         heading: "Integration partners",
@@ -154,7 +154,7 @@ const SECTIONS: Section[] = [
       },
       {
         heading: "Response",
-        text: "Security incidents are handled per the Monarch Analytics Incident Response Policy, which defines severity classifications, response team responsibilities, containment procedures, customer notification timelines, and post-incident review requirements.",
+        text: "Security incidents are handled per the Monarch Analytics Incident Response Policy, which defines severity classifications, response team responsibilities, containment procedures, stakeholder notification timelines, and post-incident review requirements.",
       },
       {
         heading: "Responsible disclosure",
