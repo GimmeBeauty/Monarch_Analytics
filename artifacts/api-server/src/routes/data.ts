@@ -108,8 +108,9 @@ const AD_SOURCES: AdSourceConfig[] = [
 
 /** Maps DAILY_AD_SUMMARY channel values to display metadata. */
 const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; color: string; channelFamily: "core" | "rmn" | "experimental"; storeIds: string[] }> = {
-  meta_ads:   { channelId: "meta-ads",   channelLabel: "Meta Ads",   color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
-  google_ads: { channelId: "google-ads", channelLabel: "Google Ads", color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
+  meta_ads:      { channelId: "meta-ads",      channelLabel: "Meta Ads",      color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
+  google_ads:    { channelId: "google-ads",    channelLabel: "Google Ads",    color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
+  pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
@@ -600,8 +601,8 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const targetSummaryQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue, SUM(units_sold) AS target_units
-          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          SELECT SUM(sale_amount) AS target_revenue, SUM(sale_quantity) AS target_units
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
@@ -609,7 +610,7 @@ router.get("/overview", authenticate, async (req, res) => {
     const walmartSummaryQuery = (isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
           SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          FROM ${DB_NAME}.RETAIL.WALMART_STATE_DAILY
           WHERE week_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);

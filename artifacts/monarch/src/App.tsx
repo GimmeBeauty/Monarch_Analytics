@@ -27,6 +27,12 @@ import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfUse from "@/pages/terms-of-use";
+import DataSecurity from "@/pages/data-security";
+import InfoSecPolicy from "@/pages/data-security/information-security-policy";
+import DataClassPolicy from "@/pages/data-security/data-classification-policy";
+import AccessControlPolicy from "@/pages/data-security/access-control-policy";
+import DataProtectionPolicy from "@/pages/data-security/data-protection-policy";
+import IncidentResponsePolicy from "@/pages/data-security/incident-response-policy";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 1000 * 60 * 2 } },
@@ -82,6 +88,24 @@ function Router() {
       </Route>
       <Route path="/terms-of-use">
         {() => <TermsOfUse />}
+      </Route>
+      <Route path="/knowledge-hub/data-security">
+        {() => <DataSecurity />}
+      </Route>
+      <Route path="/knowledge-hub/data-security/information-security-policy">
+        {() => <InfoSecPolicy />}
+      </Route>
+      <Route path="/knowledge-hub/data-security/data-classification-policy">
+        {() => <DataClassPolicy />}
+      </Route>
+      <Route path="/knowledge-hub/data-security/access-control-policy">
+        {() => <AccessControlPolicy />}
+      </Route>
+      <Route path="/knowledge-hub/data-security/data-protection-policy">
+        {() => <DataProtectionPolicy />}
+      </Route>
+      <Route path="/knowledge-hub/data-security/incident-response-policy">
+        {() => <IncidentResponsePolicy />}
       </Route>
 
       {/* Public auth routes */}

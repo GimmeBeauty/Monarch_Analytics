@@ -101,6 +101,7 @@ export interface StateRevenue {
   name: string;
   revenue: number;
   units: number;
+  storeCount: number;
   contribution: number; // 0–100
   band: 0|1|2|3|4|5;   // 0=Very High … 5=Low
 }

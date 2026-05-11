@@ -219,7 +219,58 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
         </div>
       </div>
 
-      {/* ── State drill-down table ── */}
+      {/* ── No state selected: all-states summary ── */}
+      {!selectedState && stateRevenue.length > 0 && (
+        <div className="rounded-2xl overflow-hidden monarch-card">
+          <div className="px-5 pt-4 pb-3">
+            <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#FFBC80]" />
+              State Revenue Summary
+            </h3>
+            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+              {stateRevenue.length} states · click a row to drill down
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[400px]">
+              <thead>
+                <tr className="border-b border-[#FFBC80]/15 bg-[#FFBC80]/5">
+                  {["State", "Revenue", "Units", "Stores"].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...stateRevenue].sort((a, b) => b.revenue - a.revenue).map(sr => (
+                  <tr
+                    key={sr.code}
+                    onClick={() => handleStateClick(sr.code)}
+                    className="border-b border-[#FFBC80]/8 cursor-pointer transition-colors hover:bg-[#FFBC80]/5"
+                  >
+                    <td className="px-3 py-2.5">
+                      <span className="text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{sr.name}</span>
+                      <span className="ml-1.5 text-[10px] font-mono text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">{sr.code}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">
+                      {fmtRevenue(sr.revenue)}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                      {sr.units.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                      {sr.storeCount > 0 ? sr.storeCount : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── State selected: store locations drill-down ── */}
       {selectedState && selectedStateData && (
         <div className="rounded-2xl overflow-hidden monarch-card">
           <div className="px-5 pt-4 pb-3 flex items-center justify-between">

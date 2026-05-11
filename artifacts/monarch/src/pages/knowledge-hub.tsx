@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   ArrowLeft, BookOpen, Search, ChevronRight, ChevronDown,
   LayoutDashboard, Zap, BarChart2, TrendingUp, CalendarClock, Plug, Tag,
+  Shield, ExternalLink,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -577,6 +578,27 @@ export default function KnowledgeHub() {
             })}
           </div>
         )}
+
+        {/* Data Security & Privacy */}
+        <div className="mt-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield size={13} className="text-[#FFBC80]" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-[#FFBC80]">Data Security & Privacy</h2>
+          </div>
+          <Link href="/knowledge-hub/data-security">
+            <div className="rounded-xl monarch-card-settings overflow-hidden group cursor-pointer">
+              <div className="px-4 py-3.5 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] group-hover:text-[#FFBC80] transition-colors leading-snug">Security & Privacy Policy Hub</p>
+                  <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5 leading-snug">Information security, data classification, access control, data protection, and incident response policies for Monarch Analytics.</p>
+                </div>
+                <div className="shrink-0 text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 group-hover:text-[#FFBC80] transition-colors">
+                  <ExternalLink size={16} />
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
       </div>
     </div>
   );

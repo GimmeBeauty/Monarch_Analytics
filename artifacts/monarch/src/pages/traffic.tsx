@@ -115,7 +115,7 @@ export default function Traffic() {
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
   const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
   const isWalmartSelected = selectedIds.length === 0 || selectedIds.includes("walmart");
-  console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly);
+  console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly, "| isWalmartSelected:", isWalmartSelected);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
     queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
@@ -410,26 +410,28 @@ export default function Traffic() {
     console.log("[Traffic memo] products resolved:", products.length, "rows | first storeId:", products[0]?.storeId ?? "empty");
 
     // ── State Revenue ─────────────────────────────────────────────────────────
-    const geoMap: Record<string, { revenue: number; orders: number }> = {};
+    const geoMap: Record<string, { revenue: number; orders: number; storeCount: number }> = {};
     if (!isTargetOnly) {
       for (const s of apiData.stateRevenue) {
-        if (!geoMap[s.stateCode]) geoMap[s.stateCode] = { revenue: 0, orders: 0 };
+        if (!geoMap[s.stateCode]) geoMap[s.stateCode] = { revenue: 0, orders: 0, storeCount: 0 };
         geoMap[s.stateCode].revenue += s.revenue;
         geoMap[s.stateCode].orders  += s.orders;
       }
     }
     if (includesTarget && targetGeoData?.locations) {
       for (const loc of targetGeoData.locations) {
-        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0 };
-        geoMap[loc.stateCode].revenue += loc.revenue;
-        geoMap[loc.stateCode].orders  += loc.unitsSold;
+        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0, storeCount: 0 };
+        geoMap[loc.stateCode].revenue    += loc.revenue;
+        geoMap[loc.stateCode].orders     += loc.unitsSold;
+        geoMap[loc.stateCode].storeCount += loc.storeCount ?? 0;
       }
     }
     if (isWalmartSelected && walmartGeoData?.locations) {
       for (const loc of walmartGeoData.locations) {
-        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0 };
-        geoMap[loc.stateCode].revenue += loc.revenue;
-        geoMap[loc.stateCode].orders  += loc.unitsSold;
+        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0, storeCount: 0 };
+        geoMap[loc.stateCode].revenue    += loc.revenue;
+        geoMap[loc.stateCode].orders     += loc.unitsSold;
+        geoMap[loc.stateCode].storeCount += loc.storeCount ?? 0;
       }
     }
     const totalStateRevenue = Object.values(geoMap).reduce((s, x) => s + x.revenue, 0);
@@ -440,6 +442,7 @@ export default function Traffic() {
         name:         STATE_NAMES[code] ?? code,
         revenue:      d.revenue,
         units:        d.orders,
+        storeCount:   d.storeCount,
         contribution: Math.round(contrib * 10) / 10,
         band:         5 as 0|1|2|3|4|5,
       };
@@ -473,6 +476,7 @@ export default function Traffic() {
           }))
       : [];
 
+    console.log("[Traffic] walmartLocs debug | isWalmartSelected:", isWalmartSelected, "| selectedMapState:", selectedMapState, "| walmartStoresData stores:", walmartStoresData?.stores?.length ?? "undefined (query not resolved)");
     const walmartLocs: StoreLocation[] = (isWalmartSelected && !!selectedMapState)
       ? (walmartStoresData?.stores ?? [])
           .map(s => ({
@@ -493,6 +497,7 @@ export default function Traffic() {
       : [];
 
     const storeLocations: StoreLocation[] = [...targetLocs, ...walmartLocs];
+    console.log("[Traffic] storeLocations assembled:", storeLocations.length, "total |", targetLocs.length, "Target |", walmartLocs.length, "Walmart");
 
     return { kpis, products, stateRevenue, storeLocations };
   }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData]);

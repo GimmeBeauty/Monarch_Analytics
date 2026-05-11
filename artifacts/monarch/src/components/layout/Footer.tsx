@@ -11,6 +11,10 @@ export default function Footer({ className = "" }: { className?: string }) {
         <Link href="/terms-of-use">
           <span className="hover:text-[#FFBC80] cursor-pointer transition-colors">Terms of Use</span>
         </Link>
+        <span>·</span>
+        <Link href="/knowledge-hub/data-security">
+          <span className="hover:text-[#FFBC80] cursor-pointer transition-colors">Data Security & Privacy</span>
+        </Link>
       </p>
       <p className="text-[10px] text-[#3A3A3A]/28 dark:text-[#FFF9F2]/20 mt-1">
         © {new Date().getFullYear()} Durham Brands. All rights reserved.
