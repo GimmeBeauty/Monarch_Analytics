@@ -31,7 +31,7 @@ ga_service = client.get_service("GoogleAdsService")
 conn = _get_snowflake_connection(schema="ADS")
 cur = conn.cursor()
 print("Connected to Snowflake")
-months = [("2026-04-30","2026-05-06")]
+months = [(str(__import__("datetime").date.today() - __import__("datetime").timedelta(days=2)), str(__import__("datetime").date.today()))]
 cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
 total = 0
 for month_start, month_end in months:
