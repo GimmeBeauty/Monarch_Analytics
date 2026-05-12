@@ -18,7 +18,7 @@ def get_connection():
         database=os.environ.get("SNOWFLAKE_DATABASE", "MONARCH_RAW"),
         login_timeout=30,
     )
-    key_path = "/home/runner/workspace/monarch_private_key.pem"
+    key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH", "/home/runner/workspace/monarch_private_key.pem")
     if os.path.exists(key_path):
         with open(key_path, "rb") as f:
             pk = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())

@@ -1521,7 +1521,7 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   const safeState = stateParam ? stateParam.toUpperCase().replace(/[^A-Z]/g, "") : null;
-  const stateWhere = safeState ? `AND state = '${safeState}'` : "";
+  const stateWhere = safeState ? `AND loc.state = '${safeState}'` : "";
 
   try {
     const rows = await querySnowflake(`
