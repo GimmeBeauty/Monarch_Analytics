@@ -52,7 +52,7 @@ def run_google():
     try:
         import subprocess
         result = subprocess.run(
-            ["python3", "/home/runner/workspace/backfill_google_ads.py"],
+            ["python3", "backfill_google_ads.py"],
             capture_output=True, text=True, timeout=120
         )
         print(result.stdout[-500:] if result.stdout else "No output")
