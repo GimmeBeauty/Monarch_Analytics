@@ -43,4 +43,12 @@ jobs:
           GA4_PROPERTY_ID: ${{ secrets.GA4_PROPERTY_ID }}
           GA4_REFRESH_TOKEN: ${{ secrets.GA4_REFRESH_TOKEN }}
           TARGET_KW_PASSWORD: ${{ secrets.TARGET_KW_PASSWORD }}
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_AD_ACCOUNT_ID: ${{ secrets.PINTEREST_AD_ACCOUNT_ID }}
+          NETSUITE_ACCOUNT_ID: ${{ secrets.NETSUITE_ACCOUNT_ID }}
+          NETSUITE_CLIENT_ID: ${{ secrets.NETSUITE_CLIENT_ID }}
+          NETSUITE_CLIENT_SECRET: ${{ secrets.NETSUITE_CLIENT_SECRET }}
+          NETSUITE_TOKEN_ID: ${{ secrets.NETSUITE_TOKEN_ID }}
+          NETSUITE_TOKEN_SECRET: ${{ secrets.NETSUITE_TOKEN_SECRET }}
+        timeout-minutes: 45
         run: python3 daily_scheduler.py

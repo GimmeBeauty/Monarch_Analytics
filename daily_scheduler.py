@@ -65,7 +65,7 @@ def run_google():
 
 def rebuild_summaries():
     print("\n[6/6] Rebuilding summaries...")
-    os.system("python3 /home/runner/workspace/rebuild_with_sessions.py")
+    os.system("python3 rebuild_with_sessions.py")
     print("  ✅ Summaries done")
 
 def run_ga4():
@@ -111,9 +111,10 @@ def run_target():
         token=r.json()["access_token"]
         r=requests.get(f"{KW_URL}/rest/folders/58077025/children",headers={"Authorization":f"Bearer {token}"},timeout=30)
         files=r.json().get("data",[])
-        today_str=TODAY.strftime("%m%d%Y")
-        yesterday_str=YESTERDAY.strftime("%m%d%Y")
-        target_files=[f for f in files if "DAILY_SALES" in f.get("name","") and (today_str in f.get("name","") or yesterday_str in f.get("name",""))]
+        # Target provides weekly files - find any not yet ingested
+        from datetime import timedelta
+        recent_dates=[( TODAY - timedelta(days=i)).strftime("%m%d%Y") for i in range(14)]
+        target_files=[f for f in files if "WEEKLY_SALES" in f.get("name","") and any(d in f.get("name","") for d in recent_dates)]
         conn=get_connection(schema="RETAIL")
         cur=conn.cursor()
         cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
@@ -124,12 +125,19 @@ def run_target():
                 if not txt_files: continue
                 text=z.read(txt_files[0]).decode("utf-8",errors="replace")
             records=list(csv.DictReader(io.StringIO(text),delimiter="\t"))
-            ingestion_date=TODAY.isoformat()
+            # Extract date from filename e.g. BV_7635_WEEKLY_SALES_TCIN_LOC_05092026_KW.zip
+            import re
+            date_match = re.search(r'(\d{8})_KW', file_info['name'])
+            if date_match:
+                d = date_match.group(1)
+                ingestion_date = f"{d[4:8]}-{d[0:2]}-{d[2:4]}"
+            else:
+                ingestion_date = TODAY.isoformat()
             with open("/tmp/target_day.json","w") as f:
                 for rec in records:
-                    f.write(json.dumps({"ID":f"{rec.get('BARCODE_TCIN',rec.get('BARCODE',''))}_{ingestion_date}_{rec.get('LOCATION_ID','')}","INGESTION_DATE":ingestion_date,"SOURCE":"target_daily_sales","RAW_DATA":json.dumps(rec)})+"\n")
+                    f.write(json.dumps({"ID":f"{rec.get('BARCODE_TCIN',rec.get('BARCODE',''))}_{ingestion_date}_{rec.get('LOCATION_ID','')}","INGESTION_DATE":ingestion_date,"SOURCE":"target_weekly_sales","RAW_DATA":json.dumps(rec)})+"\n")
             cur.execute("PUT file:///tmp/target_day.json @monarch_stage AUTO_COMPRESS=TRUE OVERWRITE=TRUE")
-            cur.execute(f"DELETE FROM TARGET_POS_RAW WHERE ingestion_date='{ingestion_date}' AND source='target_daily_sales'")
+            cur.execute(f"DELETE FROM TARGET_POS_RAW WHERE ingestion_date='{ingestion_date}' AND source='target_weekly_sales'")
             cur.execute("COPY INTO TARGET_POS_RAW (id,ingestion_date,source,raw_data) FROM (SELECT $1:ID::STRING,$1:INGESTION_DATE::DATE,$1:SOURCE::STRING,PARSE_JSON($1:RAW_DATA::STRING) FROM @monarch_stage/target_day.json.gz) FILE_FORMAT=(TYPE='JSON') ON_ERROR='CONTINUE'")
             print(f"  ✅ {file_info['name']}: {len(records)} records")
         if not target_files:
@@ -138,42 +146,6 @@ def run_target():
         conn.close()
     except Exception as e:
         print(f"  ❌ Target error: {e}")
-
-if __name__ == "__main__":
-    run_shopify()
-    run_meta()
-    run_google()
-    run_ga4()
-    run_target()
-    run_pinterest()
-    rebuild_summaries()
-    print("\n✅ Daily scheduler complete!")
-
-def rebuild_ad_summaries():
-    print("\n[6b/6] Rebuilding ad summaries...")
-    from snowflake_connect import get_connection
-    conn = get_connection(schema="ADS")
-    cur = conn.cursor()
-    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE())")
-    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) WITH base AS (SELECT ingestion_date,SUM(raw_data:spend::FLOAT) AS spend,SUM(raw_data:impressions::INTEGER) AS impressions,SUM(raw_data:clicks::INTEGER) AS clicks FROM MONARCH_RAW.ADS.META_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date),cv AS (SELECT m.ingestion_date,SUM(av.value:value::FLOAT) AS cv FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:action_values,OUTER=>TRUE) av WHERE av.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY m.ingestion_date),cc AS (SELECT m.ingestion_date,SUM(a.value:value::FLOAT) AS cc FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:actions,OUTER=>TRUE) a WHERE a.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY m.ingestion_date) SELECT b.ingestion_date,'meta_ads',b.spend,b.impressions,b.clicks,COALESCE(c.cc,0),COALESCE(v.cv,0),CASE WHEN b.impressions>0 THEN b.clicks/b.impressions ELSE 0 END,CASE WHEN b.clicks>0 THEN b.spend/b.clicks ELSE 0 END,CASE WHEN b.impressions>0 THEN b.spend/b.impressions*1000 ELSE 0 END,CASE WHEN b.spend>0 THEN COALESCE(v.cv,0)/b.spend ELSE 0 END FROM base b LEFT JOIN cc c ON b.ingestion_date=c.ingestion_date LEFT JOIN cv v ON b.ingestion_date=v.ingestion_date""")
-    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) SELECT ingestion_date,'google_ads',SUM(raw_data:spend::FLOAT),SUM(raw_data:impressions::INTEGER),SUM(raw_data:clicks::INTEGER),SUM(raw_data:conversions::FLOAT),SUM(raw_data:conversions_value::FLOAT),AVG(raw_data:ctr::FLOAT),AVG(raw_data:average_cpc::FLOAT),AVG(raw_data:average_cpm::FLOAT),CASE WHEN SUM(raw_data:spend::FLOAT)>0 THEN SUM(raw_data:conversions_value::FLOAT)/SUM(raw_data:spend::FLOAT) ELSE 0 END FROM MONARCH_RAW.ADS.GOOGLE_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) AND raw_data:spend::FLOAT IS NOT NULL GROUP BY ingestion_date""")
-    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
-SELECT ingestion_date,'pinterest_ads',
-SUM(raw_data:SPEND_IN_DOLLAR::FLOAT),
-SUM(raw_data:IMPRESSION_1::INTEGER),
-SUM(raw_data:CLICKTHROUGH_1::INTEGER),
-SUM(raw_data:TOTAL_CONVERSIONS::FLOAT),
-SUM(raw_data:TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR::FLOAT)/1000000,
-CASE WHEN SUM(raw_data:IMPRESSION_1::INTEGER)>0 THEN SUM(raw_data:CLICKTHROUGH_1::INTEGER)/SUM(raw_data:IMPRESSION_1::INTEGER) ELSE 0 END,
-CASE WHEN SUM(raw_data:CLICKTHROUGH_1::INTEGER)>0 THEN SUM(raw_data:SPEND_IN_DOLLAR::FLOAT)/SUM(raw_data:CLICKTHROUGH_1::INTEGER) ELSE 0 END,
-CASE WHEN SUM(raw_data:IMPRESSION_1::INTEGER)>0 THEN SUM(raw_data:SPEND_IN_DOLLAR::FLOAT)/SUM(raw_data:IMPRESSION_1::INTEGER)*1000 ELSE 0 END,
-CASE WHEN SUM(raw_data:SPEND_IN_DOLLAR::FLOAT)>0 THEN SUM(raw_data:TOTAL_CHECKOUT_VALUE_IN_MICRO_DOLLAR::FLOAT)/1000000/SUM(raw_data:SPEND_IN_DOLLAR::FLOAT) ELSE 0 END
-FROM MONARCH_RAW.ADS.PINTEREST_ADS_RAW
-WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE())
-GROUP BY ingestion_date""")
-    cur.close()
-    conn.close()
-    print("  ✅ Ad summaries done")
 
 def rebuild_ad_summaries():
     print("\n[6b/6] Rebuilding ad summaries...")
@@ -225,12 +197,25 @@ def rebuild_target_summaries():
     cur.execute("DELETE FROM TARGET_DAILY_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE())")
     cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_DAILY_SUMMARY (summary_date,sale_amount,sale_quantity,location_count,sku_count)
 SELECT ingestion_date,SUM(raw_data:SALE_AMOUNT::FLOAT),SUM(raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT raw_data:LOCATION_ID::STRING),COUNT(DISTINCT raw_data:BARCODE::STRING)
-FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW WHERE source='target_daily_sales' AND ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date""")
+FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW WHERE source='target_weekly_sales' AND ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date""")
     cur.execute("DELETE FROM TARGET_STATE_DAILY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE())")
     cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_STATE_DAILY (summary_date,state,revenue,units_sold,store_count)
 SELECT s.ingestion_date,l.state,SUM(s.raw_data:SALE_AMOUNT::FLOAT),SUM(s.raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT s.raw_data:LOCATION_ID::STRING)
 FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW s JOIN MONARCH_RAW.RETAIL.TARGET_LOCATION_MASTER l ON s.raw_data:LOCATION_ID::STRING=l.location_id
-WHERE s.source='target_daily_sales' AND s.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY s.ingestion_date,l.state""")
+WHERE s.source='target_weekly_sales' AND s.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY s.ingestion_date,l.state""")
     cur.close()
     conn.close()
     print("  ✅ Target summaries done")
+
+if __name__ == "__main__":
+    run_shopify()
+    run_meta()
+    run_google()
+    run_ga4()
+    run_target()
+    run_pinterest()
+    rebuild_summaries()
+    rebuild_ad_summaries()
+    rebuild_shopify_products()
+    rebuild_target_summaries()
+    print("\n✅ Daily scheduler complete!")
