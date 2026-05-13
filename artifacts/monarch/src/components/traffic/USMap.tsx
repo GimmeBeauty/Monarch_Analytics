@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { MapPin } from "lucide-react";
 import type { StateRevenue, StoreLocation } from "@/lib/trafficData";
@@ -48,10 +48,6 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
   const [selectedPin, setSelectedPin]     = useState<string | null>(null);
   const [tooltip, setTooltip]             = useState<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    onStateChange?.(selectedState);
-  }, [selectedState, onStateChange]);
-
   const revenueByCode = useMemo(() => {
     const m: Record<string, StateRevenue> = {};
     stateRevenue.forEach(s => { m[s.code] = s; });
@@ -71,9 +67,11 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
   const selectedStateData = selectedState ? revenueByCode[selectedState] : null;
 
   const handleStateClick = useCallback((code: string) => {
-    setSelectedState(prev => prev === code ? null : code);
+    const next = selectedState === code ? null : code;
+    setSelectedState(next);
     setSelectedPin(null);
-  }, []);
+    onStateChange?.(next);
+  }, [selectedState, onStateChange]);
 
   return (
     <div className="space-y-4">
