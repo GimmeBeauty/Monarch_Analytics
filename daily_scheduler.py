@@ -91,6 +91,15 @@ def run_ga4():
     except Exception as e:
         print(f"  ❌ GA4 error: {e}")
 
+def run_criteo():
+    print("\n[5c/6] Criteo Ads...")
+    try:
+        from ingestion.sources.criteo_ads import run_criteo_ingestion
+        run_criteo_ingestion()
+        print("  ✅ Criteo done")
+    except Exception as e:
+        print(f"  ❌ Criteo error: {e}")
+
 def run_pinterest():
     print("\n[5b/6] Pinterest Ads...")
     try:
@@ -169,6 +178,9 @@ CASE WHEN SUM(raw_data:SPEND_IN_DOLLAR::FLOAT)>0 THEN SUM(raw_data:TOTAL_CHECKOU
 FROM MONARCH_RAW.ADS.PINTEREST_ADS_RAW
 WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE())
 GROUP BY ingestion_date""")
+    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
+SELECT ingestion_date,'criteo_ads',SUM(raw_data:spend::FLOAT),SUM(raw_data:impressions::INTEGER),SUM(raw_data:clicks::INTEGER),SUM(raw_data:attributedOrders::FLOAT),SUM(raw_data:attributedSales::FLOAT),AVG(raw_data:ctr::FLOAT),AVG(raw_data:cpc::FLOAT),CASE WHEN SUM(raw_data:impressions::INTEGER)>0 THEN SUM(raw_data:spend::FLOAT)/SUM(raw_data:impressions::INTEGER)*1000 ELSE 0 END,AVG(raw_data:roas::FLOAT)
+FROM MONARCH_RAW.ADS.CRITEO_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date""")
     cur.close()
     conn.close()
     print("  ✅ Ad summaries done")
@@ -213,6 +225,7 @@ if __name__ == "__main__":
     run_google()
     run_ga4()
     run_target()
+    run_criteo()
     run_pinterest()
     rebuild_summaries()
     rebuild_ad_summaries()
