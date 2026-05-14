@@ -123,7 +123,9 @@ def run_target():
         # Target provides weekly files - find any not yet ingested
         from datetime import timedelta
         recent_dates=[( TODAY - timedelta(days=i)).strftime("%m%d%Y") for i in range(14)]
-        target_files=[f for f in files if "WEEKLY_SALES" in f.get("name","") and any(d in f.get("name","") for d in recent_dates)]
+        today_str=TODAY.strftime("%m%d%Y")
+        yesterday_str=YESTERDAY.strftime("%m%d%Y")
+        target_files=[f for f in files if "DAILY_SALES" in f.get("name","") and (today_str in f.get("name","") or yesterday_str in f.get("name",""))]
         conn=get_connection(schema="RETAIL")
         cur=conn.cursor()
         cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
