@@ -2,7 +2,7 @@ name: Monarch Weekly Scheduler
 
 on:
   schedule:
-    - cron: '0 10 * * 0'  # Sunday 4am Mountain Time
+    - cron: '0 9 * * 1'  # Monday 3am Mountain Time
   workflow_dispatch:
 
 jobs:
