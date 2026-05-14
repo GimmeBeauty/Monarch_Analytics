@@ -123,6 +123,7 @@ const CHANNEL_AD_CONFIG: Record<string, ChannelAdConfig> = {
   "walmart-connect":  { cpmBaseline:  7, ctrBaseline: 4.9, cvrBaseline: 5.3, frequencyBaseline: 2.5, elasticity: 0.71, incrementalLift: 0.76, decayRate: 0.13 },
   "target-roundel":   { cpmBaseline:  9, ctrBaseline: 4.2, cvrBaseline: 4.8, frequencyBaseline: 2.4, elasticity: 0.69, incrementalLift: 0.74, decayRate: 0.14 },
   "criteo":           { cpmBaseline: 14, ctrBaseline: 2.7, cvrBaseline: 4.2, frequencyBaseline: 3.4, elasticity: 0.64, incrementalLift: 0.69, decayRate: 0.16 },
+  "criteo-ads":       { cpmBaseline: 14, ctrBaseline: 2.7, cvrBaseline: 4.2, frequencyBaseline: 3.4, elasticity: 0.64, incrementalLift: 0.69, decayRate: 0.16 },
 };
 
 // ─── Day-level Data ───────────────────────────────────────────────────────────

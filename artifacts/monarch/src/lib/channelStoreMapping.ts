@@ -145,6 +145,15 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     color: "#F57C00",
     channelFamily: "rmn",
   },
+  {
+    channelId: "criteo-ads",
+    channelLabel: "Criteo (Ulta)",
+    storeIds: ["ulta"],
+    dailySpendBaseline: 3200,
+    baseRoas: 4.2,
+    color: "#FF6900",
+    channelFamily: "rmn",
+  },
 ];
 
 /** O(1) lookup map from channelId → mapping */

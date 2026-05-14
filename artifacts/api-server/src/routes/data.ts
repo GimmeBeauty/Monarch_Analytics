@@ -111,6 +111,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   meta_ads:      { channelId: "meta-ads",      channelLabel: "Meta Ads",      color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
   google_ads:    { channelId: "google-ads",    channelLabel: "Google Ads",    color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
+  criteo_ads:    { channelId: "criteo-ads",    channelLabel: "Criteo (Ulta)", color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }

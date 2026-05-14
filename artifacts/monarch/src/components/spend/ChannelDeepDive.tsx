@@ -164,6 +164,17 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
           </div>
         </td>
 
+        {/* Channel Type */}
+        <td className="py-3 px-3">
+          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
+            channel.channelFamily === "rmn"
+              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+              : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+          }`}>
+            {channel.channelFamily === "rmn" ? "Retail Media" : "Core Digital"}
+          </span>
+        </td>
+
         {/* Spend */}
         <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#FFF9F2]/65">
           {fmtCurrency(channel.spend)}
@@ -251,7 +262,7 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
       {/* Expanded detail row */}
       {expanded && (
         <tr className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/3 dark:bg-[#FFBC80]/4">
-          <td colSpan={11} className="px-4 py-4">
+          <td colSpan={12} className="px-4 py-4">
             <SaturationCurveChart channel={channel} />
           </td>
         </tr>
@@ -317,6 +328,7 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
             <tr className="border-b border-[#FFBC80]/20">
               {[
                 { label: "Channel",          th: "px-4 pb-2 text-left" },
+                { label: "Type",             th: "px-3 pb-2 text-left" },
                 { label: "Spend",             th: "px-3 pb-2 text-right", k: "spend" as SortKey },
                 { label: "Revenue",           th: "px-3 pb-2 text-right" },
                 { label: "Incremental Rev",   th: "px-3 pb-2 text-right", k: "incrementalRevenue" as SortKey },

@@ -262,6 +262,13 @@ const MMM_CONFIGS: Record<string, MMMConfig> = {
     haloFactor: 0.02, haloChannels: [],
     rSquared: 0.80, mape: 0.112, pValue: 0.015,
   },
+  "criteo-ads": {
+    gamma: 2.0, saturationRatio: 1.12,
+    incrementalityFactor: 0.56,
+    adstockDecay: 0.18, peakLagDays: 1,
+    haloFactor: 0.02, haloChannels: [],
+    rSquared: 0.80, mape: 0.112, pValue: 0.015,
+  },
   "ctv-programmatic": {
     gamma: 1.3, saturationRatio: 0.28,
     incrementalityFactor: 0.62,
