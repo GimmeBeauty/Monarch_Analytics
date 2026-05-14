@@ -8,7 +8,7 @@ AID="1307706";CK=os.environ["NETSUITE_CLIENT_ID"];CS=os.environ["NETSUITE_CLIENT
 TI=os.environ["NETSUITE_TOKEN_ID"];TS=os.environ["NETSUITE_TOKEN_SECRET"]
 STAGE="MONARCH_RAW.FINANCE.NETSUITE_STAGE";TABLE="MONARCH_RAW.FINANCE.NETSUITE_SALES_BY_PRODUCT"
 from datetime import timedelta
-START_DATE=(date.today()-timedelta(days=7)).isoformat();END_DATE=date.today().isoformat()
+START_DATE=(date.today()-timedelta(days=30)).isoformat();END_DATE=date.today().isoformat()
 
 def get_sf():
     key_path=os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH","/home/runner/workspace/monarch_private_key.pem")
