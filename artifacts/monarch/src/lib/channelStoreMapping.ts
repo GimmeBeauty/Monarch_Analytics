@@ -137,15 +137,6 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     channelFamily: "rmn",
   },
   {
-    channelId: "criteo",
-    channelLabel: "Criteo",
-    storeIds: ["walmart", "target", "kroger", "cvs", "ulta"],
-    dailySpendBaseline: 3200,
-    baseRoas: 4.2,
-    color: "#F57C00",
-    channelFamily: "rmn",
-  },
-  {
     channelId: "criteo-ads",
     channelLabel: "Criteo (Ulta)",
     storeIds: ["ulta"],

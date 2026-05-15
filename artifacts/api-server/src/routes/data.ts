@@ -103,7 +103,6 @@ const AD_SOURCES: AdSourceConfig[] = [
   { table: `${DB_NAME}.ADS.PATTERN_PREDICT_RAW`,  channelId: "pattern-predict", channelLabel: "Pattern Predict",  color: "#7C3AED", channelFamily: "rmn",  storeIds: ["amazon"] },
   { table: `${DB_NAME}.ADS.WALMART_CONNECT_RAW`,  channelId: "walmart-connect", channelLabel: "Walmart Connect",  color: "#0071CE", channelFamily: "rmn",  storeIds: ["walmart"] },
   { table: `${DB_NAME}.ADS.TARGET_ROUNDEL_RAW`,   channelId: "target-roundel",  channelLabel: "Target Roundel",   color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
-  { table: `${DB_NAME}.ADS.CRITEO_RAW`,           channelId: "criteo",          channelLabel: "Criteo",           color: "#F57C00", channelFamily: "rmn",  storeIds: ["walmart", "target", "kroger", "cvs", "ulta"] },
 ];
 
 /** Maps DAILY_AD_SUMMARY channel values to display metadata. */
@@ -1227,36 +1226,73 @@ router.get("/performance", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
-  const adSources = filterAdSources(parseStoreIds(req.query.storeIds));
+  const requestedStoreIds = parseStoreIds(req.query.storeIds);
 
-  const results = await Promise.all(
-    adSources.map(async (src) => {
-      const rows = await queryAdSource(src, start, end);
-      if (rows.length === 0) return null;
-      const byDate = groupByDate(rows);
-      const dailySeries = [...byDate.values()]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map(r => {
-          const roas = r.spend > 0 ? r.revenue / r.spend : 0;
-          const cpc  = r.clicks > 0 ? r.spend / r.clicks : 0;
-          const ctr  = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
-          const cvr  = r.clicks > 0 ? (r.conversions / r.clicks) * 100 : 0;
-          const cpm  = r.impressions > 0 ? (r.spend / r.impressions) * 1000 : 0;
-          const cpa  = r.conversions > 0 ? r.spend / r.conversions : 0;
-          return { date: r.date, spend: r.spend, revenue: r.revenue, impressions: r.impressions, clicks: r.clicks, conversions: r.conversions, roas, cpc, ctr, cvr, cpm, cpa };
-        });
-      return {
-        channelId:    src.channelId,
-        channelLabel: src.channelLabel,
-        color:        src.color,
-        channelFamily: src.channelFamily,
-        dailySeries,
-      };
-    }),
-  );
+  try {
+    const rows = await querySnowflake(`
+      SELECT summary_date, channel, spend, conversion_value, impressions, clicks, conversions, roas, cpc, ctr
+      FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'
+      ORDER BY summary_date ASC
+    `);
 
-  const channels = results.filter(Boolean);
-  res.json({ channels, isEmpty: channels.length === 0 });
+    const channelSeries: Record<string, {
+      meta: (typeof CHANNEL_META)[string];
+      byDate: Map<string, { spend: number; revenue: number; impressions: number; clicks: number; conversions: number; roas: number; cpc: number; ctr: number }>;
+    }> = {};
+
+    for (const row of rows) {
+      const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+      const meta = CHANNEL_META[ch];
+      if (!meta) continue;
+      if (requestedStoreIds.length && !meta.storeIds.some(id => requestedStoreIds.includes(id))) continue;
+
+      const cid  = meta.channelId;
+      const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+      if (!date) continue;
+
+      if (!channelSeries[cid]) channelSeries[cid] = { meta, byDate: new Map() };
+      const prev        = channelSeries[cid].byDate.get(date) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0, roas: 0, cpc: 0, ctr: 0 };
+      const spend       = Number(row["SPEND"]            ?? row["spend"]            ?? 0);
+      const revenue     = Number(row["CONVERSION_VALUE"] ?? row["conversion_value"] ?? 0);
+      const impressions = Number(row["IMPRESSIONS"]      ?? row["impressions"]      ?? 0);
+      const clicks      = Number(row["CLICKS"]           ?? row["clicks"]           ?? 0);
+      const conversions = Number(row["CONVERSIONS"]      ?? row["conversions"]      ?? 0);
+      const roas        = Number(row["ROAS"]             ?? row["roas"]             ?? 0);
+      const cpc         = Number(row["CPC"]              ?? row["cpc"]              ?? 0);
+      const ctr         = Number(row["CTR"]              ?? row["ctr"]              ?? 0);
+      channelSeries[cid].byDate.set(date, {
+        spend:       prev.spend       + spend,
+        revenue:     prev.revenue     + revenue,
+        impressions: prev.impressions + impressions,
+        clicks:      prev.clicks      + clicks,
+        conversions: prev.conversions + conversions,
+        roas, cpc, ctr,
+      });
+    }
+
+    const channels = Object.entries(channelSeries)
+      .map(([channelId, { meta, byDate }]) => ({
+        channelId,
+        channelLabel:  meta.channelLabel,
+        color:         meta.color,
+        channelFamily: meta.channelFamily,
+        dailySeries: [...byDate.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, r]) => {
+            const cvr = r.clicks      > 0 ? (r.conversions / r.clicks) * 100  : 0;
+            const cpm = r.impressions > 0 ? (r.spend / r.impressions) * 1000  : 0;
+            const cpa = r.conversions > 0 ? r.spend / r.conversions            : 0;
+            return { date, spend: r.spend, revenue: r.revenue, impressions: r.impressions, clicks: r.clicks, conversions: r.conversions, roas: r.roas, cpc: r.cpc, ctr: r.ctr, cvr, cpm, cpa };
+          }),
+      }))
+      .filter(ch => ch.dailySeries.length > 0);
+
+    res.json({ channels, isEmpty: channels.length === 0 });
+  } catch (e) {
+    console.error("[data/performance] Error:", e);
+    res.status(500).json({ error: "Failed to query performance data", detail: String(e) });
+  }
 });
 
 // ─── GET /api/data/target/products ───────────────────────────────────────────
@@ -1525,7 +1561,7 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
   const stateWhere = safeState ? `AND loc.state = '${safeState}'` : "";
 
   try {
-    const rows = await querySnowflake(`
+    const sql = `
       SELECT
         loc.store_number,
         loc.store_name,
@@ -1541,7 +1577,16 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
       ${stateWhere}
       GROUP BY loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code
       ORDER BY revenue DESC
-    `);
+    `;
+    console.log("[DEBUG walmart/stores] SQL:", sql);
+    let rows: Awaited<ReturnType<typeof querySnowflake>>;
+    try {
+      rows = await querySnowflake(sql);
+      console.log("[DEBUG walmart/stores] rows returned:", rows.length);
+    } catch (queryErr) {
+      console.error("[DEBUG walmart/stores] querySnowflake threw:", queryErr);
+      throw queryErr;
+    }
 
     const stores = rows.map(row => ({
       storeNumber:   String(row["STORE_NUMBER"]   ?? row["store_number"]   ?? ""),
