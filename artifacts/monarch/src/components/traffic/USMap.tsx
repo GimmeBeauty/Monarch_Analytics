@@ -67,6 +67,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
   const selectedStateData = selectedState ? revenueByCode[selectedState] : null;
 
   const handleStateClick = useCallback((code: string) => {
+    console.log("[USMap] handleStateClick called with:", code);
     const next = selectedState === code ? null : code;
     setSelectedState(next);
     setSelectedPin(null);
