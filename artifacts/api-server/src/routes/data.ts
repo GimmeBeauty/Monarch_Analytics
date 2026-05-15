@@ -1562,18 +1562,22 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
 
   try {
     const sql = `
-      SELECT
-        loc.store_number,
-        loc.store_name,
-        loc.street_address,
-        loc.city,
-        loc.state,
-        loc.zip_code,
-        SUM(sd.revenue)    AS revenue,
-        SUM(sd.units_sold) AS units_sold
+      SELECT loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code,
+        SUM(sp.revenue) AS revenue, SUM(sp.units_sold) AS units_sold
       FROM MONARCH_RAW.RETAIL.WALMART_LOCATION_MASTER loc
-      JOIN MONARCH_RAW.RETAIL.WALMART_STATE_DAILY sd ON sd.state = loc.state
-      WHERE sd.week_date BETWEEN '${start}' AND '${end}'
+      JOIN (
+        SELECT store_number::STRING as store_number, SUM(revenue) as revenue, SUM(units_sold) as units_sold
+        FROM MONARCH_RAW.RETAIL.WALMART_STORE_PRODUCT_WEEKLY
+        WHERE week_date BETWEEN '${start}' AND '${end}'
+        GROUP BY store_number
+        UNION ALL
+        SELECT STORE_NUMBER::STRING,
+          SUM(TRY_TO_NUMBER(REPLACE(REPLACE(POS_SALES_THIS_YEAR,'$',''),',',''))) as revenue,
+          SUM(TRY_TO_NUMBER(REPLACE(REPLACE(POS_QUANTITY_THIS_YEAR,'$',''),',',''))) as units_sold
+        FROM MONARCH_RAW.RETAIL.WALMART_STORE_DAILY_RAW
+        WHERE BUSINESS_DATE::DATE BETWEEN '${start}' AND '${end}'
+        GROUP BY STORE_NUMBER::STRING
+      ) sp ON sp.store_number = loc.store_number
       ${stateWhere}
       GROUP BY loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code
       ORDER BY revenue DESC

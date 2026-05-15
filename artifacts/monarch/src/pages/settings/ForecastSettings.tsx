@@ -95,11 +95,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     if (!selectedStore || !selectedYear) return;
 
     for (let m = 1; m <= 12; m++) {
-      if (!grid[m].retail.trim()) {
-        setError(`Retail price for ${MONTHS[m - 1]} is required.`);
-        return;
-      }
-      if (isNaN(Number(grid[m].retail))) {
+      if (grid[m].retail && isNaN(Number(grid[m].retail))) {
         setError(`Retail price for ${MONTHS[m - 1]} must be a number.`);
         return;
       }
