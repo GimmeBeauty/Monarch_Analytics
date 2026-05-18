@@ -120,9 +120,9 @@ def run_target():
         token=r.json()["access_token"]
         r=requests.get(f"{KW_URL}/rest/folders/58077025/children",headers={"Authorization":f"Bearer {token}"},timeout=30)
         files=r.json().get("data",[])
-        today_str=TODAY.strftime("%m%d%Y")
-        yesterday_str=YESTERDAY.strftime("%m%d%Y")
-        target_files=[f for f in files if "DAILY_SALES" in f.get("name","") and (today_str in f.get("name","") or yesterday_str in f.get("name",""))]
+        from datetime import timedelta
+        date_strs=[(TODAY-timedelta(days=i)).strftime("%m%d%Y") for i in range(4)]
+        target_files=[f for f in files if "DAILY_SALES" in f.get("name","") and any(d in f.get("name","") for d in date_strs)]
         conn=get_connection(schema="RETAIL")
         cur=conn.cursor()
         cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
