@@ -120,9 +120,6 @@ def run_target():
         token=r.json()["access_token"]
         r=requests.get(f"{KW_URL}/rest/folders/58077025/children",headers={"Authorization":f"Bearer {token}"},timeout=30)
         files=r.json().get("data",[])
-        # Target provides weekly files - find any not yet ingested
-        from datetime import timedelta
-        recent_dates=[( TODAY - timedelta(days=i)).strftime("%m%d%Y") for i in range(14)]
         today_str=TODAY.strftime("%m%d%Y")
         yesterday_str=YESTERDAY.strftime("%m%d%Y")
         target_files=[f for f in files if "DAILY_SALES" in f.get("name","") and (today_str in f.get("name","") or yesterday_str in f.get("name",""))]
@@ -136,7 +133,6 @@ def run_target():
                 if not txt_files: continue
                 text=z.read(txt_files[0]).decode("utf-8",errors="replace")
             records=list(csv.DictReader(io.StringIO(text),delimiter="\t"))
-            # Extract date from filename e.g. BV_7635_WEEKLY_SALES_TCIN_LOC_05092026_KW.zip
             import re
             date_match = re.search(r'(\d{8})_KW', file_info['name'])
             if date_match:
@@ -146,9 +142,13 @@ def run_target():
                 ingestion_date = TODAY.isoformat()
             with open("/tmp/target_day.json","w") as f:
                 for rec in records:
-                    f.write(json.dumps({"ID":f"{rec.get('BARCODE_TCIN',rec.get('BARCODE',''))}_{ingestion_date}_{rec.get('LOCATION_ID','')}","INGESTION_DATE":ingestion_date,"SOURCE":"target_weekly_sales","RAW_DATA":json.dumps(rec)})+"\n")
+                    f.write(json.dumps({"ID":f"{rec.get('BARCODE_TCIN',rec.get('BARCODE',''))}_{ingestion_date}_{rec.get('LOCATION_ID','')}","INGESTION_DATE":ingestion_date,"SOURCE":"target_daily_sales","RAW_DATA":json.dumps(rec)})+"\n")
             cur.execute("PUT file:///tmp/target_day.json @monarch_stage AUTO_COMPRESS=TRUE OVERWRITE=TRUE")
-            cur.execute(f"DELETE FROM TARGET_POS_RAW WHERE ingestion_date='{ingestion_date}' AND source='target_weekly_sales'")
+            cur.execute(f"SELECT COUNT(*) FROM TARGET_POS_RAW WHERE ingestion_date='{ingestion_date}' AND source='target_daily_sales'")
+            if cur.fetchone()[0] > 0:
+                print(f"  Skipping {ingestion_date} - already loaded")
+                continue
+            cur.execute(f"DELETE FROM TARGET_POS_RAW WHERE ingestion_date='{ingestion_date}' AND source='target_daily_sales'")
             cur.execute("COPY INTO TARGET_POS_RAW (id,ingestion_date,source,raw_data) FROM (SELECT $1:ID::STRING,$1:INGESTION_DATE::DATE,$1:SOURCE::STRING,PARSE_JSON($1:RAW_DATA::STRING) FROM @monarch_stage/target_day.json.gz) FILE_FORMAT=(TYPE='JSON') ON_ERROR='CONTINUE'")
             print(f"  ✅ {file_info['name']}: {len(records)} records")
         if not target_files:
@@ -211,12 +211,12 @@ def rebuild_target_summaries():
     cur.execute("DELETE FROM TARGET_DAILY_SUMMARY WHERE summary_date >= DATEADD(day,-7,CURRENT_DATE())")
     cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_DAILY_SUMMARY (summary_date,sale_amount,sale_quantity,location_count,sku_count)
 SELECT ingestion_date,SUM(raw_data:SALE_AMOUNT::FLOAT),SUM(raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT raw_data:LOCATION_ID::STRING),COUNT(DISTINCT raw_data:BARCODE::STRING)
-FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW WHERE source='target_weekly_sales' AND ingestion_date>=DATEADD(day,-7,CURRENT_DATE()) GROUP BY ingestion_date""")
+FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW WHERE source='target_daily_sales' AND ingestion_date>=DATEADD(day,-7,CURRENT_DATE()) GROUP BY ingestion_date""")
     cur.execute("DELETE FROM TARGET_STATE_DAILY WHERE summary_date >= DATEADD(day,-7,CURRENT_DATE())")
     cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_STATE_DAILY (summary_date,state,revenue,units_sold,store_count)
 SELECT s.ingestion_date,l.state,SUM(s.raw_data:SALE_AMOUNT::FLOAT),SUM(s.raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT s.raw_data:LOCATION_ID::STRING)
 FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW s JOIN MONARCH_RAW.RETAIL.TARGET_LOCATION_MASTER l ON s.raw_data:LOCATION_ID::STRING=l.location_id
-WHERE s.source='target_weekly_sales' AND s.ingestion_date>=DATEADD(day,-7,CURRENT_DATE()) GROUP BY s.ingestion_date,l.state""")
+WHERE s.source='target_daily_sales' AND s.ingestion_date>=DATEADD(day,-7,CURRENT_DATE()) GROUP BY s.ingestion_date,l.state""")
     cur.close()
     conn.close()
     print("  ✅ Target summaries done")
