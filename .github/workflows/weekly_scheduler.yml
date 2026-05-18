@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install snowflake-connector-python requests python-dotenv cryptography python-dateutil
+        run: pip install snowflake-connector-python requests python-dotenv cryptography python-dateutil boto3
       - name: Create private key file
         env:
           GH_PRIVATE_KEY_B64: ${{ secrets.GH_PRIVATE_KEY_B64 }}
