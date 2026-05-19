@@ -137,6 +137,15 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     channelFamily: "rmn",
   },
   {
+    channelId: "roundel-target",
+    channelLabel: "Roundel (Target)",
+    storeIds: ["target"],
+    dailySpendBaseline: 4100,
+    baseRoas: 5.1,
+    color: "#CC0000",
+    channelFamily: "rmn",
+  },
+  {
     channelId: "criteo-ads",
     channelLabel: "Criteo (Ulta)",
     storeIds: ["ulta"],

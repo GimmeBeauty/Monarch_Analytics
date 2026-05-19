@@ -255,6 +255,13 @@ const MMM_CONFIGS: Record<string, MMMConfig> = {
     haloFactor: 0.04, haloChannels: [],
     rSquared: 0.83, mape: 0.098, pValue: 0.006,
   },
+  "roundel-target": {
+    gamma: 1.8, saturationRatio: 0.81,
+    incrementalityFactor: 0.77,
+    adstockDecay: 0.19, peakLagDays: 2,
+    haloFactor: 0.04, haloChannels: [],
+    rSquared: 0.83, mape: 0.098, pValue: 0.006,
+  },
   "criteo": {
     gamma: 2.0, saturationRatio: 1.12,
     incrementalityFactor: 0.56,

@@ -47,6 +47,8 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedPin, setSelectedPin]     = useState<string | null>(null);
   const [tooltip, setTooltip]             = useState<{ x: number; y: number } | null>(null);
+  const [sortCol, setSortCol] = useState<'name' | 'sales' | 'units'>('sales');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const revenueByCode = useMemo(() => {
     const m: Record<string, StateRevenue> = {};
@@ -63,7 +65,16 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
     return m;
   }, [storeLocations]);
 
-  const selectedStateLocs = selectedState ? (locsByState[selectedState] ?? []) : [];
+  const selectedStateLocs = useMemo(() => {
+    const base = selectedState ? (locsByState[selectedState] ?? []) : [];
+    return [...base].sort((a, b) => {
+      let cmp = 0;
+      if (sortCol === 'name') cmp = a.storeName.localeCompare(b.storeName);
+      else if (sortCol === 'sales') cmp = a.sales - b.sales;
+      else cmp = (a.units ?? 0) - (b.units ?? 0);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [selectedState, locsByState, sortCol, sortDir]);
   const selectedStateData = selectedState ? revenueByCode[selectedState] : null;
 
   const handleStateClick = useCallback((code: string) => {
@@ -294,7 +305,38 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
               <table className="w-full min-w-[680px]">
                 <thead>
                   <tr className="border-b border-[#FFBC80]/15 bg-[#FFBC80]/5">
-                    {["Store Location","Store Name","Sales","Units","Address","City","State","Zip Code"].map(h => (
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                      Store Location
+                    </th>
+                    {(["Store Name", "Sales", "Units"] as const).map(col => {
+                      const key = col === "Store Name" ? "name" : col.toLowerCase() as 'sales' | 'units';
+                      const active = sortCol === key;
+                      return (
+                        <th
+                          key={col}
+                          onClick={() => {
+                            if (active) {
+                              setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setSortCol(key);
+                              setSortDir(col === 'Store Name' ? 'asc' : 'desc');
+                            }
+                          }}
+                          className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer select-none group"
+                        >
+                          <span className={active ? "text-[#FFBC80]" : "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 group-hover:text-[#3A3A3A]/70 dark:group-hover:text-[#FFF9F2]/60"}>
+                            {col}
+                          </span>
+                          <span className="ml-1 inline-block">
+                            {active
+                              ? (sortDir === 'asc' ? '↑' : '↓')
+                              : <span className="opacity-0 group-hover:opacity-40">↕</span>
+                            }
+                          </span>
+                        </th>
+                      );
+                    })}
+                    {["Address","City","State","Zip Code"].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>

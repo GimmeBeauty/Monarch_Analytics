@@ -110,7 +110,8 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   meta_ads:      { channelId: "meta-ads",      channelLabel: "Meta Ads",      color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
   google_ads:    { channelId: "google-ads",    channelLabel: "Google Ads",    color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
-  criteo_ads:    { channelId: "criteo-ads",    channelLabel: "Criteo (Ulta)", color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
+  criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
+  roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
@@ -1781,6 +1782,50 @@ router.get("/netsuite/sync-status", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/netsuite/sync-status] Error:", e);
     res.status(500).json({ error: "Failed to query NetSuite sync status", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/roundel/summary ───────────────────────────────────────────
+
+router.get("/roundel/summary", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        raw_data:"Week"::STRING                                                               AS week,
+        TRY_CAST(REGEXP_REPLACE(raw_data:"Actualized Vendor Spend"::STRING, '[$,]', '') AS FLOAT) AS spend,
+        TRY_CAST(REGEXP_REPLACE(raw_data:"Attributed Total Sales"::STRING,  '[$,]', '') AS FLOAT) AS revenue,
+        TRY_CAST(REGEXP_REPLACE(raw_data:"ROAS"::STRING,                    '[$,]', '') AS FLOAT) AS roas,
+        TRY_CAST(REGEXP_REPLACE(raw_data:"Clicks"::STRING,                  '[$,]', '') AS FLOAT) AS clicks,
+        TRY_CAST(REGEXP_REPLACE(raw_data:"Impressions"::STRING,             '[$,]', '') AS FLOAT) AS impressions
+      FROM ${DB_NAME}.ROUNDEL.ROUNDEL_ADS_RAW
+      WHERE report_type = 'Weekly Performance'
+        AND TRY_CAST(SPLIT_PART(raw_data:"Week"::STRING, ' to ', 1) AS DATE) BETWEEN '${start}' AND '${end}'
+      ORDER BY week ASC
+    `);
+
+    let totalSpend = 0, totalRevenue = 0, totalClicks = 0, totalImpressions = 0;
+    const weeks = rows.map(row => {
+      const spend       = Math.round(Number(row["SPEND"]       ?? row["spend"]       ?? 0) * 100) / 100;
+      const revenue     = Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100;
+      const roas        = Math.round(Number(row["ROAS"]        ?? row["roas"]        ?? 0) * 100) / 100;
+      const clicks      = Number(row["CLICKS"]      ?? row["clicks"]      ?? 0);
+      const impressions = Number(row["IMPRESSIONS"] ?? row["impressions"] ?? 0);
+      const week        = String(row["WEEK"]        ?? row["week"]        ?? "");
+      totalSpend += spend; totalRevenue += revenue;
+      totalClicks += clicks; totalImpressions += impressions;
+      return { week, spend, revenue, roas, clicks, impressions };
+    });
+
+    const totalRoas = totalSpend > 0 ? Math.round((totalRevenue / totalSpend) * 100) / 100 : 0;
+    res.json({ weeks, totalSpend: Math.round(totalSpend * 100) / 100, totalRevenue: Math.round(totalRevenue * 100) / 100, totalRoas, totalClicks, totalImpressions, isEmpty: weeks.length === 0 });
+  } catch (e) {
+    console.error("[data/roundel/summary] Error:", e);
+    res.status(500).json({ error: "Failed to query Roundel summary data", detail: String(e) });
   }
 });
 
