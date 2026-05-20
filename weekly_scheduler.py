@@ -31,7 +31,17 @@ def run_roundel():
     except Exception as e:
         print(f"  ❌ Roundel error: {e}")
 
+def run_circana():
+    print("\n[3/3] Circana POS data...")
+    try:
+        from ingestion.sources.circana_pos import run_circana_ingestion
+        run_circana_ingestion()
+        print("  ✅ Circana done")
+    except Exception as e:
+        print(f"  ❌ Circana error: {e}")
+
 if __name__ == "__main__":
     run_netsuite()
     run_roundel()
+    run_circana()
     print("\n✅ Weekly scheduler complete!")
