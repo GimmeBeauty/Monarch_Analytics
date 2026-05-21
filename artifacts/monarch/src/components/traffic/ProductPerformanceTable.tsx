@@ -97,6 +97,9 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
   const filtered = useMemo(() => {
     let rows = [...products];
 
+    // Drop products with no valid SKU/UPC
+    rows = rows.filter(p => { const s = (p.sku ?? "").trim(); return s !== "" && s !== "-"; });
+
     if (filters.search) {
       const q = filters.search.toLowerCase();
       rows = rows.filter(r => r.productName.toLowerCase().includes(q) || r.storeName.toLowerCase().includes(q));

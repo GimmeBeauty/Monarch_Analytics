@@ -119,6 +119,7 @@ const NS_STORE_ID: Record<string, string> = {
   "Kroger":            "kroger",
   "Publix":            "publix",
   "Walgreens":         "walgreens",
+  "Meijer":            "meijer",
   "Shopify":           "shopify",
   "Amazon (Pattern)":  "amazon",
 };

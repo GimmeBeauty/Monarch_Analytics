@@ -46,7 +46,7 @@ function TopStores({ stores }: { stores: StoreBreakdown[] }) {
       </div>
 
       <div className="space-y-3">
-        {stores.slice(0, 7).map((store) => (
+        {stores.map((store) => (
           <div key={store.storeId} className="flex items-center gap-3">
             {/* Color dot */}
             <div
@@ -239,7 +239,7 @@ function ContributionBreakdown({
 
         {/* Legend */}
         <div className="flex-1 min-w-0 space-y-2">
-          {slices.slice(0, 6).map((slice, i) => (
+          {slices.map((slice, i) => (
             <div key={i} className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: slice.color }} />
               <span className="text-xs text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 truncate flex-1 min-w-0">

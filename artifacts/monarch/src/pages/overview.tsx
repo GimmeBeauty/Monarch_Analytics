@@ -22,6 +22,7 @@ const NS_STORE_ID: Record<string, string> = {
   "Kroger":            "kroger",
   "Publix":            "publix",
   "Walgreens":         "walgreens",
+  "Meijer":            "meijer",
   "Shopify":           "shopify",
   "Amazon (Pattern)":  "amazon",
 };
@@ -69,6 +70,10 @@ function fmtCurrency(v: number): string {
 
 function fmtCurrencyFull(v: number): string {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+function fmtCurrencyWhole(v: number): string {
+  return `$${Math.round(v).toLocaleString("en-US")}`;
 }
 
 function fmtRatio(v: number): string { return `${v.toFixed(2)}x`; }
@@ -176,8 +181,8 @@ export default function Overview() {
       : displayUnits > 0 ? displayRevenue / displayUnits : (apiData.asp ?? 0);
 
     const kpis: KPIMetric[] = [
-      { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrency(displayRevenue),   change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
-      { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrency(apiData.spend),    change: 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
+      { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrencyWhole(displayRevenue),   change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
+      { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrencyWhole(apiData.spend),    change: 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
       { id: "mer",     label: "MER",               value: wsMer,            formatted: fmtRatio(wsMer),               change: 0, positive: true,  format: "ratio",    description: isWholesale ? "Wholesale Revenue ÷ Ad Spend" : "Marketing Efficiency Ratio — Total Revenue ÷ Total Ad Spend" },
       { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
       { id: "units",   label: "Units",              value: displayUnits,     formatted: displayUnits.toLocaleString(), change: 0, positive: true,  format: "number",   description: "Total units sold across all selected stores" },
@@ -214,11 +219,16 @@ export default function Overview() {
     const circanaStoreEntries = !wsActive
       ? (circanaData ?? []).map(s => ({ storeId: s.storeId, revenue: s.revenue }))
       : [];
+    const wsStoreIds = new Set(wsStores.map(s => NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-")));
     const rawStoreBreakdown = wsActive
-      ? wsStores.map(s => ({
-          storeId: NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-"),
-          revenue: s.revenue,
-        }))
+      ? [
+          ...wsStores.map(s => ({
+            storeId: NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-"),
+            revenue: s.revenue,
+          })),
+          // Shopify DTC is not sell-in so it won't appear in NetSuite; merge it from the MSRP data source.
+          ...apiData.storeBreakdown.filter(s => s.storeId === "shopify" && !wsStoreIds.has("shopify")),
+        ]
       : [...apiData.storeBreakdown, ...circanaStoreEntries];
     const totalRevenue = rawStoreBreakdown.reduce((s, x) => s + x.revenue, 0);
     const storeBreakdown: StoreBreakdown[] = rawStoreBreakdown
@@ -254,7 +264,7 @@ export default function Overview() {
       .sort((a, b) => b.spend - a.spend);
 
     // ── Contribution Slices ───────────────────────────────────────────────────
-    const contributionByStore: ContributionSlice[] = storeBreakdown.slice(0, 10).map(s => ({
+    const contributionByStore: ContributionSlice[] = storeBreakdown.map(s => ({
       name: s.label, value: s.contribution, color: s.color,
     }));
 

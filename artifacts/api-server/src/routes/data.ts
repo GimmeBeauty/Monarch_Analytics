@@ -611,7 +611,7 @@ router.get("/overview", authenticate, async (req, res) => {
     const walmartSummaryQuery = (isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
           SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
-          FROM ${DB_NAME}.RETAIL.WALMART_STATE_DAILY
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
           WHERE week_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
