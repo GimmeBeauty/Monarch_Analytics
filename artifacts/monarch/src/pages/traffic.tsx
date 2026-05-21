@@ -10,6 +10,7 @@ import USMap from "@/components/traffic/USMap";
 import { API_BASE } from "@/lib/apiBase";
 import type { TrafficKPI, ProductRow, StateRevenue, StoreLocation } from "@/lib/trafficData";
 import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
+import { storeById } from "@/lib/storeData";
 
 // ─── State Name Lookup ────────────────────────────────────────────────────────
 
@@ -73,6 +74,32 @@ interface WalmartStoresApiResponse {
   isEmpty: boolean;
 }
 
+interface CircanaSummaryItem {
+  retailer: string;
+  storeId: string;
+  revenue: number;
+  units: number;
+  avgPrice: number;
+  storeCount: number;
+}
+
+interface CircanaProductsApiResponse {
+  products: Array<{
+    product: string;
+    upc: string;
+    category: string;
+    subcategory: string;
+    brand: string;
+    retailer: string;
+    storeId: string;
+    revenue: number;
+    units: number;
+    avgPrice: number;
+    storeCount: number;
+  }>;
+  isEmpty: boolean;
+}
+
 function fmtCurrency(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
@@ -115,6 +142,8 @@ export default function Traffic() {
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
   const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
   const isWalmartSelected = selectedIds.length === 0 || selectedIds.includes("walmart");
+  const CIRCANA_STORE_IDS = ["meijer", "cvs", "walgreens", "publix"];
+  const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly, "| isWalmartSelected:", isWalmartSelected);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
@@ -246,6 +275,44 @@ export default function Traffic() {
     enabled: isWalmartSelected,
   });
 
+  const { data: circanaSummaryData, isLoading: isCircanaSummaryLoading } = useQuery<CircanaSummaryItem[]>({
+    queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryFn: async () => {
+      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/circana/summary?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<CircanaSummaryItem[]>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: includesCircana,
+  });
+
+  const { data: circanaProductData, isLoading: isCircanaProductLoading } = useQuery<CircanaProductsApiResponse>({
+    queryKey: ["circana-products", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryFn: async () => {
+      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/circana/products?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<CircanaProductsApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: includesCircana,
+  });
+
   const { data: wholesaleData, isLoading: isWholesaleLoading } = useQuery<NetSuiteSalesResponse>({
     queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
@@ -264,7 +331,7 @@ export default function Traffic() {
     enabled: isWholesale,
   });
 
-  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && (isWalmartLoading || isWalmartGeoLoading)) || (isWholesale && isWholesaleLoading);
+  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && (isWalmartLoading || isWalmartGeoLoading)) || (isWholesale && isWholesaleLoading) || (includesCircana && (isCircanaSummaryLoading || isCircanaProductLoading));
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
@@ -285,10 +352,14 @@ export default function Traffic() {
     console.log("[Traffic ws] wsActive:", wsActive, "| wsStores:", wsStores.length, "| wsRevenue:", wsRevenue, "| wsUnits:", wsUnits);
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
-    const displayRevenue = wsRevenue ?? apiData.revenue ?? 0;
-    const displayUnits   = wsUnits   ?? apiData.units   ?? 0;
+    const circanaRevenue = !wsActive ? (circanaSummaryData ?? []).reduce((sum, s) => sum + s.revenue, 0) : 0;
+    const circanaUnits   = !wsActive ? (circanaSummaryData ?? []).reduce((sum, s) => sum + s.units,   0) : 0;
+    const displayRevenue = (wsRevenue ?? apiData.revenue ?? 0) + circanaRevenue;
+    const displayUnits   = (wsUnits   ?? apiData.units   ?? 0) + circanaUnits;
 
-    const wsAsp = wsRevenue != null && displayUnits > 0 ? wsRevenue / displayUnits : (apiData.asp ?? 0);
+    const wsAsp = wsRevenue != null && displayUnits > 0
+      ? wsRevenue / displayUnits
+      : displayUnits > 0 ? displayRevenue / displayUnits : (apiData.asp ?? 0);
 
     const kpis: TrafficKPI[] = [
       { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
@@ -403,7 +474,35 @@ export default function Traffic() {
           }))
         : [];
 
-      products = [...shopifyRows, ...targetRows, ...walmartRows]
+      const circanaRows = includesCircana
+        ? (circanaProductData?.products ?? [])
+            .filter(p => selectedIds.length === 0 || selectedIds.includes(p.storeId))
+            .map((p, i) => {
+              const store = storeById(p.storeId);
+              return {
+                id:             `circana-${p.storeId}-${p.upc || i}-${p.product}`,
+                productName:    p.product,
+                sku:            p.upc ?? "",
+                storeId:        p.storeId,
+                storeName:      store?.label ?? p.retailer,
+                storeColor:     store?.color ?? "#9CA3AF",
+                sales:          p.revenue,
+                formattedSales: fmtCurrency(p.revenue),
+                salesPrior:     0,
+                units:          p.units,
+                unitsPrior:     0,
+                avgSellPrice:   p.units > 0 ? p.revenue / p.units : 0,
+                changeInSales:  0,
+                conversionRate: 0,
+                pctSalesOnline: 0,
+                pageViews:      0,
+                storeCount:     p.storeCount,
+                isTop10:        false,
+              };
+            })
+        : [];
+
+      products = [...shopifyRows, ...targetRows, ...walmartRows, ...circanaRows]
         .sort((a, b) => b.sales - a.sales)
         .map((p, i) => ({ ...p, isTop10: i < 10 }));
     }
@@ -500,7 +599,7 @@ export default function Traffic() {
     console.log("[Traffic] storeLocations assembled:", storeLocations.length, "total |", targetLocs.length, "Target |", walmartLocs.length, "Walmart");
 
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 

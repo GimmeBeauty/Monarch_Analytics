@@ -50,7 +50,7 @@ export const STORES: StoreDefinition[] = [
     id: "kroger",
     label: "Kroger",
     group: "retail",
-    weight: 0.08,
+    weight: 0.05,
     color: "#005DAA",
     integrationIds: [],
   },
@@ -84,6 +84,14 @@ export const STORES: StoreDefinition[] = [
     group: "retail",
     weight: 0.03,
     color: "#E31837",
+    integrationIds: [],
+  },
+  {
+    id: "meijer",
+    label: "Meijer",
+    group: "retail",
+    weight: 0.03,
+    color: "#009A44",
     integrationIds: [],
   },
 ];

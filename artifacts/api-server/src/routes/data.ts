@@ -1829,4 +1829,158 @@ router.get("/roundel/summary", authenticate, async (req, res) => {
   }
 });
 
+// ─── Circana Helpers ──────────────────────────────────────────────────────────
+
+const CIRCANA_RETAILER_TO_STORE: Record<string, string> = {
+  "Meijer Corp-RMA - Food":    "meijer",
+  "Publix Corp-RMA - Food":    "publix",
+  "CVS Corp Total-RMA - Drug": "cvs",
+  "Walgreens Corp-RMA - Drug": "walgreens",
+};
+
+function circanaTimePeriod(start: string, end: string): string {
+  const s = new Date(start), e = new Date(end);
+  const days = Math.round((e.getTime() - s.getTime()) / 86_400_000);
+  if (days <= 35)  return "Latest 4 Week Pd Ending 04-19-26";
+  if (days <= 100) return "Latest 13 Week Pd Ending 04-19-26";
+  if (days <= 190) return "Latest 26 Week Pd Ending 04-19-26";
+  if (s.getFullYear() <= 2025) return "Calendar Year 2025 Ending 12-28-25";
+  if (s.getFullYear() === 2026) return "Building Calendar Year 2026 Ending 05-10-26";
+  return "Latest 52 Week Pd Ending 04-19-26";
+}
+
+// ─── GET /api/data/circana/summary ────────────────────────────────────────────
+
+router.get("/circana/summary", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const storeIds = parseStoreIds(storeIdsRaw);
+  const timePeriod = circanaTimePeriod(start, end);
+
+  // Determine which retailers to include based on storeIds filter
+  const circanaStoreIds = new Set(["meijer", "publix", "cvs", "walgreens"]);
+  const activeStoreIds = storeIds.length > 0
+    ? storeIds.filter(id => circanaStoreIds.has(id))
+    : [...circanaStoreIds];
+
+  if (activeStoreIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const retailerFilter = Object.entries(CIRCANA_RETAILER_TO_STORE)
+    .filter(([, sid]) => activeStoreIds.includes(sid))
+    .map(([retailer]) => `'${retailer.replace(/'/g, "\\'")}'`)
+    .join(", ");
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        retailer,
+        SUM(dollar_sales)    AS revenue,
+        SUM(unit_sales)      AS units,
+        AVG(price_per_unit)  AS avg_price,
+        MAX(stores_selling)  AS store_count
+      FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
+      WHERE time_period = '${timePeriod}'
+        AND retailer IN (${retailerFilter})
+      GROUP BY retailer
+      ORDER BY revenue DESC
+    `);
+
+    const result = rows.map(row => {
+      const retailer   = String(row["RETAILER"]    ?? row["retailer"]    ?? "");
+      const revenue    = Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100;
+      const units      = Number(row["UNITS"]      ?? row["units"]      ?? 0);
+      const avgPrice   = Math.round(Number(row["AVG_PRICE"]  ?? row["avg_price"]  ?? 0) * 100) / 100;
+      const storeCount = Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0);
+      const storeId    = CIRCANA_RETAILER_TO_STORE[retailer] ?? retailer.toLowerCase().replace(/\s+/g, "-");
+      return { retailer, storeId, revenue, units, avgPrice, storeCount };
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error("[data/circana/summary] Error:", e);
+    res.status(500).json({ error: "Failed to query Circana summary data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/circana/products ───────────────────────────────────────────
+
+router.get("/circana/products", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const storeIds = parseStoreIds(storeIdsRaw);
+  const timePeriod = circanaTimePeriod(start, end);
+
+  const circanaStoreIds = new Set(["meijer", "publix", "cvs", "walgreens"]);
+  const activeStoreIds = storeIds.length > 0
+    ? storeIds.filter(id => circanaStoreIds.has(id))
+    : [...circanaStoreIds];
+
+  if (activeStoreIds.length === 0) {
+    res.json({ products: [], isEmpty: true });
+    return;
+  }
+
+  const retailerFilter = Object.entries(CIRCANA_RETAILER_TO_STORE)
+    .filter(([, sid]) => activeStoreIds.includes(sid))
+    .map(([retailer]) => `'${retailer.replace(/'/g, "\\'")}'`)
+    .join(", ");
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        product,
+        upc,
+        category,
+        subcategory,
+        brand,
+        retailer,
+        SUM(dollar_sales)    AS revenue,
+        SUM(unit_sales)      AS units,
+        AVG(price_per_unit)  AS avg_price,
+        MAX(stores_selling)  AS store_count
+      FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
+      WHERE time_period = '${timePeriod}'
+        AND retailer IN (${retailerFilter})
+      GROUP BY product, upc, category, subcategory, brand, retailer
+      ORDER BY revenue DESC
+    `);
+
+    const products = rows.map(row => {
+      const retailer   = String(row["RETAILER"]    ?? row["retailer"]    ?? "");
+      const revenue    = Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100;
+      const units      = Number(row["UNITS"]      ?? row["units"]      ?? 0);
+      const avgPrice   = Math.round(Number(row["AVG_PRICE"]  ?? row["avg_price"]  ?? 0) * 100) / 100;
+      const storeCount = Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0);
+      const storeId    = CIRCANA_RETAILER_TO_STORE[retailer] ?? retailer.toLowerCase().replace(/\s+/g, "-");
+      return {
+        product:     String(row["PRODUCT"]     ?? row["product"]     ?? ""),
+        upc:         String(row["UPC"]         ?? row["upc"]         ?? ""),
+        category:    String(row["CATEGORY"]    ?? row["category"]    ?? ""),
+        subcategory: String(row["SUBCATEGORY"] ?? row["subcategory"] ?? ""),
+        brand:       String(row["BRAND"]       ?? row["brand"]       ?? ""),
+        retailer,
+        storeId,
+        revenue,
+        units,
+        avgPrice,
+        storeCount,
+      };
+    });
+
+    res.json({ products, isEmpty: products.length === 0 });
+  } catch (e) {
+    console.error("[data/circana/products] Error:", e);
+    res.status(500).json({ error: "Failed to query Circana products data", detail: String(e) });
+  }
+});
+
 export default router;
