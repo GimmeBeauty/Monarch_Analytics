@@ -230,6 +230,17 @@
     linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%);
 }
 
+/* ─── Monarch butterfly throbber ─────────────────────────────────────────── */
+@keyframes monarch-flap {
+  0%, 100% { transform: scaleX(1); }
+  50%       { transform: scaleX(0.12); }
+}
+
+@keyframes monarch-bob {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
 @layer utilities {
   .gradient-border {
     position: relative;

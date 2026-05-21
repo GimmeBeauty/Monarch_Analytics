@@ -11,6 +11,7 @@ import { ExportsProvider } from "@/context/ExportsContext";
 import { StoreFilterProvider } from "@/context/StoreFilterContext";
 import { PricingModeProvider } from "@/context/PricingModeContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { Throbber } from "@/components/ui/Throbber";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/overview";
 import Traffic from "@/pages/traffic";
@@ -63,13 +64,7 @@ function PrivateRoute({ component: Component }: { component: React.ComponentType
 function AuthLoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#FFF9F2] dark:bg-[#120d06]">
-      <div className="flex flex-col items-center gap-3">
-        <div
-          className="w-9 h-9 rounded-xl"
-          style={{ background: "linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)" }}
-        />
-        <div className="w-5 h-5 border-2 border-[#FFBC80]/40 border-t-[#FFBC80] rounded-full animate-spin" />
-      </div>
+      <Throbber size={96} />
     </div>
   );
 }
