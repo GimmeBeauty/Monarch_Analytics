@@ -969,8 +969,8 @@ router.get("/traffic", authenticate, async (req, res) => {
   try {
     const targetTrafficSummaryQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue, SUM(units_sold) AS target_units
-          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          SELECT SUM(sale_amount) AS target_revenue, SUM(sale_quantity) AS target_units
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
@@ -986,8 +986,8 @@ router.get("/traffic", authenticate, async (req, res) => {
     const priorSummaryQuery = hasPrior
       ? (isTargetOnly
         ? querySnowflake(`
-            SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders, SUM(units_sold) AS total_units
-            FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+            SELECT SUM(sale_amount) AS total_revenue, SUM(sale_quantity) AS total_orders, SUM(sale_quantity) AS total_units
+            FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
             WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
           `)
         : querySnowflake(`
@@ -999,8 +999,8 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const priorTrafficTargetQuery = (hasPrior && includesTarget && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue
-          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          SELECT SUM(sale_amount) AS target_revenue
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
       : Promise.resolve([]);
@@ -1025,8 +1025,8 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const summaryQuery = isTargetOnly
       ? querySnowflake(`
-          SELECT SUM(revenue) AS total_revenue, SUM(units_sold) AS total_orders, SUM(units_sold) AS total_units
-          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          SELECT SUM(sale_amount) AS total_revenue, SUM(sale_quantity) AS total_orders, SUM(sale_quantity) AS total_units
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
       : querySnowflake(`

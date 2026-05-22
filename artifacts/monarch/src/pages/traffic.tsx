@@ -364,7 +364,7 @@ export default function Traffic() {
 
     const kpis: TrafficKPI[] = [
       { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
-      { id: "units",    label: "Units",    value: displayUnits, formatted: displayUnits.toLocaleString(), change: 0, positive: true, description: "Total units sold across all selected stores" },
+      { id: "units",    label: "Units",    value: displayUnits, formatted: Math.round(displayUnits).toLocaleString(), change: 0, positive: true, description: "Total units sold across all selected stores" },
       { id: "asp",      label: "ASP",      value: wsAsp,        formatted: fmtCurrencyFull(wsAsp),       change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
       { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: apiData.sessionsChange ?? 0, positive: true, description: "Total GA4 sessions in period" },
       { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange     ?? 0, positive: true, description: "Orders ÷ Sessions" },

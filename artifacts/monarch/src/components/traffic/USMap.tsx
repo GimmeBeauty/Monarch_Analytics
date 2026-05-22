@@ -267,7 +267,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                       {fmtRevenue(sr.revenue)}
                     </td>
                     <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
-                      {sr.units.toLocaleString()}
+                      {Math.round(sr.units).toLocaleString()}
                     </td>
                     <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
                       {sr.storeCount > 0 ? sr.storeCount : "—"}
@@ -380,7 +380,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                           {loc.formattedSales}
                         </td>
                         <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
-                          {(loc.units ?? 0).toLocaleString()}
+                          {Math.round(loc.units ?? 0).toLocaleString()}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
                           {loc.address}
