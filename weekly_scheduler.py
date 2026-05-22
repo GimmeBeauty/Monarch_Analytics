@@ -40,8 +40,20 @@ def run_circana():
     except Exception as e:
         print(f"  ❌ Circana error: {e}")
 
+def run_walmart_s3():
+    print("\n[4/4] Walmart S3 data...")
+    try:
+        from ingestion.sources.walmart_s3 import run_walmart_s3_ingestion
+        from datetime import date, timedelta
+        after_date = (date.today() - timedelta(days=35)).isoformat()
+        run_walmart_s3_ingestion(after_date=after_date)
+        print("  ✅ Walmart S3 done")
+    except Exception as e:
+        print(f"  ❌ Walmart S3 error: {e}")
+
 if __name__ == "__main__":
     run_netsuite()
     run_roundel()
     run_circana()
+    run_walmart_s3()
     print("\n✅ Weekly scheduler complete!")
