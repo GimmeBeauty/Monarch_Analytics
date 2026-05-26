@@ -7,6 +7,7 @@ import { usePricingMode } from "@/context/PricingModeContext";
 import TrafficKPISection from "@/components/traffic/TrafficKPISection";
 import ProductPerformanceTable from "@/components/traffic/ProductPerformanceTable";
 import USMap from "@/components/traffic/USMap";
+import PerformanceOverTimeChart from "@/components/traffic/PerformanceOverTimeChart";
 import { API_BASE } from "@/lib/apiBase";
 import type { TrafficKPI, ProductRow, StateRevenue, StoreLocation } from "@/lib/trafficData";
 import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
@@ -638,6 +639,11 @@ export default function Traffic() {
         {data && (
           <>
             <TrafficKPISection kpis={data.kpis} />
+            <PerformanceOverTimeChart
+              selectedStoreIds={selectedIds}
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
+            />
             {!effectiveIsLoading && (
               <ProductPerformanceTable
                 products={data.products}

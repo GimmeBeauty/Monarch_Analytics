@@ -569,11 +569,11 @@ router.get("/overview", authenticate, async (req, res) => {
     const aggregateQuery = isTargetOnly
       ? querySnowflake(`
           SELECT
-            SUM(revenue)    AS total_revenue,
-            0               AS total_spend,
-            SUM(units_sold) AS total_units,
-            SUM(units_sold) AS total_orders
-          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+            SUM(sale_amount)   AS total_revenue,
+            0                  AS total_spend,
+            SUM(sale_quantity) AS total_units,
+            SUM(sale_quantity) AS total_orders
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
       : querySnowflake(`
@@ -644,8 +644,8 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const priorTargetQuery = (hasPrior && includesTarget)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS target_revenue, SUM(units_sold) AS target_units
-          FROM ${DB_NAME}.RETAIL.TARGET_STORE_DAILY
+          SELECT SUM(sale_amount) AS target_revenue, SUM(sale_quantity) AS target_units
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
       : Promise.resolve([]);
@@ -1980,6 +1980,231 @@ router.get("/circana/products", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/circana/products] Error:", e);
     res.status(500).json({ error: "Failed to query Circana products data", detail: String(e) });
+  }
+});
+
+// ─── GET /api/data/traffic/trends ────────────────────────────────────────────
+
+const TREND_STORE_COLORS: Record<string, string> = {
+  shopify:   "#95BF47",
+  amazon:    "#FF9900",
+  walmart:   "#0071CE",
+  target:    "#CC0000",
+  kroger:    "#005DAA",
+  cvs:       "#CC0000",
+  publix:    "#007A3D",
+  ulta:      "#B5298F",
+  walgreens: "#E31837",
+  meijer:    "#009A44",
+};
+
+const TREND_STORE_LABELS: Record<string, string> = {
+  shopify:   "Shopify",
+  amazon:    "Amazon (Pattern)",
+  walmart:   "Walmart",
+  target:    "Target",
+  kroger:    "Kroger",
+  cvs:       "CVS",
+  publix:    "Publix",
+  ulta:      "Ulta Beauty",
+  walgreens: "Walgreens",
+  meijer:    "Meijer",
+};
+
+const NS_STORE_NAME_FOR_TRENDS: Record<string, string> = {
+  ulta:   "Ulta Beauty",
+  kroger: "Kroger",
+  amazon: "Amazon (Pattern)",
+};
+
+const NS_STORE_ID_FROM_NAME: Record<string, string> = {
+  "Ulta Beauty":       "ulta",
+  "Kroger":            "kroger",
+  "Amazon (Pattern)":  "amazon",
+};
+
+function circanaEndDate(period: string): string {
+  const m = period.match(/Ending (\d{2})-(\d{2})-(\d{2})$/);
+  if (!m) return "2026-01-01";
+  return `20${m[3]}-${m[1]}-${m[2]}`;
+}
+
+router.get("/traffic/trends", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const storeIds = parseStoreIds(storeIdsRaw);
+  const allStores = storeIds.length === 0;
+  const has = (id: string) => allStores || storeIds.includes(id);
+
+  const CIRCANA_IDS = ["cvs", "walgreens", "publix", "meijer"] as const;
+  const NETSUITE_IDS = ["ulta", "kroger", "amazon"] as const;
+  const activeCircana = CIRCANA_IDS.filter(id => has(id));
+  const activeNetsuite = NETSUITE_IDS.filter(id => has(id));
+
+  type TrendPoint = { date: string; revenue: number; units: number };
+  type StoreTrend = { storeId: string; storeName: string; color: string; data: TrendPoint[] };
+  const results: StoreTrend[] = [];
+
+  try {
+    const queries: Promise<void>[] = [];
+
+    if (has("shopify")) {
+      queries.push(
+        querySnowflake(`
+          SELECT summary_date, SUM(revenue) AS revenue, SUM(units_sold) AS units
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_PRODUCT_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+          GROUP BY summary_date
+          ORDER BY summary_date ASC
+        `).then(rows => {
+          results.push({
+            storeId: "shopify",
+            storeName: "Shopify",
+            color: TREND_STORE_COLORS["shopify"],
+            data: rows.map(r => ({
+              date:    toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+              revenue: Math.round(Number(r["REVENUE"]  ?? r["revenue"]  ?? 0) * 100) / 100,
+              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
+            })),
+          });
+        }),
+      );
+    }
+
+    if (has("target")) {
+      queries.push(
+        querySnowflake(`
+          SELECT summary_date, SUM(sale_amount) AS revenue, SUM(sale_quantity) AS units
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+          GROUP BY summary_date
+          ORDER BY summary_date ASC
+        `).then(rows => {
+          results.push({
+            storeId: "target",
+            storeName: "Target",
+            color: TREND_STORE_COLORS["target"],
+            data: rows.map(r => ({
+              date:    toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+              revenue: Math.round(Number(r["REVENUE"]  ?? r["revenue"]  ?? 0) * 100) / 100,
+              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
+            })),
+          });
+        }),
+      );
+    }
+
+    if (has("walmart")) {
+      queries.push(
+        querySnowflake(`
+          SELECT week_date, revenue, units_sold AS units
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE week_date BETWEEN '${start}' AND '${end}'
+          ORDER BY week_date ASC
+        `).then(rows => {
+          results.push({
+            storeId: "walmart",
+            storeName: "Walmart",
+            color: TREND_STORE_COLORS["walmart"],
+            data: rows.map(r => ({
+              date:    toDateStr(r["WEEK_DATE"] ?? r["week_date"]),
+              revenue: Math.round(Number(r["REVENUE"] ?? r["revenue"] ?? 0) * 100) / 100,
+              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
+            })),
+          });
+        }),
+      );
+    }
+
+    if (activeCircana.length > 0) {
+      const retailerFilter = Object.entries(CIRCANA_RETAILER_TO_STORE)
+        .filter(([, sid]) => activeCircana.includes(sid as typeof CIRCANA_IDS[number]))
+        .map(([retailer]) => `'${retailer.replace(/'/g, "\\'")}'`)
+        .join(", ");
+      queries.push(
+        querySnowflake(`
+          SELECT time_period, retailer, SUM(dollar_sales) AS revenue, SUM(unit_sales) AS units
+          FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
+          WHERE retailer IN (${retailerFilter})
+          GROUP BY time_period, retailer
+          ORDER BY time_period ASC
+        `).then(rows => {
+          const byStore: Record<string, TrendPoint[]> = {};
+          for (const row of rows) {
+            const retailer = String(row["RETAILER"] ?? row["retailer"] ?? "");
+            const sid = CIRCANA_RETAILER_TO_STORE[retailer] ?? retailer.toLowerCase().replace(/\s+/g, "-");
+            const period = String(row["TIME_PERIOD"] ?? row["time_period"] ?? "");
+            const date = circanaEndDate(period);
+            if (!byStore[sid]) byStore[sid] = [];
+            byStore[sid].push({
+              date,
+              revenue: Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+              units:   Number(row["UNITS"] ?? row["units"] ?? 0),
+            });
+          }
+          for (const sid of activeCircana) {
+            results.push({
+              storeId:   sid,
+              storeName: TREND_STORE_LABELS[sid] ?? sid,
+              color:     TREND_STORE_COLORS[sid] ?? "#888888",
+              data:      (byStore[sid] ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+            });
+          }
+        }),
+      );
+    }
+
+    if (activeNetsuite.length > 0) {
+      const storeNameFilter = activeNetsuite
+        .map(sid => `'${NS_STORE_NAME_FOR_TRENDS[sid]}'`)
+        .join(", ");
+      queries.push(
+        querySnowflake(`
+          SELECT
+            DATE_TRUNC('month', TRANDATE) AS month_date,
+            STORE_NAME,
+            SUM(REVENUE) AS revenue,
+            SUM(UNITS)   AS units
+          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+            AND STORE_NAME IN (${storeNameFilter})
+          GROUP BY DATE_TRUNC('month', TRANDATE), STORE_NAME
+          ORDER BY month_date ASC
+        `).then(rows => {
+          const byStore: Record<string, TrendPoint[]> = {};
+          for (const row of rows) {
+            const storeName = String(row["STORE_NAME"] ?? row["store_name"] ?? "");
+            const sid = NS_STORE_ID_FROM_NAME[storeName] ?? storeName.toLowerCase().replace(/\s+/g, "-");
+            if (!activeNetsuite.includes(sid as typeof NETSUITE_IDS[number])) continue;
+            if (!byStore[sid]) byStore[sid] = [];
+            const raw = row["MONTH_DATE"] ?? row["month_date"] ?? "";
+            const date = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw).slice(0, 10);
+            byStore[sid].push({
+              date,
+              revenue: Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+              units:   Number(row["UNITS"] ?? row["units"] ?? 0),
+            });
+          }
+          for (const sid of activeNetsuite) {
+            results.push({
+              storeId:   sid,
+              storeName: TREND_STORE_LABELS[sid] ?? sid,
+              color:     TREND_STORE_COLORS[sid] ?? "#888888",
+              data:      byStore[sid] ?? [],
+            });
+          }
+        }),
+      );
+    }
+
+    await Promise.all(queries);
+    res.json(results);
+  } catch (e) {
+    console.error("[data/traffic/trends] Error:", e);
+    res.status(500).json({ error: "Failed to query traffic trends", detail: String(e) });
   }
 });
 
