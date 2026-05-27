@@ -2208,4 +2208,83 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
   }
 });
 
+// ── Notes ────────────────────────────────────────────────────────────────────
+
+router.get("/notes", authenticate, async (req, res) => {
+  try {
+    const start = requireDate(req.query["start"], "start");
+    const end   = requireDate(req.query["end"],   "end");
+    const storeIds = parseStoreIds(req.query["storeIds"]);
+
+    const storeFilter = storeIds.length
+      ? `AND store_id IN (${storeIds.map(s => `'${s.replace(/'/g, "''")}'`).join(",")})`
+      : "";
+
+    const rows = await querySnowflake(`
+      SELECT id, store_id, note_date, title, body, created_by, created_at
+      FROM ${DB_NAME}.COMMERCE.MONARCH_NOTES
+      WHERE note_date BETWEEN '${start}' AND '${end}'
+      ${storeFilter}
+      ORDER BY note_date ASC, created_at ASC
+    `);
+
+    res.json(rows.map(r => ({
+      id:        String(r["ID"]         ?? r["id"]         ?? ""),
+      storeId:   String(r["STORE_ID"]   ?? r["store_id"]   ?? ""),
+      noteDate:  toDateStr(r["NOTE_DATE"]  ?? r["note_date"]  ?? ""),
+      title:     String(r["TITLE"]      ?? r["title"]      ?? ""),
+      body:      String(r["BODY"]       ?? r["body"]       ?? ""),
+      createdBy: String(r["CREATED_BY"] ?? r["created_by"] ?? ""),
+      createdAt: String(r["CREATED_AT"] ?? r["created_at"] ?? ""),
+    })));
+  } catch (e) {
+    console.error("[data/notes GET] Error:", e);
+    res.status(400).json({ error: String(e) });
+  }
+});
+
+router.post("/notes", authenticate, async (req, res) => {
+  try {
+    const { storeId, noteDate, title, body, createdBy } = req.body as Record<string, unknown>;
+    if (!storeId || !noteDate || !title)
+      return res.status(400).json({ error: "storeId, noteDate, and title are required" });
+
+    requireDate(String(noteDate), "noteDate");
+
+    const id          = crypto.randomUUID();
+    const sid         = String(storeId).replace(/'/g, "''");
+    const safeDate    = String(noteDate).replace(/'/g, "''");
+    const safeTitle   = String(title).slice(0, 100).replace(/'/g, "''");
+    const safeBody    = String(body ?? "").slice(0, 1000).replace(/'/g, "''");
+    const safeCreator = String(createdBy ?? "").slice(0, 200).replace(/'/g, "''");
+
+    await querySnowflake(`
+      INSERT INTO ${DB_NAME}.COMMERCE.MONARCH_NOTES
+        (id, store_id, note_date, title, body, created_by, created_at)
+      VALUES
+        ('${id}', '${sid}', '${safeDate}', '${safeTitle}', '${safeBody}', '${safeCreator}', CURRENT_TIMESTAMP())
+    `);
+
+    return res.json({ id, storeId: sid, noteDate: safeDate, title: safeTitle, body: safeBody, createdBy: safeCreator });
+  } catch (e) {
+    console.error("[data/notes POST] Error:", e);
+    return res.status(400).json({ error: String(e) });
+  }
+});
+
+router.delete("/notes/:id", authenticate, async (req, res) => {
+  try {
+    const id = String(req.params["id"] ?? "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      return res.status(400).json({ error: "Invalid note id" });
+
+    await querySnowflake(`DELETE FROM ${DB_NAME}.COMMERCE.MONARCH_NOTES WHERE id = '${id}'`);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("[data/notes DELETE] Error:", e);
+    return res.status(400).json({ error: String(e) });
+  }
+});
+
 export default router;
+
