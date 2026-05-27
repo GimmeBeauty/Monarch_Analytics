@@ -176,7 +176,7 @@ function AddNoteModal({ date: initialDate, startDate, endDate, storeIds, trends,
             <input
               type="date"
               value={selectedDate}
-              min={startDate}
+              min="2025-01-01"
               max={endDate}
               onChange={e => setSelectedDate(e.target.value)}
               className="w-full rounded-lg border border-border bg-background text-foreground text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40"
