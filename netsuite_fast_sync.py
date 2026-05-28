@@ -53,7 +53,7 @@ def bulk_load(cur,rows,store_name,store_type,entity_id,month_start):
 def sync_entity(entity_id,store_name,store_type,conn):
     print(f"\n=== {store_name} ===",flush=True)
     cur=conn.cursor()
-    cur.execute(f"DELETE FROM {TABLE} WHERE STORE_NAME='{store_name}'")
+    cur.execute(f"DELETE FROM {TABLE} WHERE STORE_NAME='{store_name}' AND TRANDATE BETWEEN '{START_DATE}' AND '{END_DATE}'")
     total=0
     for month_start,month_end in month_chunks(START_DATE,END_DATE):
         sql=f"SELECT i.entity,i.trandate,tl.item,inv.itemid AS sku,inv.fullname AS product_name,inv.upccode,SUM(ABS(tl.quantity)) AS units,SUM(tl.creditforeignamount) AS revenue FROM invoice i INNER JOIN TransactionLine tl ON i.id=tl.transaction INNER JOIN InventoryItem inv ON tl.item=inv.id WHERE i.trandate>=TO_DATE('{month_start}','YYYY-MM-DD') AND i.trandate<=TO_DATE('{month_end}','YYYY-MM-DD') AND i.total>0 AND tl.mainline='F' AND tl.taxline='F' AND tl.item IS NOT NULL AND i.entity='{entity_id}' GROUP BY i.entity,i.trandate,tl.item,inv.itemid,inv.fullname,inv.upccode ORDER BY i.trandate DESC"
