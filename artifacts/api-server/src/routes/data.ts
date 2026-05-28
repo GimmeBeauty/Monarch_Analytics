@@ -1417,12 +1417,13 @@ router.get("/target/locations", authenticate, async (req, res) => {
     const rows = await querySnowflake(`
       SELECT
         m.location_id, m.location_name, m.city, m.state, m.zip_code,
-        COALESCE(SUM(d.revenue), 0)    AS revenue,
-        COALESCE(SUM(d.units_sold), 0) AS units_sold
+        COALESCE(SUM(r.raw_data:SALE_AMOUNT::FLOAT), 0)   AS revenue,
+        COALESCE(SUM(r.raw_data:SALE_QUANTITY::FLOAT), 0) AS units_sold
       FROM ${DB_NAME}.RETAIL.TARGET_LOCATION_MASTER m
-      LEFT JOIN ${DB_NAME}.RETAIL.TARGET_STORE_DAILY d
-        ON d.location_id = m.location_id
-        AND d.summary_date BETWEEN '${start}' AND '${end}'
+      LEFT JOIN ${DB_NAME}.RETAIL.TARGET_POS_RAW r
+        ON r.raw_data:LOCATION_ID::STRING = m.location_id
+        AND r.source = 'target_daily_sales'
+        AND r.ingestion_date BETWEEN '${start}' AND '${end}'
       WHERE m.state = '${safeState}'
       GROUP BY m.location_id, m.location_name, m.city, m.state, m.zip_code
       ORDER BY revenue DESC
