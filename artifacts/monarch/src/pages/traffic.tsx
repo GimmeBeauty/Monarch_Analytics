@@ -643,6 +643,7 @@ export default function Traffic() {
               selectedStoreIds={selectedIds}
               startDate={dateRange.startDate}
               endDate={dateRange.endDate}
+              isWholesale={isWholesale}
             />
             {!effectiveIsLoading && (
               <ProductPerformanceTable

@@ -2,8 +2,9 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -15,7 +16,7 @@ import {
 import { API_BASE } from "@/lib/apiBase";
 import { useAuth } from "@/context/AuthContext";
 
-type Metric = "revenue" | "units" | "both";
+type Metric = "revenue" | "volume" | "efficiency";
 
 interface TrendPoint {
   date: string;
@@ -44,6 +45,7 @@ interface Props {
   selectedStoreIds: string[];
   startDate: string;
   endDate: string;
+  isWholesale?: boolean;
 }
 
 function formatCurrency(v: number) {
@@ -56,6 +58,10 @@ function formatUnits(v: number) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
   return String(Math.round(v));
+}
+
+function formatASP(v: number) {
+  return `$${v.toFixed(2)}`;
 }
 
 function formatDate(dateStr: string) {
@@ -84,15 +90,18 @@ function CustomTooltip({
       <p className="text-xs text-muted-foreground mb-1.5">{formatDate(date)}</p>
       {dataLines.map((entry) => {
         const key = String(entry.dataKey ?? "");
-        const isRev = key.endsWith("_revenue");
-        const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units`);
-        const name = store
-          ? store.storeName + (metric === "both" ? (isRev ? " Rev" : " Units") : "")
-          : key;
+        const isRev = key.endsWith("_revenue") || key.endsWith("_asp");
+        const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_asp`);
+        const suffix = metric === "volume"
+          ? (key.endsWith("_revenue") ? " Rev" : " Units")
+          : metric === "efficiency"
+            ? (key.endsWith("_revenue") ? " Rev" : " ASP")
+            : "";
+        const name = store ? store.storeName + suffix : key;
         const val = Number(entry.value ?? 0);
         return (
           <p key={key} className="text-sm font-semibold" style={{ color: entry.color }}>
-            {name}: {isRev ? formatCurrency(val) : formatUnits(val)}
+            {name}: {key.endsWith("_asp") ? formatASP(val) : key.endsWith("_revenue") ? formatCurrency(val) : formatUnits(val)}
           </p>
         );
       })}
@@ -337,7 +346,7 @@ function NoteDetail({ notes, trends, onClose, onDeleted }: NoteDetailProps) {
 
 // ── Main chart component ──────────────────────────────────────────────────────
 
-export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, endDate }: Props) {
+export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, endDate, isWholesale }: Props) {
   const [metric, setMetric] = useState<Metric>("revenue");
   const [addNoteDate, setAddNoteDate] = useState<string | null>(null);
   const [detailNotes, setDetailNotes] = useState<Note[] | null>(null);
@@ -348,10 +357,11 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
   const storeParam = selectedStoreIds.length ? `&storeIds=${selectedStoreIds.join(",")}` : "";
 
   const { data: trends, isLoading } = useQuery<StoreTrend[]>({
-    queryKey: ["traffic-trends", startDate, endDate, selectedStoreIds.join(",")],
+    queryKey: ["traffic-trends", startDate, endDate, selectedStoreIds.join(","), isWholesale],
     queryFn: async () => {
+      const wholesaleParam = isWholesale ? "&isWholesale=true" : "";
       const res = await fetch(
-        `${API_BASE}/api/data/traffic/trends?start=${startDate}&end=${endDate}${storeParam}`,
+        `${API_BASE}/api/data/traffic/trends?start=${startDate}&end=${endDate}${storeParam}${wholesaleParam}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -397,6 +407,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
         const entry = dateMap.get(point.date)!;
         entry[`${store.storeId}_revenue`] = point.revenue;
         entry[`${store.storeId}_units`]   = point.units;
+        entry[`${store.storeId}_asp`]     = point.units > 0 ? point.revenue / point.units : undefined;
       }
     }
     return Array.from(dateMap.entries())
@@ -461,7 +472,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
           )}
           {/* Metric toggle */}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#FFF9F2]/5">
-            {(["revenue", "units", "both"] as Metric[]).map((m) => (
+            {(["revenue", "volume", "efficiency"] as Metric[]).map((m) => (
               <button
                 key={m}
                 onClick={() => setMetric(m)}
@@ -471,7 +482,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                     : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/60"
                 }`}
               >
-                {m === "both" ? "Both" : m.charAt(0).toUpperCase() + m.slice(1)}
+                {m.charAt(0).toUpperCase() + m.slice(1)}
               </button>
             ))}
           </div>
@@ -502,9 +513,9 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
           )}
 
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart
+            <ComposedChart
               data={chartData}
-              margin={{ top: 16, right: metric === "both" ? 64 : 16, left: 0, bottom: 0 }}
+              margin={{ top: 16, right: metric === "volume" || metric === "efficiency" ? 64 : 16, left: 0, bottom: 0 }}
             >
               <CartesianGrid
                 strokeDasharray="3 3"
@@ -522,17 +533,17 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               />
               <YAxis
                 yAxisId="left"
-                tickFormatter={metric === "units" ? formatUnits : formatCurrency}
+                tickFormatter={formatCurrency}
                 tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
                 axisLine={false}
                 tickLine={false}
                 width={64}
               />
-              {metric === "both" && (
+              {(metric === "volume" || metric === "efficiency") && (
                 <YAxis
                   yAxisId="right"
                   orientation="right"
-                  tickFormatter={formatUnits}
+                  tickFormatter={metric === "volume" ? formatUnits : formatASP}
                   tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
                   axisLine={false}
                   tickLine={false}
@@ -548,10 +559,11 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                 formatter={(value) => {
                   const key = String(value);
                   if (key === "__note__") return null;
-                  const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units`);
+                  const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_asp`);
                   if (!store) return key;
-                  if (metric !== "both") return store.storeName;
-                  return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (Units)");
+                  if (metric === "revenue") return store.storeName;
+                  if (metric === "volume") return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (Units)");
+                  return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (ASP)");
                 }}
               />
 
@@ -567,50 +579,67 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               />
 
               {trends?.flatMap((store) => {
-                const lines = [];
-                if (metric === "revenue" || metric === "both") {
-                  lines.push(
-                    <Line
-                      key={`${store.storeId}_revenue`}
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey={`${store.storeId}_revenue`}
-                      stroke={store.color}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, strokeWidth: 0, fill: store.color }}
-                      connectNulls
+                const els = [];
+                if (metric === "efficiency") {
+                  els.push(
+                    <Bar
+                      key={`${store.storeId}_asp`}
+                      yAxisId="right"
+                      dataKey={`${store.storeId}_asp`}
+                      fill={store.color}
+                      opacity={0.25}
+                      isAnimationActive={false}
                     />,
                   );
                 }
-                if (metric === "units" || metric === "both") {
-                  lines.push(
+                els.push(
+                  <Line
+                    key={`${store.storeId}_revenue`}
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey={`${store.storeId}_revenue`}
+                    stroke={store.color}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0, fill: store.color }}
+                    connectNulls
+                  />,
+                );
+                if (metric === "volume") {
+                  els.push(
                     <Line
                       key={`${store.storeId}_units`}
-                      yAxisId={metric === "both" ? "right" : "left"}
+                      yAxisId="right"
                       type="monotone"
                       dataKey={`${store.storeId}_units`}
                       stroke={store.color}
-                      strokeWidth={metric === "both" ? 1.5 : 2}
-                      strokeDasharray={metric === "both" ? "5 3" : undefined}
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
                       dot={false}
                       activeDot={{ r: 4, strokeWidth: 0, fill: store.color }}
                       connectNulls
                     />,
                   );
                 }
-                return lines;
+                return els;
               })}
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {metric === "both" && hasData && (
+      {metric === "volume" && hasData && (
         <p className="mt-3 text-xs text-muted-foreground text-center">
           {isSingleStore
-            ? "Solid line = Revenue (left axis) · Dashed line = Units (right axis)"
-            : "Solid lines = Revenue (left axis) · Dashed lines = Units (right axis)"}
+            ? "Solid line = Revenue (left axis) · Dotted line = Units (right axis)"
+            : "Solid lines = Revenue (left axis) · Dotted lines = Units (right axis)"}
+        </p>
+      )}
+      {metric === "efficiency" && hasData && (
+        <p className="mt-3 text-xs text-muted-foreground text-center">
+          {isSingleStore
+            ? "Solid line = Revenue (left axis) · Bars = ASP (right axis)"
+            : "Solid lines = Revenue (left axis) · Bars = ASP (right axis)"}
         </p>
       )}
 

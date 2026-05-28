@@ -561,6 +561,14 @@ router.get("/overview", authenticate, async (req, res) => {
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
   const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
+  const isUltaSelected = storeIds.length === 0 || storeIds.includes("ulta");
+
+  const activeChannels: string[] = [];
+  if (isShopifySelected) activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
+  if (isUltaSelected)    activeChannels.push("criteo_ads");
+  if (includesTarget)    activeChannels.push("roundel_target");
+  const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
+
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
   const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
   const hasPrior   = !!(priorStart && priorEnd);
@@ -671,22 +679,28 @@ router.get("/overview", authenticate, async (req, res) => {
     const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
-      // Daily conversion value and spend from DAILY_AD_SUMMARY
-      querySnowflake(`
-        SELECT summary_date, SUM(conversion_value) AS cv, SUM(spend) AS ad_spend
-        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-        GROUP BY summary_date
-        ORDER BY summary_date ASC
-      `),
-      // Channel breakdown from DAILY_AD_SUMMARY
-      querySnowflake(`
-        SELECT channel, SUM(spend) AS spend, SUM(conversion_value) AS revenue
-        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-        GROUP BY channel
-        ORDER BY spend DESC
-      `),
+      // Daily conversion value and spend from DAILY_AD_SUMMARY (filtered to active channels)
+      activeChannels.length > 0
+        ? querySnowflake(`
+            SELECT summary_date, SUM(conversion_value) AS cv, SUM(spend) AS ad_spend
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${channelFilter})
+            GROUP BY summary_date
+            ORDER BY summary_date ASC
+          `)
+        : Promise.resolve([]),
+      // Channel breakdown from DAILY_AD_SUMMARY (filtered to active channels)
+      activeChannels.length > 0
+        ? querySnowflake(`
+            SELECT channel, SUM(spend) AS spend, SUM(conversion_value) AS revenue
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${channelFilter})
+            GROUP BY channel
+            ORDER BY spend DESC
+          `)
+        : Promise.resolve([]),
       // Sessions from GA4_DAILY_SUMMARY
       querySnowflake(`
         SELECT SUM(sessions) AS total_sessions
@@ -2013,15 +2027,27 @@ const TREND_STORE_LABELS: Record<string, string> = {
 };
 
 const NS_STORE_NAME_FOR_TRENDS: Record<string, string> = {
-  ulta:   "Ulta Beauty",
-  kroger: "Kroger",
-  amazon: "Amazon (Pattern)",
+  target:    "Target",
+  walmart:   "Walmart",
+  ulta:      "Ulta Beauty",
+  cvs:       "CVS",
+  walgreens: "Walgreens",
+  publix:    "Publix",
+  kroger:    "Kroger",
+  amazon:    "Amazon (Pattern)",
+  meijer:    "Meijer",
 };
 
 const NS_STORE_ID_FROM_NAME: Record<string, string> = {
+  "Target":            "target",
+  "Walmart":           "walmart",
   "Ulta Beauty":       "ulta",
+  "CVS":               "cvs",
+  "Walgreens":         "walgreens",
+  "Publix":            "publix",
   "Kroger":            "kroger",
   "Amazon (Pattern)":  "amazon",
+  "Meijer":            "meijer",
 };
 
 function circanaEndDate(period: string): string {
@@ -2031,11 +2057,12 @@ function circanaEndDate(period: string): string {
 }
 
 router.get("/traffic/trends", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, isWholesale: isWholesaleRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
+  const isWholesale = isWholesaleRaw === "true";
   const storeIds = parseStoreIds(storeIdsRaw);
   const allStores = storeIds.length === 0;
   const has = (id: string) => allStores || storeIds.includes(id);
@@ -2052,7 +2079,54 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
   try {
     const queries: Promise<void>[] = [];
 
-    if (has("shopify")) {
+    if (isWholesale) {
+      const wholesaleStoreIds = Object.keys(NS_STORE_NAME_FOR_TRENDS);
+      const activeWholesale = wholesaleStoreIds.filter(id => has(id));
+      if (activeWholesale.length > 0) {
+        const storeNameFilter = activeWholesale
+          .map(sid => `'${NS_STORE_NAME_FOR_TRENDS[sid]}'`)
+          .join(", ");
+        queries.push(
+          querySnowflake(`
+            SELECT
+              DATE_TRUNC('month', TRANDATE) AS month_date,
+              STORE_NAME,
+              SUM(REVENUE) AS revenue,
+              SUM(UNITS)   AS units
+            FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+            WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+              AND STORE_NAME IN (${storeNameFilter})
+            GROUP BY DATE_TRUNC('month', TRANDATE), STORE_NAME
+            ORDER BY month_date ASC
+          `).then(rows => {
+            const byStore: Record<string, TrendPoint[]> = {};
+            for (const row of rows) {
+              const storeName = String(row["STORE_NAME"] ?? row["store_name"] ?? "");
+              const sid = NS_STORE_ID_FROM_NAME[storeName];
+              if (!sid || !activeWholesale.includes(sid)) continue;
+              if (!byStore[sid]) byStore[sid] = [];
+              const raw = row["MONTH_DATE"] ?? row["month_date"] ?? "";
+              const date = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw).slice(0, 10);
+              byStore[sid].push({
+                date,
+                revenue: Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+                units:   Number(row["UNITS"] ?? row["units"] ?? 0),
+              });
+            }
+            for (const sid of activeWholesale) {
+              results.push({
+                storeId:   sid,
+                storeName: TREND_STORE_LABELS[sid] ?? NS_STORE_NAME_FOR_TRENDS[sid] ?? sid,
+                color:     TREND_STORE_COLORS[sid] ?? "#888888",
+                data:      (byStore[sid] ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+              });
+            }
+          }),
+        );
+      }
+    }
+
+    if (!isWholesale && has("shopify")) {
       queries.push(
         querySnowflake(`
           SELECT summary_date, SUM(revenue) AS revenue, SUM(units_sold) AS units
@@ -2075,7 +2149,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
       );
     }
 
-    if (has("target")) {
+    if (!isWholesale && has("target")) {
       queries.push(
         querySnowflake(`
           SELECT summary_date, SUM(sale_amount) AS revenue, SUM(sale_quantity) AS units
@@ -2098,7 +2172,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
       );
     }
 
-    if (has("walmart")) {
+    if (!isWholesale && has("walmart")) {
       queries.push(
         querySnowflake(`
           SELECT week_date, revenue, units_sold AS units
@@ -2120,7 +2194,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
       );
     }
 
-    if (activeCircana.length > 0) {
+    if (!isWholesale && activeCircana.length > 0) {
       const retailerFilter = Object.entries(CIRCANA_RETAILER_TO_STORE)
         .filter(([, sid]) => activeCircana.includes(sid as typeof CIRCANA_IDS[number]))
         .map(([retailer]) => `'${retailer.replace(/'/g, "\\'")}'`)
@@ -2158,7 +2232,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
       );
     }
 
-    if (activeNetsuite.length > 0) {
+    if (!isWholesale && activeNetsuite.length > 0) {
       const storeNameFilter = activeNetsuite
         .map(sid => `'${NS_STORE_NAME_FOR_TRENDS[sid]}'`)
         .join(", ");
