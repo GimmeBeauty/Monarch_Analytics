@@ -2375,11 +2375,10 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdStart = `${year}-01-01`;
     const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
 
-    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw] = await Promise.all([
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows] = await Promise.all([
       querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
-               COALESCE(SUM(units_sold), 0) AS UNITS,
-               COALESCE(SUM(ad_spend), 0) AS SPEND
+               COALESCE(SUM(units_sold), 0) AS UNITS
         FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
         WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
@@ -2418,6 +2417,11 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
         FROM src GROUP BY m ORDER BY m
       `),
+      querySnowflake(`
+        SELECT COALESCE(SUM(ad_spend), 0) AS SPEND
+        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
     ]);
 
     const pick = (row: unknown, ...keys: string[]): number => {
@@ -2439,7 +2443,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
 
     const ytdUnits = pick(r0(shopifyRows), "UNITS") + pick(r0(targetRows), "UNITS") +
                      pick(r0(walmartRows), "UNITS") + pick(r0(netsuiteRows), "UNITS");
-    const ytdSpend = pick(r0(shopifyRows), "SPEND");
+    const ytdSpend = pick(r0(spendRows), "SPEND");
 
     const dayOfYear = isCurrentYear
       ? Math.floor((today.getTime() - new Date(`${year}-01-01`).getTime()) / 86_400_000) + 1
