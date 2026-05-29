@@ -15,6 +15,7 @@ interface ForecastStore {
   stores: StoreRow[];
   years: YearRow[];
   forecasts: Record<string, Grid>; // key: `${storeId}-${year}`
+  annualGoals: Record<number, number>; // key: year
 }
 
 const DEFAULT_STORES: StoreRow[] = [
@@ -45,7 +46,7 @@ function loadData(): ForecastStore {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { stores: DEFAULT_STORES, years: DEFAULT_YEARS, forecasts: {} };
+  return { stores: DEFAULT_STORES, years: DEFAULT_YEARS, forecasts: {}, annualGoals: {} };
 }
 
 function saveData(data: ForecastStore) {
@@ -60,6 +61,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [annualGoalInput, setAnnualGoalInput] = useState("");
 
   // Add store modal state
   const [showAddStore, setShowAddStore] = useState(false);
@@ -76,12 +78,13 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     if (!selectedYear && data.years.length) setSelectedYear(data.years[data.years.length - 1].year);
   }, [data.stores, data.years]);
 
-  // Load grid when store or year changes
+  // Load grid and annual goal when store or year changes
   const loadGrid = useCallback(() => {
     if (!selectedStore || !selectedYear) return;
     const key = `${selectedStore}-${selectedYear}`;
     setGrid(data.forecasts[key] ? { ...data.forecasts[key] } : emptyGrid());
-  }, [selectedStore, selectedYear, data.forecasts]);
+    setAnnualGoalInput(String(data.annualGoals?.[selectedYear] ?? ""));
+  }, [selectedStore, selectedYear, data.forecasts, data.annualGoals]);
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -115,12 +118,28 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
         wholesale: isShopify ? "" : grid[m].wholesale,
       };
     }
-    const updated = { ...data, forecasts: { ...data.forecasts, [key]: savedGrid } };
+    const annualGoalVal = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
+    const updated = {
+      ...data,
+      forecasts: { ...data.forecasts, [key]: savedGrid },
+      annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: annualGoalVal },
+    };
     setData(updated);
     saveData(updated);
     setSaving(false);
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 2500);
+  };
+
+  const handleAnnualGoalBlur = () => {
+    if (!selectedYear) return;
+    const val = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
+    const updated = {
+      ...data,
+      annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: val },
+    };
+    setData(updated);
+    saveData(updated);
   };
 
   const handleAddStore = () => {
@@ -172,6 +191,38 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
         <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
           Set monthly retail and wholesale price forecasts per store and year.
         </p>
+      </div>
+
+      {/* Annual Revenue Goal */}
+      <div className="rounded-xl p-4 bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
+        <div className="flex items-end gap-4 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1.5">
+              Annual Revenue Goal{selectedYear ? ` — ${selectedYear}` : ""}
+            </label>
+            <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mb-2">
+              Used for % to Annual Goal KPI and scenario comparison on the Forecast page.
+            </p>
+            <div className="relative max-w-[220px]">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={annualGoalInput}
+                onChange={(e) => setAnnualGoalInput(e.target.value)}
+                onBlur={handleAnnualGoalBlur}
+                placeholder="e.g. 2000000"
+                className="w-full pl-6 pr-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none transition-colors"
+              />
+            </div>
+          </div>
+          {annualGoalInput && parseFloat(annualGoalInput.replace(/,/g, "")) > 0 && (
+            <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 pb-2 space-y-0.5">
+              <p>Conservative: <span className="font-semibold">${Math.round(parseFloat(annualGoalInput.replace(/,/g, "")) * 0.90 / 1000)}k</span></p>
+              <p>BHAG: <span className="font-semibold">${Math.round(parseFloat(annualGoalInput.replace(/,/g, "")) * 1.15 / 1000)}k</span></p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error banner */}

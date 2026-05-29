@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, integrationsTable } from "@workspace/db";
+import { db, integrationsTable, storeForecastsTable, forecastYearsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
@@ -2358,6 +2358,273 @@ router.delete("/notes/:id", authenticate, async (req, res) => {
   } catch (e) {
     console.error("[data/notes DELETE] Error:", e);
     return res.status(400).json({ error: String(e) });
+  }
+});
+
+// ─── GET /api/data/forecast/summary ──────────────────────────────────────────
+router.get("/forecast/summary", authenticate, async (req, res) => {
+  try {
+    const year = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
+    const annualGoal = parseFloat(String(req.query["annualGoal"] ?? "0")) || 0;
+
+    if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
+
+    const today = new Date();
+    const isCurrentYear = today.getFullYear() === year;
+    const ytdEnd   = isCurrentYear ? today.toISOString().slice(0, 10) : `${year}-12-31`;
+    const ytdStart = `${year}-01-01`;
+    const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
+
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw] = await Promise.all([
+      querySnowflake(`
+        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
+               COALESCE(SUM(units_sold), 0) AS UNITS,
+               COALESCE(SUM(ad_spend), 0) AS SPEND
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
+      querySnowflake(`
+        SELECT COALESCE(SUM(sale_amount), 0) AS REVENUE,
+               COALESCE(SUM(sale_quantity), 0) AS UNITS
+        FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
+      querySnowflake(`
+        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
+               COALESCE(SUM(units_sold), 0) AS UNITS
+        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+        WHERE week_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
+      querySnowflake(`
+        SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE,
+               COALESCE(SUM(UNITS), 0) AS UNITS
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
+      querySnowflake(`
+        WITH src AS (
+          SELECT DATE_TRUNC('month', summary_date) AS m, revenue AS rev, units_sold AS units
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}
+          UNION ALL
+          SELECT DATE_TRUNC('month', summary_date), sale_amount, sale_quantity
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}
+          UNION ALL
+          SELECT DATE_TRUNC('month', week_date), revenue, units_sold
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${year}
+          UNION ALL
+          SELECT DATE_TRUNC('month', TRANDATE), REVENUE, UNITS
+          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT WHERE YEAR(TRANDATE) = ${year}
+        )
+        SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
+        FROM src GROUP BY m ORDER BY m
+      `),
+    ]);
+
+    const pick = (row: unknown, ...keys: string[]): number => {
+      const r = row as Record<string, unknown>;
+      for (const k of keys) {
+        const v = r[k] ?? r[k.toUpperCase()] ?? r[k.toLowerCase()];
+        if (v != null) return Number(v);
+      }
+      return 0;
+    };
+    const r0 = (rows: unknown[]) => (rows[0] ?? {}) as Record<string, unknown>;
+
+    const ytdRevenue  = Math.round((
+      pick(r0(shopifyRows),  "REVENUE") +
+      pick(r0(targetRows),   "REVENUE") +
+      pick(r0(walmartRows),  "REVENUE") +
+      pick(r0(netsuiteRows), "REVENUE")
+    ) * 100) / 100;
+
+    const ytdUnits = pick(r0(shopifyRows), "UNITS") + pick(r0(targetRows), "UNITS") +
+                     pick(r0(walmartRows), "UNITS") + pick(r0(netsuiteRows), "UNITS");
+    const ytdSpend = pick(r0(shopifyRows), "SPEND");
+
+    const dayOfYear = isCurrentYear
+      ? Math.floor((today.getTime() - new Date(`${year}-01-01`).getTime()) / 86_400_000) + 1
+      : 365;
+    const mult = isCurrentYear && dayOfYear > 0 ? 365 / dayOfYear : 1;
+
+    const projectedRevenue = Math.round(ytdRevenue * mult);
+    const projectedSpend   = Math.round(ytdSpend   * mult);
+    const asp              = ytdUnits > 0 ? ytdRevenue / ytdUnits : 15.99;
+    const projectedUnits   = Math.round(projectedRevenue / asp);
+
+    // Monthly actuals breakdown
+    const monthlyActualsMap: Record<number, number> = {};
+    for (const row of monthlyRaw as Record<string, unknown>[]) {
+      const mo  = Math.round(pick(row, "MO"));
+      const rev = pick(row, "REVENUE");
+      if (mo >= 1 && mo <= 12) monthlyActualsMap[mo] = Math.round((monthlyActualsMap[mo] ?? 0) + rev);
+    }
+    const monthlyActuals = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      revenue: monthlyActualsMap[i + 1] ?? 0,
+    }));
+    const mtdRevenue = monthlyActualsMap[currentMonth] ?? 0;
+
+    // Monthly goals from store_forecasts PostgreSQL table
+    const yearRows = await db.select().from(forecastYearsTable)
+      .where(eq(forecastYearsTable.year, year)).limit(1);
+    let monthlyGoals = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, goal: 0 }));
+    if (yearRows.length > 0) {
+      const yearId = yearRows[0]!.id;
+      const forecasts = await db.select().from(storeForecastsTable)
+        .where(eq(storeForecastsTable.forecastYearId, yearId));
+      const goalMap: Record<number, number> = {};
+      for (const f of forecasts) {
+        goalMap[f.month] = (goalMap[f.month] ?? 0) + Number(f.retailPrice ?? 0);
+      }
+      monthlyGoals = Array.from({ length: 12 }, (_, i) => ({
+        month: i + 1,
+        goal: Math.round((goalMap[i + 1] ?? 0) * 100) / 100,
+      }));
+    }
+    const currentMonthGoal = monthlyGoals[currentMonth - 1]?.goal ?? 0;
+    const totalMonthlyGoal = Math.round(monthlyGoals.reduce((s, g) => s + g.goal, 0) * 100) / 100;
+
+    const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return res.json({
+      year,
+      ytdRevenue,
+      projectedRevenue,
+      projectedSpend,
+      projectedUnits,
+      asp: Math.round(asp * 100) / 100,
+      mtdRevenue: Math.round(mtdRevenue * 100) / 100,
+      currentMonth,
+      currentMonthLabel: `${MONTHS_SHORT[currentMonth - 1]} ${year}`,
+      currentMonthGoal,
+      annualGoal,
+      monthlyActuals,
+      monthlyGoals,
+      totalMonthlyGoal,
+    });
+  } catch (e) {
+    console.error("[data/forecast/summary]", e);
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// ─── GET /api/data/forecast/chart ────────────────────────────────────────────
+router.get("/forecast/chart", authenticate, async (req, res) => {
+  try {
+    const year = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
+    const granularity = String(req.query["granularity"] ?? "month") === "week" ? "week" : "month";
+    const withPriorYear = req.query["priorYear"] === "true";
+
+    if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
+
+    const today = new Date();
+    const priorYear = year - 1;
+    const trunc = granularity === "week" ? "week" : "month";
+
+    const buildQuery = (y: number) => `
+      WITH src AS (
+        SELECT DATE_TRUNC('${trunc}', summary_date) AS p, revenue AS rev
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}
+        UNION ALL
+        SELECT DATE_TRUNC('${trunc}', summary_date), sale_amount
+        FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}
+        UNION ALL
+        SELECT DATE_TRUNC('${trunc}', week_date), revenue
+        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${y}
+        UNION ALL
+        SELECT DATE_TRUNC('${trunc}', TRANDATE), REVENUE
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT WHERE YEAR(TRANDATE) = ${y}
+      )
+      SELECT p AS PERIOD_START, SUM(rev) AS REVENUE FROM src GROUP BY p ORDER BY p
+    `;
+
+    const [actualsRaw, priorRaw] = await Promise.all([
+      querySnowflake(buildQuery(year)),
+      withPriorYear ? querySnowflake(buildQuery(priorYear)) : Promise.resolve([]),
+    ]);
+
+    const pick = (row: unknown, ...keys: string[]): number => {
+      const r = row as Record<string, unknown>;
+      for (const k of keys) {
+        const v = r[k] ?? r[k.toUpperCase()] ?? r[k.toLowerCase()];
+        if (v != null) return Number(v);
+      }
+      return 0;
+    };
+
+    const toKey = (val: unknown): string => {
+      const d = val instanceof Date ? val : new Date(String(val));
+      return d.toISOString().slice(0, 10);
+    };
+
+    const actualsMap = new Map<string, number>();
+    for (const row of actualsRaw as Record<string, unknown>[]) {
+      actualsMap.set(toKey(row["PERIOD_START"] ?? row["period_start"]), Math.round(pick(row, "REVENUE")));
+    }
+    const priorMap = new Map<string, number>();
+    for (const row of priorRaw as Record<string, unknown>[]) {
+      priorMap.set(toKey(row["PERIOD_START"] ?? row["period_start"]), Math.round(pick(row, "REVENUE")));
+    }
+
+    const knownVals = [...actualsMap.values()].filter(v => v > 0);
+    const avgPerPeriod = knownVals.length > 0
+      ? Math.round(knownVals.reduce((a, b) => a + b, 0) / knownVals.length)
+      : 50_000;
+
+    // Month-based seasonal index (Jan=0 … Dec=11)
+    const SEASONAL = [0.85, 0.82, 0.95, 0.97, 1.00, 1.02, 0.98, 1.05, 1.10, 1.08, 1.20, 1.30];
+    const todayKey = today.toISOString().slice(0, 10);
+
+    interface PeriodMeta { label: string; periodKey: string; priorKey: string; monthIdx: number }
+    const periods: PeriodMeta[] = [];
+
+    if (granularity === "month") {
+      for (let m = 0; m < 12; m++) {
+        periods.push({
+          label:     new Date(year, m, 1).toLocaleDateString("en-US", { month: "short" }),
+          periodKey: new Date(year, m, 1).toISOString().slice(0, 10),
+          priorKey:  new Date(priorYear, m, 1).toISOString().slice(0, 10),
+          monthIdx:  m,
+        });
+      }
+    } else {
+      const start = new Date(year, 0, 1);
+      for (let w = 0; w < 54; w++) {
+        const d = new Date(start.getTime() + w * 7 * 86_400_000);
+        if (d.getFullYear() > year) break;
+        const pd = new Date(d); pd.setFullYear(priorYear);
+        periods.push({
+          label:     `W${w + 1}`,
+          periodKey: d.toISOString().slice(0, 10),
+          priorKey:  pd.toISOString().slice(0, 10),
+          monthIdx:  d.getMonth(),
+        });
+      }
+    }
+
+    const series = periods.map(({ label, periodKey, priorKey, monthIdx }) => {
+      const isPast   = periodKey <= todayKey;
+      const actual   = actualsMap.get(periodKey);
+      const seasonal = SEASONAL[monthIdx] ?? 1.0;
+      const projected = Math.round(avgPerPeriod * seasonal);
+      const base = isPast && actual != null && actual > 0 ? actual : projected;
+      const pt: Record<string, unknown> = {
+        period:    label,
+        projected,
+        lower:     Math.round(base * 0.85),
+        upper:     Math.round(base * 1.15),
+      };
+      if (isPast && actual != null) pt["actual"] = actual;
+      if (withPriorYear) {
+        const pv = priorMap.get(priorKey);
+        if (pv != null) pt["priorYear"] = pv;
+      }
+      return pt;
+    });
+
+    return res.json({ year, granularity, series });
+  } catch (e) {
+    console.error("[data/forecast/chart]", e);
+    return res.status(500).json({ error: String(e) });
   }
 });
 

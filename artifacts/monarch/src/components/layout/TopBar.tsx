@@ -7,9 +7,10 @@ import { Tag } from "lucide-react";
 interface TopBarProps {
   title: string;
   description: string;
+  hideDatePicker?: boolean;
 }
 
-export default function TopBar({ title, description }: TopBarProps) {
+export default function TopBar({ title, description, hideDatePicker }: TopBarProps) {
   const { dateRange } = useDateRange();
   const { isWholesale } = usePricingMode();
 
@@ -45,7 +46,7 @@ export default function TopBar({ title, description }: TopBarProps) {
         )}
 
         {/* Comparison badge — shown when compare is active */}
-        {dateRange.compareEnabled && compareStart && compareEnd && (
+        {!hideDatePicker && dateRange.compareEnabled && compareStart && compareEnd && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FFBC80]/40 bg-[#FFBC80]/10">
             <div className="w-2 h-2 rounded-full" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
             <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
@@ -58,7 +59,7 @@ export default function TopBar({ title, description }: TopBarProps) {
         <StoreFilter />
 
         {/* Date range selector */}
-        <DateRangeButton />
+        {!hideDatePicker && <DateRangeButton />}
       </div>
     </div>
   );
