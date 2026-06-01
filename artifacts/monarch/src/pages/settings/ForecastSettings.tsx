@@ -98,11 +98,11 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     if (!selectedStore || !selectedYear) return;
 
     for (let m = 1; m <= 12; m++) {
-      if (grid[m].retail && isNaN(Number(grid[m].retail))) {
+      if (grid[m].retail && isNaN(Number(grid[m].retail.replace(/,/g, "")))) {
         setError(`Retail price for ${MONTHS[m - 1]} must be a number.`);
         return;
       }
-      if (grid[m].wholesale && isNaN(Number(grid[m].wholesale))) {
+      if (grid[m].wholesale && isNaN(Number(grid[m].wholesale.replace(/,/g, "")))) {
         setError(`Wholesale price for ${MONTHS[m - 1]} must be a number.`);
         return;
       }
@@ -114,8 +114,8 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     const savedGrid: Grid = {};
     for (let m = 1; m <= 12; m++) {
       savedGrid[m] = {
-        retail: grid[m].retail,
-        wholesale: isShopify ? "" : grid[m].wholesale,
+        retail:    grid[m].retail.replace(/,/g, ""),
+        wholesale: isShopify ? "" : grid[m].wholesale.replace(/,/g, ""),
       };
     }
     const annualGoalVal = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
@@ -140,6 +140,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     };
     setData(updated);
     saveData(updated);
+    setAnnualGoalInput(val > 0 ? val.toLocaleString("en-US") : "");
   };
 
   const handleAddStore = () => {
@@ -182,6 +183,16 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
   const inputCls = "w-full px-2 py-1.5 rounded-lg text-xs bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none transition-colors text-right";
   const labelCls = "block text-[10px] font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-0.5";
+
+  const formatWithCommas = (val: string): string => {
+    const n = parseFloat(val.replace(/,/g, ""));
+    return isNaN(n) || val === "" ? val : n.toLocaleString("en-US");
+  };
+
+  const handleCellBlur = (month: number, field: "retail" | "wholesale") => {
+    const raw = grid[month][field].replace(/,/g, "");
+    setCell(month, field, formatWithCommas(raw));
+  };
 
   return (
     <div className={`space-y-5 ${readOnly ? "pointer-events-none select-none opacity-75" : ""}`}>
@@ -279,7 +290,8 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
           {showAddYear ? (
             <div className="flex items-center gap-1.5">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={newYear}
                 onChange={(e) => setNewYear(e.target.value)}
                 placeholder="2027"
@@ -401,11 +413,11 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                   <div className="relative">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={grid[month].retail}
-                      onChange={(e) => setCell(month, "retail", e.target.value)}
+                      onChange={(e) => setCell(month, "retail", e.target.value.replace(/,/g, ""))}
+                      onBlur={() => handleCellBlur(month, "retail")}
                       placeholder="0.00"
                       className={inputCls + " pl-5"}
                     />
@@ -417,11 +429,11 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                     <div className="relative">
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={grid[month].wholesale}
-                        onChange={(e) => setCell(month, "wholesale", e.target.value)}
+                        onChange={(e) => setCell(month, "wholesale", e.target.value.replace(/,/g, ""))}
+                        onBlur={() => handleCellBlur(month, "wholesale")}
                         placeholder="0.00"
                         className={inputCls + " pl-5"}
                       />
