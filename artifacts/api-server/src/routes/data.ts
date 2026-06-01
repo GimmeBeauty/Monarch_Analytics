@@ -2632,5 +2632,300 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
   }
 });
 
+// ─── GET /api/data/ads/channel-detail ────────────────────────────────────────
+
+const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel"]);
+
+router.get("/ads/channel-detail", authenticate, async (req, res) => {
+  const { channel: channelRaw, start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const channel = channelRaw?.toLowerCase().trim() ?? "";
+  if (!VALID_DETAIL_CHANNELS.has(channel)) {
+    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel" });
+    return;
+  }
+
+  try {
+    if (channel === "meta") {
+      const [campaignRows, checkoutRows] = await Promise.all([
+        querySnowflake(`
+          SELECT
+            raw_data:campaign_id::STRING    AS campaign_id,
+            raw_data:campaign_name::STRING  AS campaign_name,
+            SUM(raw_data:spend::FLOAT)                                                       AS spend,
+            SUM(raw_data:impressions::INT)                                                   AS impressions,
+            SUM(raw_data:clicks::INT)                                                        AS clicks,
+            SUM(raw_data:reach::FLOAT)                                                       AS reach,
+            AVG(raw_data:frequency::FLOAT)                                                   AS avg_frequency,
+            SUM(raw_data:spend::FLOAT) / NULLIF(SUM(raw_data:impressions::FLOAT), 0) * 1000 AS cpm,
+            SUM(raw_data:spend::FLOAT) / NULLIF(SUM(raw_data:clicks::FLOAT), 0)             AS cpc,
+            SUM(raw_data:clicks::FLOAT) / NULLIF(SUM(raw_data:impressions::FLOAT), 0) * 100 AS ctr,
+            AVG(raw_data:cpp::FLOAT)                                                         AS avg_cpp
+          FROM ${DB_NAME}.ADS.META_ADS_RAW
+          WHERE TRY_CAST(raw_data:date_start::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+          GROUP BY 1, 2
+          ORDER BY spend DESC
+          LIMIT 50
+        `),
+        querySnowflake(`
+          SELECT
+            raw_data:campaign_id::STRING AS campaign_id,
+            SUM(f.value:value::INT)      AS initiate_checkout
+          FROM ${DB_NAME}.ADS.META_ADS_RAW,
+          LATERAL FLATTEN(input => raw_data:actions) f
+          WHERE TRY_CAST(raw_data:date_start::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+            AND f.value:action_type::STRING IN (
+              'initiate_checkout',
+              'offsite_conversion.fb_pixel_initiate_checkout',
+              'onsite_web_initiate_checkout',
+              'omni_initiated_checkout'
+            )
+          GROUP BY 1
+        `),
+      ]);
+
+      const checkoutMap: Record<string, number> = {};
+      for (const r of checkoutRows) {
+        const cid = String(r["CAMPAIGN_ID"] ?? r["campaign_id"] ?? "");
+        if (cid) checkoutMap[cid] = Number(r["INITIATE_CHECKOUT"] ?? r["initiate_checkout"] ?? 0);
+      }
+
+      const campaigns = campaignRows.map(r => {
+        const cid = String(r["CAMPAIGN_ID"] ?? r["campaign_id"] ?? "");
+        return {
+          campaignId:      cid,
+          campaignName:    String(r["CAMPAIGN_NAME"]  ?? r["campaign_name"]  ?? ""),
+          spend:           Math.round(Number(r["SPEND"]         ?? r["spend"]         ?? 0) * 100) / 100,
+          impressions:     Math.round(Number(r["IMPRESSIONS"]   ?? r["impressions"]   ?? 0)),
+          clicks:          Math.round(Number(r["CLICKS"]        ?? r["clicks"]        ?? 0)),
+          reach:           Math.round(Number(r["REACH"]         ?? r["reach"]         ?? 0)),
+          frequency:       Math.round(Number(r["AVG_FREQUENCY"] ?? r["avg_frequency"] ?? 0) * 10) / 10,
+          cpm:             Math.round(Number(r["CPM"]           ?? r["cpm"]           ?? 0) * 100) / 100,
+          cpc:             Math.round(Number(r["CPC"]           ?? r["cpc"]           ?? 0) * 100) / 100,
+          ctr:             Math.round(Number(r["CTR"]           ?? r["ctr"]           ?? 0) * 100) / 100,
+          cpp:             Math.round(Number(r["AVG_CPP"]       ?? r["avg_cpp"]       ?? 0) * 100) / 100,
+          initiateCheckout: checkoutMap[cid] ?? 0,
+        };
+      });
+
+      const tSpend = campaigns.reduce((s, c) => s + c.spend, 0);
+      const tImpr  = campaigns.reduce((s, c) => s + c.impressions, 0);
+      const tReach = campaigns.reduce((s, c) => s + c.reach, 0);
+      const tInit  = campaigns.reduce((s, c) => s + c.initiateCheckout, 0);
+      const avgFreq = campaigns.length > 0 ? campaigns.reduce((s, c) => s + c.frequency, 0) / campaigns.length : 0;
+      const avgCpp  = campaigns.length > 0 ? campaigns.reduce((s, c) => s + c.cpp, 0) / campaigns.length : 0;
+      const blCpm   = tImpr > 0 ? (tSpend / tImpr) * 1000 : 0;
+
+      res.json({
+        channel: "meta",
+        kpis: {
+          frequency:       Math.round(avgFreq * 10) / 10,
+          cpm:             Math.round(blCpm   * 100) / 100,
+          cpp:             Math.round(avgCpp  * 100) / 100,
+          initiateCheckout: tInit,
+          reach:           tReach,
+        },
+        campaigns,
+        isEmpty: campaigns.length === 0,
+      });
+
+    } else if (channel === "google") {
+      const rows = await querySnowflake(`
+        SELECT
+          raw_data:campaign_id::STRING    AS campaign_id,
+          raw_data:campaign_name::STRING  AS campaign_name,
+          SUM(raw_data:spend::FLOAT)                                                       AS spend,
+          SUM(raw_data:impressions::INT)                                                   AS impressions,
+          SUM(raw_data:clicks::INT)                                                        AS clicks,
+          SUM(raw_data:conversions::FLOAT)                                                 AS conversions,
+          SUM(raw_data:conversions_value::FLOAT)                                           AS revenue,
+          SUM(raw_data:clicks::FLOAT) / NULLIF(SUM(raw_data:impressions::FLOAT), 0) * 100 AS ctr,
+          SUM(raw_data:spend::FLOAT) / NULLIF(SUM(raw_data:clicks::FLOAT), 0)             AS cpc,
+          SUM(raw_data:spend::FLOAT) / NULLIF(SUM(raw_data:impressions::FLOAT), 0) * 1000 AS cpm
+        FROM ${DB_NAME}.ADS.GOOGLE_ADS_RAW
+        WHERE TRY_CAST(raw_data:date::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+        GROUP BY 1, 2
+        ORDER BY spend DESC
+        LIMIT 50
+      `);
+
+      const campaigns = rows.map(r => {
+        const spend   = Number(r["SPEND"]       ?? r["spend"]       ?? 0);
+        const revenue = Number(r["REVENUE"]     ?? r["revenue"]     ?? 0);
+        const roas    = spend > 0 ? revenue / spend : 0;
+        return {
+          campaignId:   String(r["CAMPAIGN_ID"]   ?? r["campaign_id"]   ?? ""),
+          campaignName: String(r["CAMPAIGN_NAME"] ?? r["campaign_name"] ?? ""),
+          spend:        Math.round(spend * 100) / 100,
+          impressions:  Math.round(Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0)),
+          clicks:       Math.round(Number(r["CLICKS"]      ?? r["clicks"]      ?? 0)),
+          conversions:  Math.round(Number(r["CONVERSIONS"] ?? r["conversions"] ?? 0) * 10) / 10,
+          revenue:      Math.round(revenue * 100) / 100,
+          ctr:          Math.round(Number(r["CTR"] ?? r["ctr"] ?? 0) * 100) / 100,
+          cpc:          Math.round(Number(r["CPC"] ?? r["cpc"] ?? 0) * 100) / 100,
+          cpm:          Math.round(Number(r["CPM"] ?? r["cpm"] ?? 0) * 100) / 100,
+          roas:         Math.round(roas * 100) / 100,
+        };
+      });
+
+      const tSpend = campaigns.reduce((s, c) => s + c.spend, 0);
+      const tImpr  = campaigns.reduce((s, c) => s + c.impressions, 0);
+      const tClicks = campaigns.reduce((s, c) => s + c.clicks, 0);
+      const tConv   = campaigns.reduce((s, c) => s + c.conversions, 0);
+      const blCpm   = tImpr   > 0 ? (tSpend / tImpr)   * 1000 : 0;
+      const blCpc   = tClicks > 0 ? tSpend / tClicks : 0;
+
+      res.json({
+        channel: "google",
+        kpis: {
+          conversions: Math.round(tConv * 10) / 10,
+          cpc:         Math.round(blCpc * 100) / 100,
+          cpm:         Math.round(blCpm * 100) / 100,
+        },
+        campaigns,
+        isEmpty: campaigns.length === 0,
+      });
+
+    } else if (channel === "pinterest") {
+      const rows = await querySnowflake(`
+        SELECT
+          SUM(raw_data:SPEND_IN_DOLLAR::FLOAT)                                                    AS spend,
+          SUM(raw_data:IMPRESSION_1::INT)                                                         AS impressions,
+          SUM(raw_data:CLICKTHROUGH_1::INT)                                                       AS clicks,
+          SUM(raw_data:TOTAL_ENGAGEMENT::INT)                                                     AS engagements,
+          SUM(raw_data:CLICKTHROUGH_1::FLOAT) / NULLIF(SUM(raw_data:IMPRESSION_1::FLOAT), 0) * 100 AS ctr
+        FROM ${DB_NAME}.ADS.PINTEREST_ADS_RAW
+        WHERE TRY_CAST(raw_data:DATE::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+      `);
+
+      const agg = rows[0] ?? {};
+      res.json({
+        channel: "pinterest",
+        kpis: {
+          spend:       Math.round(Number(agg["SPEND"]       ?? agg["spend"]       ?? 0) * 100) / 100,
+          impressions: Math.round(Number(agg["IMPRESSIONS"] ?? agg["impressions"] ?? 0)),
+          clicks:      Math.round(Number(agg["CLICKS"]      ?? agg["clicks"]      ?? 0)),
+          engagements: Math.round(Number(agg["ENGAGEMENTS"] ?? agg["engagements"] ?? 0)),
+          ctr:         Math.round(Number(agg["CTR"]         ?? agg["ctr"]         ?? 0) * 100) / 100,
+        },
+        isEmpty: Number(agg["IMPRESSIONS"] ?? agg["impressions"] ?? 0) === 0,
+      });
+
+    } else if (channel === "criteo") {
+      const rows = await querySnowflake(`
+        SELECT
+          raw_data:campaignId::STRING       AS campaign_id,
+          raw_data:campaignName::STRING     AS campaign_name,
+          raw_data:campaignTypeName::STRING AS campaign_type,
+          SUM(raw_data:spend::FLOAT)                                                       AS spend,
+          SUM(raw_data:impressions::INT)                                                   AS impressions,
+          SUM(raw_data:clicks::INT)                                                        AS clicks,
+          SUM(raw_data:attributedSales::FLOAT)                                             AS revenue,
+          SUM(raw_data:attributedOrders::INT)                                              AS orders,
+          SUM(raw_data:clicks::FLOAT) / NULLIF(SUM(raw_data:impressions::FLOAT), 0) * 100 AS ctr,
+          SUM(raw_data:spend::FLOAT) / NULLIF(SUM(raw_data:clicks::FLOAT), 0)             AS cpc,
+          SUM(raw_data:spend::FLOAT) / NULLIF(SUM(raw_data:impressions::FLOAT), 0) * 1000 AS cpm
+        FROM ${DB_NAME}.ADS.CRITEO_ADS_RAW
+        WHERE TRY_CAST(raw_data:date::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+        GROUP BY 1, 2, 3
+        ORDER BY spend DESC
+        LIMIT 50
+      `);
+
+      const campaigns = rows.map(r => {
+        const spend   = Number(r["SPEND"]   ?? r["spend"]   ?? 0);
+        const revenue = Number(r["REVENUE"] ?? r["revenue"] ?? 0);
+        const roas    = spend > 0 ? revenue / spend : 0;
+        return {
+          campaignId:   String(r["CAMPAIGN_ID"]   ?? r["campaign_id"]   ?? ""),
+          campaignName: String(r["CAMPAIGN_NAME"] ?? r["campaign_name"] ?? ""),
+          campaignType: String(r["CAMPAIGN_TYPE"] ?? r["campaign_type"] ?? ""),
+          spend:        Math.round(spend * 100) / 100,
+          impressions:  Math.round(Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0)),
+          clicks:       Math.round(Number(r["CLICKS"]      ?? r["clicks"]      ?? 0)),
+          revenue:      Math.round(revenue * 100) / 100,
+          orders:       Number(r["ORDERS"] ?? r["orders"] ?? 0),
+          ctr:          Math.round(Number(r["CTR"] ?? r["ctr"] ?? 0) * 100) / 100,
+          cpc:          Math.round(Number(r["CPC"] ?? r["cpc"] ?? 0) * 100) / 100,
+          cpm:          Math.round(Number(r["CPM"] ?? r["cpm"] ?? 0) * 100) / 100,
+          roas:         Math.round(roas * 100) / 100,
+        };
+      });
+
+      const tSpend   = campaigns.reduce((s, c) => s + c.spend, 0);
+      const tImpr    = campaigns.reduce((s, c) => s + c.impressions, 0);
+      const tClicks  = campaigns.reduce((s, c) => s + c.clicks, 0);
+      const tRevenue = campaigns.reduce((s, c) => s + c.revenue, 0);
+      const blCpm    = tImpr   > 0 ? (tSpend / tImpr)   * 1000 : 0;
+      const blCpc    = tClicks > 0 ? tSpend / tClicks : 0;
+      const blRoas   = tSpend  > 0 ? tRevenue / tSpend : 0;
+
+      res.json({
+        channel: "criteo",
+        kpis: {
+          cpm:     Math.round(blCpm  * 100) / 100,
+          cpc:     Math.round(blCpc  * 100) / 100,
+          revenue: Math.round(tRevenue * 100) / 100,
+          roas:    Math.round(blRoas * 100) / 100,
+        },
+        campaigns,
+        isEmpty: campaigns.length === 0,
+      });
+
+    } else {
+      // roundel
+      const rows = await querySnowflake(`
+        SELECT
+          raw_data:"Week"::STRING                    AS week,
+          raw_data:"Actualized Vendor Spend"::FLOAT  AS spend,
+          raw_data:"Attributed Total Sales"::FLOAT   AS revenue,
+          raw_data:"ROAS"::FLOAT                     AS roas,
+          raw_data:"Attributed Total Orders"::INT    AS orders,
+          raw_data:"Clicks"::INT                     AS clicks,
+          raw_data:"Impressions"::INT                AS impressions,
+          raw_data:"CTR"::FLOAT                      AS ctr,
+          raw_data:"Cost Per Click (CPC)"::FLOAT     AS cpc
+        FROM ${DB_NAME}.ROUNDEL.ROUNDEL_ADS_RAW
+        WHERE report_type = 'Weekly Performance'
+          AND TRY_CAST(raw_data:"Week"::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+        ORDER BY week DESC
+        LIMIT 52
+      `);
+
+      const weeks = rows.map(r => ({
+        week:        String(r["WEEK"]        ?? r["week"]        ?? ""),
+        spend:       Math.round(Number(r["SPEND"]       ?? r["spend"]       ?? 0) * 100) / 100,
+        revenue:     Math.round(Number(r["REVENUE"]     ?? r["revenue"]     ?? 0) * 100) / 100,
+        roas:        Math.round(Number(r["ROAS"]        ?? r["roas"]        ?? 0) * 100) / 100,
+        orders:      Number(r["ORDERS"]      ?? r["orders"]      ?? 0),
+        clicks:      Number(r["CLICKS"]      ?? r["clicks"]      ?? 0),
+        impressions: Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0),
+        ctr:         Math.round(Number(r["CTR"]         ?? r["ctr"]         ?? 0) * 100) / 100,
+        cpc:         Math.round(Number(r["CPC"]         ?? r["cpc"]         ?? 0) * 100) / 100,
+      }));
+
+      const tRevenue = weeks.reduce((s, w) => s + w.revenue, 0);
+      const tSpend   = weeks.reduce((s, w) => s + w.spend, 0);
+      const blRoas   = tSpend > 0 ? tRevenue / tSpend : 0;
+
+      res.json({
+        channel: "roundel",
+        kpis: {
+          revenue: Math.round(tRevenue * 100) / 100,
+          roas:    Math.round(blRoas * 100) / 100,
+        },
+        weeks,
+        isEmpty: weeks.length === 0,
+      });
+    }
+  } catch (e) {
+    console.error("[data/ads/channel-detail] Error:", e);
+    res.status(500).json({ error: "Failed to query channel detail", detail: String(e) });
+  }
+});
+
 export default router;
 
