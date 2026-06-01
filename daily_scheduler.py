@@ -217,6 +217,21 @@ FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW WHERE source='target_daily_sales' AND ing
 SELECT s.ingestion_date,l.state,SUM(s.raw_data:SALE_AMOUNT::FLOAT),SUM(s.raw_data:SALE_QUANTITY::FLOAT),COUNT(DISTINCT s.raw_data:LOCATION_ID::STRING)
 FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW s JOIN MONARCH_RAW.RETAIL.TARGET_LOCATION_MASTER l ON s.raw_data:LOCATION_ID::STRING=l.location_id
 WHERE s.source='target_daily_sales' AND s.ingestion_date>=DATEADD(day,-7,CURRENT_DATE()) GROUP BY s.ingestion_date,l.state""")
+    cur.execute("DELETE FROM TARGET_PRODUCT_DAILY WHERE summary_date >= DATEADD(day,-7,CURRENT_DATE())")
+    cur.execute("""INSERT INTO MONARCH_RAW.RETAIL.TARGET_PRODUCT_DAILY
+(summary_date,barcode,tcin,dpci,manufacturer_style,item_description,dept,class,revenue,units_sold,regular_revenue,promo_revenue,clearance_revenue,circle_revenue,drive_up_revenue,shipt_revenue,store_count)
+SELECT ingestion_date,
+raw_data:BARCODE::STRING,raw_data:TCIN::STRING,raw_data:DPCI::STRING,raw_data:MANUFACTURER_STYLE::STRING,raw_data:ITEM_DESCRIPTION::STRING,
+raw_data:DEPT::STRING,raw_data:CLASS::STRING,
+SUM(raw_data:SALE_AMOUNT::FLOAT),SUM(raw_data:SALE_QUANTITY::FLOAT),
+SUM(raw_data:REGULAR_SALE_AMOUNT::FLOAT),SUM(raw_data:PROMO_SALE_AMOUNT::FLOAT),
+SUM(raw_data:CLEARANCE_SALE_AMOUNT::FLOAT),SUM(raw_data:CIRCLE_SALE_AMOUNT::FLOAT),
+SUM(raw_data:DRIVE_UP_SALE_A::FLOAT),SUM(raw_data:SHIPT_SALE_AMOUNT::FLOAT),
+COUNT(DISTINCT raw_data:LOCATION_ID::STRING)
+FROM MONARCH_RAW.RETAIL.TARGET_POS_RAW
+WHERE source='target_daily_sales' AND ingestion_date>=DATEADD(day,-7,CURRENT_DATE())
+GROUP BY ingestion_date,raw_data:BARCODE::STRING,raw_data:TCIN::STRING,raw_data:DPCI::STRING,
+raw_data:MANUFACTURER_STYLE::STRING,raw_data:ITEM_DESCRIPTION::STRING,raw_data:DEPT::STRING,raw_data:CLASS::STRING""")
     cur.close()
     conn.close()
     print("  ✅ Target summaries done")
