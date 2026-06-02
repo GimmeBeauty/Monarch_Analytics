@@ -100,6 +100,15 @@ def run_criteo():
     except Exception as e:
         print(f"  ❌ Criteo error: {e}")
 
+def run_roundel():
+    print("\n[5d/6] Roundel (Target) Ads...")
+    try:
+        from ingestion.sources.roundel_ads import run_roundel_ingestion
+        run_roundel_ingestion()
+        print("  ✅ Roundel done")
+    except Exception as e:
+        print(f"  ❌ Roundel error: {e}")
+
 def run_pinterest():
     print("\n[5b/6] Pinterest Ads...")
     try:
@@ -243,6 +252,7 @@ if __name__ == "__main__":
     run_ga4()
     run_target()
     run_criteo()
+    run_roundel()
     run_pinterest()
     rebuild_summaries()
     rebuild_ad_summaries()

@@ -97,6 +97,9 @@ def run_roundel_ingestion():
     files = response.get('Contents', [])
     if not files:
         print("  No files found"); return
+    # Only process the most recent file (daily files are cumulative)
+    files = sorted(files, key=lambda x: x['LastModified'], reverse=True)[:1]
+    print(f"  Processing most recent file: {files[0]['Key']}")
     import sys
     sys.path.insert(0, "/home/runner/workspace")
     from snowflake_connect import get_connection
