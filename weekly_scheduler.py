@@ -22,15 +22,6 @@ def run_netsuite():
     except Exception as e:
         print(f"  ❌ NetSuite error: {e}")
 
-def run_roundel():
-    print("\n[2/2] Roundel (Target) Ads...")
-    try:
-        from ingestion.sources.roundel_ads import run_roundel_ingestion
-        run_roundel_ingestion()
-        print("  ✅ Roundel done")
-    except Exception as e:
-        print(f"  ❌ Roundel error: {e}")
-
 def run_circana():
     print("\n[3/3] Circana POS data...")
     try:
@@ -53,7 +44,6 @@ def run_walmart_s3():
 
 if __name__ == "__main__":
     run_netsuite()
-    run_roundel()
     run_circana()
     run_walmart_s3()
     print("\n✅ Weekly scheduler complete!")
