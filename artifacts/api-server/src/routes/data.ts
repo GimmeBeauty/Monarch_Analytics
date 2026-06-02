@@ -2771,19 +2771,21 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
         };
       });
 
-      const tSpend = campaigns.reduce((s, c) => s + c.spend, 0);
-      const tImpr  = campaigns.reduce((s, c) => s + c.impressions, 0);
-      const tClicks = campaigns.reduce((s, c) => s + c.clicks, 0);
-      const tConv   = campaigns.reduce((s, c) => s + c.conversions, 0);
-      const blCpm   = tImpr   > 0 ? (tSpend / tImpr)   * 1000 : 0;
-      const blCpc   = tClicks > 0 ? tSpend / tClicks : 0;
+      const tSpend   = campaigns.reduce((s, c) => s + c.spend, 0);
+      const tImpr    = campaigns.reduce((s, c) => s + c.impressions, 0);
+      const tClicks  = campaigns.reduce((s, c) => s + c.clicks, 0);
+      const tConv    = campaigns.reduce((s, c) => s + c.conversions, 0);
+      const tRevenue = campaigns.reduce((s, c) => s + c.revenue, 0);
+      const blCpm    = tImpr   > 0 ? (tSpend / tImpr)   * 1000 : 0;
+      const blCpc    = tClicks > 0 ? tSpend / tClicks : 0;
 
       res.json({
         channel: "google",
         kpis: {
-          conversions: Math.round(tConv * 10) / 10,
-          cpc:         Math.round(blCpc * 100) / 100,
-          cpm:         Math.round(blCpm * 100) / 100,
+          conversions: Math.round(tConv    * 10)  / 10,
+          cpc:         Math.round(blCpc    * 100) / 100,
+          cpm:         Math.round(blCpm    * 100) / 100,
+          revenue:     Math.round(tRevenue * 100) / 100,
         },
         campaigns,
         isEmpty: campaigns.length === 0,
@@ -2879,18 +2881,18 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
       // roundel
       const rows = await querySnowflake(`
         SELECT
-          raw_data:"Week"::STRING                    AS week,
-          raw_data:"Actualized Vendor Spend"::FLOAT  AS spend,
-          raw_data:"Attributed Total Sales"::FLOAT   AS revenue,
-          raw_data:"ROAS"::FLOAT                     AS roas,
-          raw_data:"Attributed Total Orders"::INT    AS orders,
-          raw_data:"Clicks"::INT                     AS clicks,
-          raw_data:"Impressions"::INT                AS impressions,
-          raw_data:"CTR"::FLOAT                      AS ctr,
-          raw_data:"Cost Per Click (CPC)"::FLOAT     AS cpc
+          raw_data:"Week"::STRING                                                                              AS week,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Actualized Vendor Spend"::STRING, '[\\$,]', '') AS FLOAT)         AS spend,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Attributed Total Sales"::STRING,  '[\\$,]', '') AS FLOAT)         AS revenue,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"ROAS"::STRING,                    '[\\$,]', '') AS FLOAT)         AS roas,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Attributed Total Orders"::STRING, '[,]',    '') AS INT)           AS orders,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Clicks"::STRING,                  '[,]',    '') AS INT)           AS clicks,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Impressions"::STRING,             '[,]',    '') AS INT)           AS impressions,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"CTR"::STRING,                     '[%]',    '') AS FLOAT)         AS ctr,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Cost Per Click (CPC)"::STRING,    '[\\$,]', '') AS FLOAT)         AS cpc
         FROM ${DB_NAME}.ROUNDEL.ROUNDEL_ADS_RAW
         WHERE report_type = 'Weekly Performance'
-          AND TRY_CAST(raw_data:"Week"::STRING AS DATE) BETWEEN '${start}' AND '${end}'
+          AND LEFT(raw_data:"Week"::STRING, 10) BETWEEN '${start}' AND '${end}'
         ORDER BY week DESC
         LIMIT 52
       `);

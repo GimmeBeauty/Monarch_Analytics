@@ -240,7 +240,7 @@ interface GoogleCampaign {
 }
 interface GoogleDetailData {
   channel: "google";
-  kpis: { conversions: number; cpc: number; cpm: number };
+  kpis: { conversions: number; cpc: number; cpm: number; revenue: number };
   campaigns: GoogleCampaign[];
   isEmpty: boolean;
 }
@@ -343,7 +343,7 @@ function MetaDetailPanel({ data }: { data: MetaDetailData }) {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <SmallKpiCard label="Frequency"        value={`${k.frequency.toFixed(1)}x`} />
         <SmallKpiCard label="CPM"              value={`$${k.cpm.toFixed(2)}`} />
-        <SmallKpiCard label="CPP"              value={`$${k.cpp.toFixed(2)}`} />
+        <SmallKpiCard label="CPA"              value={`$${k.cpp.toFixed(2)}`} />
         <SmallKpiCard label="Init. Checkout"   value={fmtNumber(k.initiateCheckout)} />
         <SmallKpiCard label="Reach"            value={fmtNumber(k.reach)} />
       </div>
@@ -396,7 +396,8 @@ function GoogleDetailPanel({ data }: { data: GoogleDetailData }) {
   const k = data.kpis;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <SmallKpiCard label="Revenue"     value={fmtCurrency(k.revenue)} />
         <SmallKpiCard label="Conversions" value={fmtNumber(k.conversions)} />
         <SmallKpiCard label="CPC"         value={`$${k.cpc.toFixed(2)}`} />
         <SmallKpiCard label="CPM"         value={`$${k.cpm.toFixed(2)}`} />
