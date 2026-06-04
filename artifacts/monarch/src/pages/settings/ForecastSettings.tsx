@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Save, Check, ChevronDown, Store, Calendar, AlertCircle, Trash2 } from "lucide-react";
+import { API_BASE } from "@/lib/apiBase";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -78,13 +79,41 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     if (!selectedYear && data.years.length) setSelectedYear(data.years[data.years.length - 1].year);
   }, [data.stores, data.years]);
 
-  // Load grid and annual goal when store or year changes
+  // Load grid and annual goal when store or year changes — API first, localStorage fallback
   const loadGrid = useCallback(() => {
     if (!selectedStore || !selectedYear) return;
-    const key = `${selectedStore}-${selectedYear}`;
-    setGrid(data.forecasts[key] ? { ...data.forecasts[key] } : emptyGrid());
-    setAnnualGoalInput(String(data.annualGoals?.[selectedYear] ?? ""));
-  }, [selectedStore, selectedYear, data.forecasts, data.annualGoals]);
+
+    const storeName = data.stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
+
+    fetch(`${API_BASE}/api/data/forecast/settings?year=${selectedYear}`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then((resp: { stores: Record<string, { months: Record<number, { retailGoal: number; wholesaleGoal: number }>; annualGoal: number }> }) => {
+        const entry = resp.stores[storeName];
+        if (entry) {
+          const g = emptyGrid();
+          for (let m = 1; m <= 12; m++) {
+            const mo = entry.months[m];
+            if (mo) {
+              g[m] = {
+                retail:    mo.retailGoal    > 0 ? String(mo.retailGoal)    : "",
+                wholesale: mo.wholesaleGoal > 0 ? String(mo.wholesaleGoal) : "",
+              };
+            }
+          }
+          setGrid(g);
+          setAnnualGoalInput(entry.annualGoal > 0 ? entry.annualGoal.toLocaleString("en-US") : "");
+        } else {
+          setGrid(emptyGrid());
+          setAnnualGoalInput("");
+        }
+      })
+      .catch(() => {
+        // Fallback to localStorage
+        const key = `${selectedStore}-${selectedYear}`;
+        setGrid(data.forecasts[key] ? { ...data.forecasts[key] } : emptyGrid());
+        setAnnualGoalInput(String(data.annualGoals?.[selectedYear] ?? ""));
+      });
+  }, [selectedStore, selectedYear, data.stores, data.forecasts, data.annualGoals]);
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -94,7 +123,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     setGrid((g) => ({ ...g, [month]: { ...g[month], [field]: value } }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedStore || !selectedYear) return;
 
     for (let m = 1; m <= 12; m++) {
@@ -110,37 +139,79 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
     setError(null);
     setSaving(true);
-    const key = `${selectedStore}-${selectedYear}`;
-    const savedGrid: Grid = {};
-    for (let m = 1; m <= 12; m++) {
-      savedGrid[m] = {
-        retail:    grid[m].retail.replace(/,/g, ""),
-        wholesale: isShopify ? "" : grid[m].wholesale.replace(/,/g, ""),
-      };
-    }
+
+    const storeName     = data.stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
     const annualGoalVal = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
-    const updated = {
-      ...data,
-      forecasts: { ...data.forecasts, [key]: savedGrid },
-      annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: annualGoalVal },
-    };
-    setData(updated);
-    saveData(updated);
+
+    // Build monthly POST payloads
+    const monthPayloads = Array.from({ length: 12 }, (_, i) => {
+      const m = i + 1;
+      return {
+        year:          selectedYear,
+        storeId:       storeName,
+        month:         m,
+        retailGoal:    parseFloat(grid[m].retail.replace(/,/g, ""))    || 0,
+        wholesaleGoal: isShopify ? 0 : parseFloat(grid[m].wholesale.replace(/,/g, "")) || 0,
+        annualGoal:    0,
+        updatedBy:     "user",
+      };
+    });
+    // Annual goal row (month = 0)
+    const annualPayload = { year: selectedYear, storeId: storeName, month: 0, retailGoal: 0, wholesaleGoal: 0, annualGoal: annualGoalVal, updatedBy: "user" };
+
+    try {
+      await Promise.all(
+        [...monthPayloads, annualPayload].map(payload =>
+          fetch(`${API_BASE}/api/data/forecast/settings`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+        )
+      );
+    } catch {
+      // Fallback: persist to localStorage so data isn't lost
+      const key = `${selectedStore}-${selectedYear}`;
+      const savedGrid: Grid = {};
+      for (let m = 1; m <= 12; m++) {
+        savedGrid[m] = {
+          retail:    grid[m].retail.replace(/,/g, ""),
+          wholesale: isShopify ? "" : grid[m].wholesale.replace(/,/g, ""),
+        };
+      }
+      const updated = {
+        ...data,
+        forecasts:   { ...data.forecasts,   [key]:         savedGrid      },
+        annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: annualGoalVal },
+      };
+      setData(updated);
+      saveData(updated);
+    }
+
     setSaving(false);
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 2500);
   };
 
   const handleAnnualGoalBlur = () => {
-    if (!selectedYear) return;
+    if (!selectedYear || !selectedStore) return;
     const val = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
-    const updated = {
-      ...data,
-      annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: val },
-    };
-    setData(updated);
-    saveData(updated);
     setAnnualGoalInput(val > 0 ? val.toLocaleString("en-US") : "");
+
+    const storeName = data.stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
+
+    // Fire-and-forget POST; fallback to localStorage on failure
+    fetch(`${API_BASE}/api/data/forecast/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ year: selectedYear, storeId: storeName, month: 0, retailGoal: 0, wholesaleGoal: 0, annualGoal: val, updatedBy: "user" }),
+    }).catch(() => {
+      const updated = { ...data, annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: val } };
+      setData(updated);
+      saveData(updated);
+    });
   };
 
   const handleAddStore = () => {

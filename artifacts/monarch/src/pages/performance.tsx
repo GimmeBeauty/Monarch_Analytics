@@ -34,8 +34,9 @@ import {
 import { API_BASE } from "@/lib/apiBase";
 import {
   TrendingUp, TrendingDown, Minus, AlertTriangle, TrendingUpIcon,
-  ChevronDown, SlidersHorizontal,
+  ChevronDown, SlidersHorizontal, Info,
 } from "lucide-react";
+import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
@@ -84,6 +85,13 @@ const FAMILY_LABELS: Record<string, string> = {
   experimental: "Experimental",
 };
 const FAMILY_ORDER = ["core", "rmn", "experimental"];
+
+const METRIC_TOOLTIP_TEXT: Record<string, string> = {
+  roas: "Return On Ad Spend: revenue generated per dollar spent on advertising (Revenue ÷ Spend)",
+  cpc:  "Cost Per Click: average amount spent for each ad click (Spend ÷ Clicks)",
+  ctr:  "Click-Through Rate: percentage of impressions that resulted in a click (Clicks ÷ Impressions)",
+  cpm:  "Cost Per Mille: cost per 1,000 impressions (Spend ÷ Impressions × 1,000)",
+};
 
 // ─── Channel Selector Accordion ───────────────────────────────────────────────
 
@@ -725,20 +733,29 @@ export default function Performance() {
 
           {/* Metric Selector */}
           <div className="flex flex-wrap gap-2 mb-5">
-            {EFFICIENCY_METRICS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setMetric(m.id)}
-                title={m.description}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  metric === m.id
-                    ? "bg-[#FFBC80] text-[#3A3A3A] shadow-sm"
-                    : "bg-[#FFF9F2] dark:bg-[#120d06] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 border border-[#FFBC80]/25 hover:border-[#FFBC80]/60 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/70"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
+            {EFFICIENCY_METRICS.map((m) => {
+              const tipText = METRIC_TOOLTIP_TEXT[m.id] ?? m.description;
+              return (
+                <UITooltip key={m.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setMetric(m.id)}
+                      className={`flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                        metric === m.id
+                          ? "bg-[#FFBC80] text-[#3A3A3A] shadow-sm"
+                          : "bg-[#FFF9F2] dark:bg-[#120d06] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 border border-[#FFBC80]/25 hover:border-[#FFBC80]/60 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/70"
+                      }`}
+                    >
+                      {m.label}
+                      <Info size={10} className="opacity-50 flex-shrink-0" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-[#FFF9F2] dark:bg-[#1a1008] border border-[#FFBC80]/40 text-[#3A3A3A] dark:text-[#FFF9F2] shadow max-w-[220px] text-center leading-relaxed">
+                    {tipText}
+                  </TooltipContent>
+                </UITooltip>
+              );
+            })}
           </div>
 
           {data.channels.length === 0 ? (

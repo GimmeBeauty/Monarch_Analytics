@@ -64,7 +64,7 @@ export const INTEGRATION_REGISTRY: IntegrationDef[] = [
       { key: "refresh_token", label: "Refresh Token", type: "password", placeholder: "Populated via OAuth", required: false, group: "oauth_callback", sensitive: true },
     ],
     dataCapabilities: ["spend", "impressions", "clicks", "conversions", "roas", "ctr", "cpc"],
-    iconColor: "#4285F4",
+    iconColor: "#34A853",
     iconBg: "#E8F0FE",
     defaultSyncSchedule: "daily",
     oauthConfig: {

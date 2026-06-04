@@ -73,7 +73,7 @@ const PROVIDERS: ProviderDef[] = [
   // Advertising
   {
     id: "google_ads", name: "Google Ads", desc: "Search, display & shopping ads",
-    Icon: SiGoogleads, color: "#4285F4", section: "Advertising",
+    Icon: SiGoogleads, color: "#34A853", section: "Advertising",
     authMode: "oauth", oauthLabel: "Connect with Google",
     fields: [
       { key: "developerToken", label: "Developer Token", secret: true, placeholder: "xxxx" },

@@ -16,7 +16,7 @@ import { type PricingMode, getWholesaleRate } from "./wholesaleData";
 
 // ─── Public Types ──────────────────────────────────────────────────────────────
 
-export type EfficiencyMetric = "roas" | "cpc" | "ctr" | "cvr" | "cpm" | "cpa" | "cac" | "aov";
+export type EfficiencyMetric = "roas" | "cpc" | "ctr" | "cvr" | "cpm" | "cpa" | "aov";
 
 export interface EfficiencyMetricMeta {
   id: EfficiencyMetric;
@@ -35,7 +35,6 @@ export const EFFICIENCY_METRICS: EfficiencyMetricMeta[] = [
   { id: "cvr",  label: "CVR",  description: "Conversion Rate",             prefix: "",  suffix: "%",  decimals: 2, higherIsBetter: true  },
   { id: "cpm",  label: "CPM",  description: "Cost Per Mille (1K impr.)",   prefix: "$", suffix: "",   decimals: 2, higherIsBetter: false },
   { id: "cpa",  label: "CPA",  description: "Cost Per Acquisition",        prefix: "$", suffix: "",   decimals: 0, higherIsBetter: false },
-  { id: "cac",  label: "CAC",  description: "Customer Acquisition Cost",   prefix: "$", suffix: "",   decimals: 0, higherIsBetter: false },
   { id: "aov",  label: "AOV",  description: "Average Order Value",         prefix: "$", suffix: "",   decimals: 2, higherIsBetter: true  },
 ];
 

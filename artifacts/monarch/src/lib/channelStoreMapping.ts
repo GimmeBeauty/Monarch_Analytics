@@ -57,7 +57,7 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     storeIds: ["shopify"],
     dailySpendBaseline: 6200,
     baseRoas: 4.8,
-    color: "#4285F4",
+    color: "#34A853",
     channelFamily: "core",
   },
   {

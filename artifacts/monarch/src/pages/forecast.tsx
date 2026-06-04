@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useStoreFilter } from "@/context/StoreFilterContext";
@@ -64,35 +64,19 @@ interface ForecastChartResp {
   series: ChartPoint[];
 }
 
-const STORAGE_KEY = "monarch-forecast-settings";
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Forecast() {
   const [selectedYear, setSelectedYear]   = useState(2026);
   const [granularity,  setGranularity]    = useState<"week" | "month">("month");
   const [showPriorYear, setShowPriorYear] = useState(false);
-  const [annualGoal, setAnnualGoal]       = useState(0);
 
   const { storeWeight: sw } = useStoreFilter();
 
-  // Read annual goal from localStorage (written by ForecastSettings)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const d = JSON.parse(raw) as { annualGoals?: Record<string, number> };
-        setAnnualGoal(Number(d.annualGoals?.[selectedYear] ?? 0));
-      } else {
-        setAnnualGoal(0);
-      }
-    } catch { setAnnualGoal(0); }
-  }, [selectedYear]);
-
   const { data: summary, isLoading: summaryLoading } = useQuery<ForecastSummary>({
-    queryKey: ["forecast-summary", selectedYear, annualGoal],
+    queryKey: ["forecast-summary", selectedYear],
     queryFn: async () => {
-      const p = new URLSearchParams({ year: String(selectedYear), annualGoal: String(annualGoal) });
+      const p = new URLSearchParams({ year: String(selectedYear) });
       const r = await fetch(`/api/data/forecast/summary?${p}`);
       if (!r.ok) throw new Error(await r.text());
       return r.json() as Promise<ForecastSummary>;
@@ -148,8 +132,8 @@ export default function Forecast() {
   const pctMonthly = s && s.currentMonthGoal > 0
     ? Math.round((s.mtdRevenue / s.currentMonthGoal) * 100)
     : null;
-  const pctAnnual = s && annualGoal > 0
-    ? Math.round((s.ytdRevenue / annualGoal) * 100)
+  const pctAnnual = s && s.annualGoal > 0
+    ? Math.round((s.ytdRevenue / s.annualGoal) * 100)
     : null;
 
   // Accent color helper
@@ -162,7 +146,7 @@ export default function Forecast() {
   // Scenario calculations
   const scenarios = useMemo(() => {
     if (!s) return null;
-    const base       = annualGoal > 0 ? annualGoal : (s.totalMonthlyGoal > 0 ? s.totalMonthlyGoal : s.projectedRevenue);
+    const base       = s.annualGoal > 0 ? s.annualGoal : (s.totalMonthlyGoal > 0 ? s.totalMonthlyGoal : s.projectedRevenue);
     const goalBase   = s.totalMonthlyGoal > 0 ? s.totalMonthlyGoal : base;
     const spendRatio = s.projectedRevenue > 0 ? s.projectedSpend / s.projectedRevenue : 0.25;
     const build = (rev: number) => ({
@@ -175,7 +159,7 @@ export default function Forecast() {
       { label: "Actual Goals", ...build(goalBase) },
       { label: "BHAG",         ...build(base * 1.15) },
     ];
-  }, [s, annualGoal]);
+  }, [s]);
 
   // KPI card data
   const kpiCards = s ? [
@@ -205,7 +189,7 @@ export default function Forecast() {
     },
     {
       label: "% to Annual Goal",
-      value: pctAnnual != null ? `${pctAnnual}%` : annualGoal === 0 ? "Set goal ↗" : "—",
+      value: pctAnnual != null ? `${pctAnnual}%` : s.annualGoal === 0 ? "Set goal ↗" : "—",
       sub:   s.ytdRevenue > 0 ? `${fmt$(s.ytdRevenue)} YTD` : "No annual goal set",
       color: pctColor(pctAnnual),
     },
@@ -416,7 +400,7 @@ export default function Forecast() {
                     Updates daily as actuals come in · Remaining months use forecast model
                   </p>
                 </div>
-                {annualGoal === 0 && (
+                {!s?.annualGoal && (
                   <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 text-right max-w-[200px] leading-relaxed">
                     Set an Annual Revenue Goal in Forecast Settings to calibrate scenarios.
                   </p>

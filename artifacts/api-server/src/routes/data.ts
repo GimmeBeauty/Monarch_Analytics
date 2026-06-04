@@ -96,7 +96,7 @@ function filterCommerceSources(storeIds: string[]): CommerceSourceConfig[] {
 
 const AD_SOURCES: AdSourceConfig[] = [
   { table: `${DB_NAME}.ADS.META_ADS_RAW`,         channelId: "meta-ads",        channelLabel: "Meta Ads",         color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
-  { table: `${DB_NAME}.ADS.GOOGLE_ADS_RAW`,       channelId: "google-ads",      channelLabel: "Google Ads",       color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
+  { table: `${DB_NAME}.ADS.GOOGLE_ADS_RAW`,       channelId: "google-ads",      channelLabel: "Google Ads",       color: "#34A853", channelFamily: "core", storeIds: ["shopify"] },
   { table: `${DB_NAME}.ADS.TIKTOK_ADS_RAW`,       channelId: "tiktok-ads",      channelLabel: "TikTok Ads",       color: "#69C9D0", channelFamily: "core", storeIds: ["shopify"] },
   { table: `${DB_NAME}.ADS.PINTEREST_ADS_RAW`,    channelId: "pinterest-ads",   channelLabel: "Pinterest Ads",    color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
   { table: `${DB_NAME}.ADS.AMAZON_ADS_RAW`,       channelId: "amazon-ads",      channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
@@ -108,7 +108,7 @@ const AD_SOURCES: AdSourceConfig[] = [
 /** Maps DAILY_AD_SUMMARY channel values to display metadata. */
 const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; color: string; channelFamily: "core" | "rmn" | "experimental"; storeIds: string[] }> = {
   meta_ads:      { channelId: "meta-ads",      channelLabel: "Meta Ads",      color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
-  google_ads:    { channelId: "google-ads",    channelLabel: "Google Ads",    color: "#4285F4", channelFamily: "core", storeIds: ["shopify"] },
+  google_ads:    { channelId: "google-ads",    channelLabel: "Google Ads",    color: "#34A853", channelFamily: "core", storeIds: ["shopify"] },
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
@@ -2361,11 +2361,104 @@ router.delete("/notes/:id", authenticate, async (req, res) => {
   }
 });
 
+// ─── GET /api/data/forecast/settings ─────────────────────────────────────────
+router.get("/forecast/settings", authenticate, async (req, res) => {
+  try {
+    const year = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
+    if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
+
+    await querySnowflake(`
+      CREATE TABLE IF NOT EXISTS ${DB_NAME}.COMMERCE.FORECAST_SETTINGS (
+        store_id       VARCHAR(100)  NOT NULL,
+        year           INTEGER       NOT NULL,
+        month          INTEGER       NOT NULL,
+        retail_goal    FLOAT         DEFAULT 0,
+        wholesale_goal FLOAT         DEFAULT 0,
+        annual_goal    FLOAT         DEFAULT 0,
+        updated_by     VARCHAR(200),
+        updated_at     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+        PRIMARY KEY (store_id, year, month)
+      )
+    `);
+
+    const rows = await querySnowflake(`
+      SELECT store_id, month, retail_goal, wholesale_goal, annual_goal
+      FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
+      WHERE year = ${year}
+      ORDER BY store_id, month
+    `);
+
+    const storeMap: Record<string, {
+      months: Record<number, { retailGoal: number; wholesaleGoal: number }>;
+      annualGoal: number;
+    }> = {};
+    for (const r of rows as Record<string, unknown>[]) {
+      const sid = String(r["STORE_ID"]        ?? r["store_id"]        ?? "");
+      const mo  = Number(r["MONTH"]           ?? r["month"]           ?? 0);
+      const ret = Number(r["RETAIL_GOAL"]     ?? r["retail_goal"]     ?? 0);
+      const whl = Number(r["WHOLESALE_GOAL"]  ?? r["wholesale_goal"]  ?? 0);
+      const ann = Number(r["ANNUAL_GOAL"]     ?? r["annual_goal"]     ?? 0);
+      if (!storeMap[sid]) storeMap[sid] = { months: {}, annualGoal: 0 };
+      if (mo === 0) { storeMap[sid]!.annualGoal = ann; }
+      else          { storeMap[sid]!.months[mo] = { retailGoal: ret, wholesaleGoal: whl }; }
+    }
+
+    return res.json({ year, stores: storeMap });
+  } catch (e) {
+    console.error("[data/forecast/settings GET]", e);
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// ─── POST /api/data/forecast/settings ────────────────────────────────────────
+router.post("/forecast/settings", authenticate, async (req, res) => {
+  try {
+    const { year, storeId, month, retailGoal, wholesaleGoal, annualGoal, updatedBy } =
+      req.body as Record<string, unknown>;
+
+    const safeYear      = parseInt(String(year  ?? ""), 10);
+    const safeMonth     = parseInt(String(month ?? ""), 10);
+    const safeRetail    = parseFloat(String(retailGoal    ?? "0")) || 0;
+    const safeWholesale = parseFloat(String(wholesaleGoal ?? "0")) || 0;
+    const safeAnnual    = parseFloat(String(annualGoal    ?? "0")) || 0;
+    const safeStoreId   = String(storeId   ?? "").slice(0, 100).replace(/'/g, "''");
+    const safeUpdatedBy = String(updatedBy ?? "").slice(0, 200).replace(/'/g, "''");
+
+    if (!safeStoreId)
+      return res.status(400).json({ error: "storeId is required" });
+    if (safeYear < 2020 || safeYear > 2100)
+      return res.status(400).json({ error: "Invalid year" });
+    if (safeMonth < 0 || safeMonth > 12)
+      return res.status(400).json({ error: "month must be 0–12 (0 = annual goal row)" });
+
+    await querySnowflake(`
+      MERGE INTO ${DB_NAME}.COMMERCE.FORECAST_SETTINGS AS tgt
+      USING (SELECT '${safeStoreId}' AS store_id, ${safeYear} AS year, ${safeMonth} AS month) AS src
+        ON tgt.store_id = src.store_id AND tgt.year = src.year AND tgt.month = src.month
+      WHEN MATCHED THEN UPDATE SET
+        retail_goal    = ${safeRetail},
+        wholesale_goal = ${safeWholesale},
+        annual_goal    = ${safeAnnual},
+        updated_by     = '${safeUpdatedBy}',
+        updated_at     = CURRENT_TIMESTAMP()
+      WHEN NOT MATCHED THEN INSERT
+        (store_id, year, month, retail_goal, wholesale_goal, annual_goal, updated_by, updated_at)
+      VALUES
+        ('${safeStoreId}', ${safeYear}, ${safeMonth}, ${safeRetail}, ${safeWholesale},
+         ${safeAnnual}, '${safeUpdatedBy}', CURRENT_TIMESTAMP())
+    `);
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("[data/forecast/settings POST]", e);
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
 // ─── GET /api/data/forecast/summary ──────────────────────────────────────────
 router.get("/forecast/summary", authenticate, async (req, res) => {
   try {
     const year = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
-    const annualGoal = parseFloat(String(req.query["annualGoal"] ?? "0")) || 0;
 
     if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
 
@@ -2375,7 +2468,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdStart = `${year}-01-01`;
     const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
 
-    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows] = await Promise.all([
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows, goalRows, annualRows] = await Promise.all([
       querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
                COALESCE(SUM(units_sold), 0) AS UNITS
@@ -2422,6 +2515,17 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
         WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
+      querySnowflake(`
+        SELECT month, COALESCE(SUM(retail_goal), 0) AS total_goal
+        FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
+        WHERE year = ${year} AND month BETWEEN 1 AND 12
+        GROUP BY month ORDER BY month
+      `).catch(() => []),
+      querySnowflake(`
+        SELECT COALESCE(SUM(annual_goal), 0) AS total_annual
+        FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
+        WHERE year = ${year} AND month = 0
+      `).catch(() => []),
     ]);
 
     const pick = (row: unknown, ...keys: string[]): number => {
@@ -2468,23 +2572,18 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     }));
     const mtdRevenue = monthlyActualsMap[currentMonth] ?? 0;
 
-    // Monthly goals from store_forecasts PostgreSQL table
-    const yearRows = await db.select().from(forecastYearsTable)
-      .where(eq(forecastYearsTable.year, year)).limit(1);
-    let monthlyGoals = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, goal: 0 }));
-    if (yearRows.length > 0) {
-      const yearId = yearRows[0]!.id;
-      const forecasts = await db.select().from(storeForecastsTable)
-        .where(eq(storeForecastsTable.forecastYearId, yearId));
-      const goalMap: Record<number, number> = {};
-      for (const f of forecasts) {
-        goalMap[f.month] = (goalMap[f.month] ?? 0) + Number(f.retailPrice ?? 0);
-      }
-      monthlyGoals = Array.from({ length: 12 }, (_, i) => ({
-        month: i + 1,
-        goal: Math.round((goalMap[i + 1] ?? 0) * 100) / 100,
-      }));
+    // Monthly goals from Snowflake FORECAST_SETTINGS
+    const goalMap: Record<number, number> = {};
+    for (const row of goalRows as Record<string, unknown>[]) {
+      const mo   = Math.round(Number(row["MONTH"]      ?? row["month"]      ?? 0));
+      const goal = Number(row["TOTAL_GOAL"] ?? row["total_goal"] ?? 0);
+      if (mo >= 1 && mo <= 12) goalMap[mo] = Math.round(goal * 100) / 100;
     }
+    const monthlyGoals = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1, goal: goalMap[i + 1] ?? 0,
+    }));
+    const annualGoalRow    = (annualRows as Record<string, unknown>[])[0] ?? {};
+    const annualGoal       = Math.round(Number(annualGoalRow["TOTAL_ANNUAL"] ?? annualGoalRow["total_annual"] ?? 0) * 100) / 100;
     const currentMonthGoal = monthlyGoals[currentMonth - 1]?.goal ?? 0;
     const totalMonthlyGoal = Math.round(monthlyGoals.reduce((s, g) => s + g.goal, 0) * 100) / 100;
 

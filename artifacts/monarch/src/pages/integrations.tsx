@@ -30,7 +30,7 @@ const PROVIDERS = [
     Icon: SiGoogleads,
     name: "Google Ads",
     desc: "Import campaign data, spend, and conversions",
-    color: "#4285F4",
+    color: "#34A853",
     requiresShop: false,
   },
   {
