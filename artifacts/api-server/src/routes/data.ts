@@ -2458,7 +2458,11 @@ router.post("/forecast/settings", authenticate, async (req, res) => {
 // ─── GET /api/data/forecast/summary ──────────────────────────────────────────
 router.get("/forecast/summary", authenticate, async (req, res) => {
   try {
-    const year = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
+    const year        = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
+    const isWholesale = req.query["isWholesale"] === "true";
+    const storeFilter = typeof req.query["store"] === "string" && req.query["store"].trim()
+      ? req.query["store"].trim()
+      : null;
 
     if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
 
@@ -2468,32 +2472,23 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdStart = `${year}-01-01`;
     const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
 
-    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows, goalRows, annualRows] = await Promise.all([
-      querySnowflake(`
-        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
-               COALESCE(SUM(units_sold), 0) AS UNITS
-        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
-      `),
-      querySnowflake(`
-        SELECT COALESCE(SUM(sale_amount), 0) AS REVENUE,
-               COALESCE(SUM(sale_quantity), 0) AS UNITS
-        FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
-      `),
-      querySnowflake(`
-        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
-               COALESCE(SUM(units_sold), 0) AS UNITS
-        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-        WHERE week_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
-      `),
-      querySnowflake(`
-        SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE,
-               COALESCE(SUM(UNITS), 0) AS UNITS
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
-        WHERE TRANDATE BETWEEN '${ytdStart}' AND '${ytdEnd}'
-      `),
-      querySnowflake(`
+    // Wholesale mode: NetSuite only (optionally filtered by store).
+    // MSRP mode: Shopify + Target + Walmart only. Never include Circana.
+    const netsuiteStoreClause = isWholesale && storeFilter
+      ? `AND STORE_NAME = '${storeFilter.replace(/'/g, "''")}'`
+      : "";
+
+    const monthlyQuery = isWholesale
+      ? `
+        WITH src AS (
+          SELECT DATE_TRUNC('month', TRANDATE) AS m, REVENUE AS rev, UNITS AS units
+          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          WHERE YEAR(TRANDATE) = ${year} ${netsuiteStoreClause}
+        )
+        SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
+        FROM src GROUP BY m ORDER BY m
+      `
+      : `
         WITH src AS (
           SELECT DATE_TRUNC('month', summary_date) AS m, revenue AS rev, units_sold AS units
           FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}
@@ -2503,13 +2498,38 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
           UNION ALL
           SELECT DATE_TRUNC('month', week_date), revenue, units_sold
           FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${year}
-          UNION ALL
-          SELECT DATE_TRUNC('month', TRANDATE), REVENUE, UNITS
-          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT WHERE YEAR(TRANDATE) = ${year}
         )
         SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
         FROM src GROUP BY m ORDER BY m
+      `;
+
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows, goalRows, annualRows] = await Promise.all([
+      isWholesale ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
+               COALESCE(SUM(units_sold), 0) AS UNITS
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
+      isWholesale ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(sale_amount), 0) AS REVENUE,
+               COALESCE(SUM(sale_quantity), 0) AS UNITS
+        FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
+      isWholesale ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
+               COALESCE(SUM(units_sold), 0) AS UNITS
+        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+        WHERE week_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+      `),
+      isWholesale ? querySnowflake(`
+        SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE,
+               COALESCE(SUM(UNITS), 0) AS UNITS
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${ytdStart}' AND '${ytdEnd}'
+          ${netsuiteStoreClause}
+      `) : Promise.resolve([]),
+      querySnowflake(monthlyQuery),
       querySnowflake(`
         SELECT COALESCE(SUM(ad_spend), 0) AS SPEND
         FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
@@ -2538,15 +2558,17 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     };
     const r0 = (rows: unknown[]) => (rows[0] ?? {}) as Record<string, unknown>;
 
-    const ytdRevenue  = Math.round((
-      pick(r0(shopifyRows),  "REVENUE") +
-      pick(r0(targetRows),   "REVENUE") +
-      pick(r0(walmartRows),  "REVENUE") +
-      pick(r0(netsuiteRows), "REVENUE")
-    ) * 100) / 100;
+    const ytdRevenue = isWholesale
+      ? Math.round(pick(r0(netsuiteRows), "REVENUE") * 100) / 100
+      : Math.round((
+          pick(r0(shopifyRows), "REVENUE") +
+          pick(r0(targetRows),  "REVENUE") +
+          pick(r0(walmartRows), "REVENUE")
+        ) * 100) / 100;
 
-    const ytdUnits = pick(r0(shopifyRows), "UNITS") + pick(r0(targetRows), "UNITS") +
-                     pick(r0(walmartRows), "UNITS") + pick(r0(netsuiteRows), "UNITS");
+    const ytdUnits = isWholesale
+      ? pick(r0(netsuiteRows), "UNITS")
+      : pick(r0(shopifyRows), "UNITS") + pick(r0(targetRows), "UNITS") + pick(r0(walmartRows), "UNITS");
     const ytdSpend = pick(r0(spendRows), "SPEND");
 
     const dayOfYear = isCurrentYear

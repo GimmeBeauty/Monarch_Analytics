@@ -18,6 +18,7 @@ import Traffic from "@/pages/traffic";
 import Spend from "@/pages/spend";
 import Attribution from "@/pages/attribution";
 import Performance from "@/pages/performance";
+import ItemPerformance from "@/pages/item-performance";
 import Forecast from "@/pages/forecast";
 import KnowledgeHub from "@/pages/knowledge-hub";
 import Settings from "@/pages/settings";
@@ -135,6 +136,9 @@ function Router() {
       </Route>
       <Route path="/performance">
         {() => <PrivateRoute component={Performance} />}
+      </Route>
+      <Route path="/item-performance">
+        {() => <PrivateRoute component={ItemPerformance} />}
       </Route>
       <Route path="/forecast">
         {() => <PrivateRoute component={Forecast} />}

@@ -6,6 +6,7 @@ import {
   Target,
   BarChart2,
   Telescope,
+  LayoutGrid,
   Settings,
   BookOpen,
   LogOut,
@@ -21,6 +22,7 @@ const topNavItems = [
   { path: "/spend", label: "Spend Optimizer", icon: DollarSign },
   { path: "/attribution", label: "Ad Attribution", icon: Target },
   { path: "/performance", label: "Performance Trends", icon: BarChart2 },
+  { path: "/item-performance", label: "Item Performance", icon: LayoutGrid },
   { path: "/forecast", label: "Forecast", icon: Telescope },
 ];
 

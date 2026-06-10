@@ -1,0 +1,904 @@
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from "recharts";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { API_BASE } from "@/lib/apiBase";
+import {
+  Info,
+  ChevronDown,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  AlertTriangle,
+} from "lucide-react";
+import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface WeekPoint { week: string; revenue: number; }
+interface RetailerBreakdown {
+  entityId: number;
+  name: string;
+  revenue: number;
+  units: number;
+  dpsw: number | null;
+  dataSource: string;
+}
+interface SkuRow {
+  sku: string;
+  productName: string;
+  upc: string;
+  totalRevenue: number;
+  totalUnits: number;
+  avgDpsw: number;
+  targetDpsw: number;
+  vsTargetBenchmark: number;
+  vsRetailAvg: number;
+  retailerCount: number;
+  dataSources: string[];
+  weeklyTrend: WeekPoint[];
+  byRetailer: RetailerBreakdown[];
+}
+interface RetailerRow {
+  entityId: number;
+  name: string;
+  totalRevenue: number;
+  totalUnits: number;
+  skuCount: number;
+  avgDpsw: number | null;
+  dataSource: string;
+}
+interface Summary {
+  topSkuByDpsw:    { sku: string; productName: string; dpsw: number } | null;
+  skusAboveAvg:    { count: number; pct: number };
+  highestVolumeSku: { sku: string; productName: string; revenue: number } | null;
+  biggestOpportunity: { sku: string; productName: string; gap: number } | null;
+}
+interface ApiResponse {
+  summary: Summary;
+  skus: SkuRow[];
+  retailers: RetailerRow[];
+  storeCountsUsed: Record<string, number>;
+  periodLabel: string;
+  dataSourceNote: string;
+}
+
+// ─── Formatting ───────────────────────────────────────────────────────────────
+
+function fmtCurrency(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000)     return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
+}
+
+function fmtDpsw(v: number | null | undefined): string {
+  if (v == null || isNaN(v)) return "—";
+  return `$${v.toFixed(2)}`;
+}
+
+function fmtUnits(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}K`;
+  return v.toLocaleString();
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PERIOD_OPTIONS = [
+  { value: "4w",  label: "Last 4 Weeks" },
+  { value: "13w", label: "Last 13 Weeks" },
+  { value: "26w", label: "Last 26 Weeks" },
+  { value: "52w", label: "Last 52 Weeks" },
+  { value: "ytd", label: "Year to Date" },
+];
+
+const RETAILER_OPTIONS = [
+  { value: 229,  label: "Target" },
+  { value: 231,  label: "Walmart" },
+  { value: 230,  label: "Ulta Beauty" },
+  { value: 228,  label: "Kroger" },
+  { value: 222,  label: "CVS" },
+  { value: 633,  label: "Publix" },
+  { value: 1068, label: "Walgreens" },
+  { value: 227,  label: "Meijer" },
+];
+
+const TT_STYLE = {
+  background:   "rgba(255,249,242,0.97)",
+  border:       "1px solid #FFBC80",
+  borderRadius: "10px",
+  fontSize:     12,
+  boxShadow:    "0 4px 20px rgba(0,0,0,0.08)",
+  padding:      "8px 12px",
+};
+
+const SKU_TABS = [
+  { value: "all",           label: "All SKUs" },
+  { value: "above_avg",     label: "Above Retail Avg" },
+  { value: "below_avg",     label: "Below Retail Avg" },
+  { value: "above_target",  label: "Above Target Benchmark" },
+  { value: "below_target",  label: "Below Target Benchmark" },
+];
+
+// ─── Delta Badge ──────────────────────────────────────────────────────────────
+
+function DeltaBadge({ value }: { value: number }) {
+  if (isNaN(value) || value === 0) {
+    return <span className="text-[#3A3A3A]/40 text-xs">—</span>;
+  }
+  const isPos = value > 0;
+  const Icon  = isPos ? TrendingUp : TrendingDown;
+  const color = isPos ? "text-emerald-600" : "text-red-500";
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${color}`}>
+      <Icon size={11} strokeWidth={2.5} />
+      {isPos ? "+" : ""}{fmtDpsw(value)}
+    </span>
+  );
+}
+
+// ─── Data Source Badges ───────────────────────────────────────────────────────
+
+function DataSourceBadges({ sources }: { sources: string[] }) {
+  return (
+    <div className="flex gap-1">
+      {sources.includes("sellin") && (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#3A3A3A]/10 text-[#3A3A3A]/60 uppercase tracking-wide">
+          S
+        </span>
+      )}
+      {sources.includes("pos") && (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 uppercase tracking-wide">
+          P
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Sparkline ────────────────────────────────────────────────────────────────
+
+function Sparkline({ data }: { data: WeekPoint[] }) {
+  if (!data || data.length < 2) {
+    return <span className="text-[#3A3A3A]/30 text-xs">—</span>;
+  }
+  return (
+    <ResponsiveContainer width={80} height={28}>
+      <LineChart data={data} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
+        <Line
+          type="monotone"
+          dataKey="revenue"
+          stroke="#FFBC80"
+          strokeWidth={1.5}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── DPSW color class ─────────────────────────────────────────────────────────
+
+function dpswColor(vsAvg: number): string {
+  if (isNaN(vsAvg)) return "text-[#3A3A3A]/60";
+  if (vsAvg > 0.1)  return "text-emerald-600 font-semibold";
+  if (vsAvg < -0.1) return "text-red-500 font-semibold";
+  return "text-amber-500 font-semibold";
+}
+
+// ─── Skeleton row ─────────────────────────────────────────────────────────────
+
+function SkeletonRow() {
+  return (
+    <tr className="border-b border-[#FFBC80]/10">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <td key={i} className="px-4 py-3">
+          <div className="h-3 rounded bg-[#FFBC80]/20 animate-pulse" style={{ width: `${40 + (i * 7) % 40}%` }} />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+
+interface KpiCardProps {
+  title: string;
+  value: string;
+  sub?: string;
+  note?: string;
+  highlight?: boolean;
+}
+
+function KpiCard({ title, value, sub, note, highlight }: KpiCardProps) {
+  return (
+    <div
+      className="rounded-xl p-4 bg-white dark:bg-[#1a1208] shadow-sm border border-[#FFBC80]/20"
+      style={highlight ? { background: "linear-gradient(135deg, rgba(255,188,128,0.12), rgba(255,226,154,0.12))" } : {}}
+    >
+      <div className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-1">{title}</div>
+      <div className="text-xl font-bold text-[#3A3A3A] dark:text-[#FFF9F2] leading-tight">{value}</div>
+      {sub  && <div className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 mt-0.5 truncate">{sub}</div>}
+      {note && <div className="text-[10px] text-[#3A3A3A]/40 mt-1">{note}</div>}
+    </div>
+  );
+}
+
+// ─── SKU Detail Drawer ────────────────────────────────────────────────────────
+
+function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => void; numWeeks: number }) {
+  const [drawerTab, setDrawerTab] = useState<"retailers" | "trend" | "distribution">("retailers");
+
+  const retailAvgDpsw = useMemo(() => {
+    const carrying = sku.byRetailer.filter(r => r.dpsw != null);
+    if (!carrying.length) return 0;
+    return carrying.reduce((s, r) => s + (r.dpsw ?? 0), 0) / carrying.length;
+  }, [sku]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/20" onClick={onClose} />
+      <div className="w-[520px] bg-[#FFF9F2] dark:bg-[#1a1208] shadow-2xl flex flex-col h-full overflow-hidden border-l border-[#FFBC80]/30">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-[#FFBC80]/20 flex items-start justify-between shrink-0">
+          <div>
+            <div className="font-bold text-[#3A3A3A] dark:text-[#FFF9F2] text-base">{sku.productName}</div>
+            <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+              SKU: {sku.sku}{sku.upc ? ` · UPC: ${sku.upc}` : ""}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-[#FFBC80]/15 text-[#3A3A3A]/50 hover:text-[#3A3A3A] transition-colors mt-0.5"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-0.5 px-6 pt-3 shrink-0">
+          {(["retailers", "trend", "distribution"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setDrawerTab(tab)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
+                drawerTab === tab
+                  ? "text-[#3A3A3A] dark:text-[#1a1208]"
+                  : "text-[#3A3A3A]/50 hover:bg-[#FFBC80]/10"
+              }`}
+              style={drawerTab === tab ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+            >
+              {tab === "retailers" ? "By Retailer" : tab === "trend" ? "Trend" : "Distribution"}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+
+          {/* Tab: By Retailer */}
+          {drawerTab === "retailers" && (
+            <div>
+              {/* Bar chart */}
+              <div className="mb-4">
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart
+                    data={sku.byRetailer.filter(r => r.dpsw != null)}
+                    margin={{ top: 8, right: 8, left: -10, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,58,58,0.06)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: "rgba(58,58,58,0.45)" }} />
+                    <YAxis tick={{ fontSize: 10, fill: "rgba(58,58,58,0.45)" }} />
+                    <Tooltip contentStyle={TT_STYLE} formatter={(v: number) => [`$${v.toFixed(2)}`, "DPSW"]} />
+                    <ReferenceLine y={retailAvgDpsw} stroke="#FFBC80" strokeDasharray="4 2" label={{ value: "Retail Avg", fontSize: 9, fill: "#FFBC80" }} />
+                    <Bar dataKey="dpsw" fill="#FFBC80" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-lg border border-[#FFBC80]/15">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#FFBC80]/10">
+                      <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Retailer</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Revenue</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Units</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">DPSW</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">vs Avg</th>
+                      <th className="px-3 py-2 text-center font-semibold text-[#3A3A3A]/60">Src</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sku.byRetailer.map(r => (
+                      <tr key={r.entityId} className="border-t border-[#FFBC80]/10 hover:bg-[#FFBC80]/5">
+                        <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{r.name}</td>
+                        <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtCurrency(r.revenue)}</td>
+                        <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtUnits(r.units)}</td>
+                        <td className="px-3 py-2 text-right">{fmtDpsw(r.dpsw)}</td>
+                        <td className="px-3 py-2 text-right">
+                          {r.dpsw != null ? <DeltaBadge value={r.dpsw - retailAvgDpsw} /> : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <DataSourceBadges sources={[r.dataSource]} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Trend */}
+          {drawerTab === "trend" && (
+            <div>
+              <div className="text-xs text-[#3A3A3A]/50 mb-3">Weekly revenue over selected period (sell-in)</div>
+              {sku.weeklyTrend.length < 2 ? (
+                <div className="text-center py-12 text-[#3A3A3A]/30 text-sm">Not enough data for trend</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={sku.weeklyTrend} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,58,58,0.06)" />
+                    <XAxis dataKey="week" tick={{ fontSize: 9, fill: "rgba(58,58,58,0.45)" }} />
+                    <YAxis tick={{ fontSize: 10, fill: "rgba(58,58,58,0.45)" }} tickFormatter={v => `$${(v / 1000).toFixed(0)}K`} />
+                    <Tooltip contentStyle={TT_STYLE} formatter={(v: number) => [fmtCurrency(v), "Revenue"]} />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#FFBC80"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: "#FFBC80" }}
+                      strokeDasharray="5 3"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+              <div className="mt-3 flex items-center gap-1.5 text-[10px] text-[#3A3A3A]/40">
+                <span className="inline-block w-6 border-t-2 border-dashed border-[#FFBC80]" />
+                Sell-in (NetSuite) — shipments to retailer
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Distribution */}
+          {drawerTab === "distribution" && (
+            <div>
+              <div className="text-xs text-[#3A3A3A]/50 mb-3">Retailer distribution for this SKU in the selected period</div>
+              <div className="overflow-x-auto rounded-lg border border-[#FFBC80]/15">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#FFBC80]/10">
+                      <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Retailer</th>
+                      <th className="px-3 py-2 text-center font-semibold text-[#3A3A3A]/60">Carrying?</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">DPSW</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Est. Stores</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RETAILER_OPTIONS.map(opt => {
+                      const r = sku.byRetailer.find(br => br.entityId === opt.value);
+                      const carrying = r && r.revenue > 0;
+                      return (
+                        <tr key={opt.value} className="border-t border-[#FFBC80]/10 hover:bg-[#FFBC80]/5">
+                          <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{opt.label}</td>
+                          <td className="px-3 py-2 text-center">
+                            {carrying ? (
+                              <span className="text-emerald-600 font-semibold">✓</span>
+                            ) : (
+                              <span className="text-red-400 font-semibold text-[10px] uppercase tracking-wide">Gap</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">{r ? fmtDpsw(r.dpsw) : "—"}</td>
+                          <td className="px-3 py-2 text-right text-[#3A3A3A]/60">
+                            {RETAILER_OPTIONS.find(o => o.value === opt.value) ? (
+                              (({
+                                229: "2,000", 231: "4,700", 230: "1,350",
+                                228: "2,800", 222: "9,000", 633: "1,400",
+                                1068: "8,700", 227: "500",
+                              } as Record<number, string>)[opt.value] ?? "—")
+                            ) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function ItemPerformance() {
+  const [period,     setPeriod]     = useState<string>("4w");
+  const [retailers,  setRetailers]  = useState<number[]>([]);
+  const [dataSource, setDataSource] = useState<string>("all");
+  const [skuFilter,  setSkuFilter]  = useState<string>("all");
+  const [sortCol,    setSortCol]    = useState<string>("avgDpsw");
+  const [sortDir,    setSortDir]    = useState<"asc" | "desc">("desc");
+  const [drawerSku,  setDrawerSku]  = useState<SkuRow | null>(null);
+  const [retailerOpen, setRetailerOpen] = useState(false);
+  const [periodOpen,   setPeriodOpen]   = useState(false);
+
+  const queryParams = new URLSearchParams({ period, dataSource });
+  if (retailers.length) queryParams.set("retailers", retailers.join(","));
+
+  const { data, isLoading, isError } = useQuery<ApiResponse>({
+    queryKey: ["item-performance", period, retailers.join(","), dataSource],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/item-performance?${queryParams.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  const numWeeks = useMemo(() => {
+    if (period === "ytd") {
+      const now = new Date();
+      const soy = new Date(now.getFullYear(), 0, 1);
+      return Math.max(1, Math.ceil((now.getTime() - soy.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+    }
+    return parseInt(period) || 4;
+  }, [period]);
+
+  // Client-side sort
+  const sortedSkus = useMemo(() => {
+    if (!data?.skus) return [];
+    return [...data.skus].sort((a, b) => {
+      let va: number, vb: number;
+      if (sortCol === "avgDpsw")           { va = a.avgDpsw;           vb = b.avgDpsw; }
+      else if (sortCol === "targetDpsw")   { va = a.targetDpsw;        vb = b.targetDpsw; }
+      else if (sortCol === "totalRevenue") { va = a.totalRevenue;       vb = b.totalRevenue; }
+      else if (sortCol === "totalUnits")   { va = a.totalUnits;         vb = b.totalUnits; }
+      else if (sortCol === "vsRetailAvg")  { va = a.vsRetailAvg;        vb = b.vsRetailAvg; }
+      else if (sortCol === "retailers")    { va = a.retailerCount;      vb = b.retailerCount; }
+      else { va = a.avgDpsw; vb = b.avgDpsw; }
+      return sortDir === "desc" ? vb - va : va - vb;
+    });
+  }, [data?.skus, sortCol, sortDir]);
+
+  function toggleSort(col: string) {
+    if (sortCol === col) setSortDir(d => d === "desc" ? "asc" : "desc");
+    else { setSortCol(col); setSortDir("desc"); }
+  }
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortCol !== col) return <Minus size={10} className="text-[#3A3A3A]/20" />;
+    return sortDir === "desc"
+      ? <TrendingDown size={10} className="text-[#FFBC80]" />
+      : <TrendingUp   size={10} className="text-[#FFBC80]" />;
+  };
+
+  const retailAvgDpsw = useMemo(() => {
+    if (!data?.skus?.length) return 0;
+    return data.skus.reduce((s, r) => s + r.avgDpsw, 0) / data.skus.length;
+  }, [data?.skus]);
+
+  const includesSellIn = dataSource === "all" || dataSource === "sellin";
+
+  const retailerLabel = retailers.length === 0
+    ? "All Retailers"
+    : RETAILER_OPTIONS.filter(o => retailers.includes(o.value)).map(o => o.label).join(", ");
+
+  const periodLabelStr = PERIOD_OPTIONS.find(o => o.value === period)?.label ?? period;
+
+  return (
+    <DashboardLayout
+      title="Item Performance"
+      description="SKU-level sales velocity across all retail channels"
+      hideDatePicker
+    >
+      {/* ── Filters Bar ─────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Period dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => { setPeriodOpen(o => !o); setRetailerOpen(false); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:border-[#FFBC80]/60 transition-colors"
+          >
+            {periodLabelStr}
+            <ChevronDown size={14} className={`transition-transform ${periodOpen ? "rotate-180" : ""}`} />
+          </button>
+          {periodOpen && (
+            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[160px]">
+              {PERIOD_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setPeriod(opt.value); setPeriodOpen(false); }}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Retailer multi-select */}
+        <div className="relative">
+          <button
+            onClick={() => { setRetailerOpen(o => !o); setPeriodOpen(false); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:border-[#FFBC80]/60 transition-colors max-w-[220px] truncate"
+          >
+            <span className="truncate">{retailerLabel}</span>
+            <ChevronDown size={14} className={`shrink-0 transition-transform ${retailerOpen ? "rotate-180" : ""}`} />
+          </button>
+          {retailerOpen && (
+            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[180px]">
+              <button
+                onClick={() => setRetailers([])}
+                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${retailers.length === 0 ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+              >
+                All Retailers
+              </button>
+              {RETAILER_OPTIONS.map(opt => {
+                const checked = retailers.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setRetailers(prev =>
+                      checked ? prev.filter(v => v !== opt.value) : [...prev, opt.value]
+                    )}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors flex items-center gap-2"
+                  >
+                    <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "border-[#FFBC80] bg-[#FFBC80]" : "border-[#3A3A3A]/30"}`}>
+                      {checked && <span className="text-[8px] font-bold text-[#3A3A3A]">✓</span>}
+                    </span>
+                    <span className={checked ? "font-medium text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}>
+                      {opt.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Data Source toggle */}
+        <div className="flex rounded-lg border border-[#FFBC80]/30 overflow-hidden bg-white dark:bg-[#1a1208]">
+          {[
+            { value: "all",    label: "All" },
+            { value: "sellin", label: "Sell-In" },
+            { value: "pos",    label: "Sell-Through" },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setDataSource(opt.value)}
+              className={`px-3 py-2 text-xs font-medium transition-all ${
+                dataSource === opt.value
+                  ? "text-[#3A3A3A] dark:text-[#1a1208]"
+                  : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10"
+              }`}
+              style={dataSource === opt.value ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Store Filter — placeholder */}
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <button
+              disabled
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/20 bg-white/50 dark:bg-[#1a1208]/50 text-sm text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 cursor-not-allowed"
+            >
+              Store Filter
+              <ChevronDown size={14} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Store-level filtering coming soon</TooltipContent>
+        </UITooltip>
+      </div>
+
+      {/* ── Sell-In Banner ───────────────────────────────────────────────── */}
+      {includesSellIn && (
+        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/30 text-xs text-amber-800 dark:text-amber-300">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <span>
+            <strong>Sell-in vs. sell-through:</strong> NetSuite data reflects shipments to retailers, not consumer purchases.
+            Circana and Target POS reflect actual consumer sales velocity.
+          </span>
+        </div>
+      )}
+
+      {/* ── KPI Cards ────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl p-4 bg-white dark:bg-[#1a1208] shadow-sm border border-[#FFBC80]/20 animate-pulse">
+              <div className="h-3 w-24 bg-[#FFBC80]/20 rounded mb-2" />
+              <div className="h-6 w-32 bg-[#FFBC80]/20 rounded mb-1" />
+              <div className="h-3 w-20 bg-[#FFBC80]/15 rounded" />
+            </div>
+          ))
+        ) : isError ? (
+          <div className="col-span-4 text-center py-4 text-[#3A3A3A]/40 text-sm">Unable to load summary</div>
+        ) : data?.summary ? (
+          <>
+            <KpiCard
+              title="Top SKU by DPSW"
+              value={fmtDpsw(data.summary.topSkuByDpsw?.dpsw ?? null)}
+              sub={data.summary.topSkuByDpsw?.productName}
+              note={`SKU: ${data.summary.topSkuByDpsw?.sku ?? "—"}`}
+              highlight
+            />
+            <KpiCard
+              title="SKUs Above Retail Avg"
+              value={String(data.summary.skusAboveAvg.count)}
+              sub={`${data.summary.skusAboveAvg.pct.toFixed(0)}% of all SKUs`}
+            />
+            <KpiCard
+              title="Highest Volume SKU"
+              value={fmtCurrency(data.summary.highestVolumeSku?.revenue ?? 0)}
+              sub={data.summary.highestVolumeSku?.productName}
+              note={`SKU: ${data.summary.highestVolumeSku?.sku ?? "—"}`}
+            />
+            <KpiCard
+              title="Biggest Opportunity"
+              value={data.summary.biggestOpportunity ? `${fmtDpsw(data.summary.biggestOpportunity.gap)} gap` : "—"}
+              sub={data.summary.biggestOpportunity?.productName}
+              note="Target DPSW vs. retail avg"
+            />
+          </>
+        ) : null}
+      </div>
+
+      {/* ── SKU Performance Table ─────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-[#1a1208] rounded-xl border border-[#FFBC80]/20 shadow-sm mb-6">
+        {/* Table header */}
+        <div className="px-5 pt-5 pb-3 border-b border-[#FFBC80]/15">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">SKU Performance</h2>
+              <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5 flex items-center gap-1">
+                Dollars per store per week across all retail channels
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <Info size={12} className="cursor-help text-[#3A3A3A]/30 hover:text-[#FFBC80] transition-colors" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[240px]">
+                    DPSW = Total Revenue ÷ Store Count ÷ Weeks in period.
+                    Store counts are estimates.{" "}
+                    {includesSellIn && "Sell-in data reflects shipments to retailer, not consumer purchases."}
+                  </TooltipContent>
+                </UITooltip>
+              </p>
+            </div>
+            <div className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 text-right shrink-0">
+              {data?.periodLabel ?? periodLabelStr}
+              <br />
+              <span className="text-[10px]">{sortedSkus.length} SKU{sortedSkus.length !== 1 ? "s" : ""}</span>
+            </div>
+          </div>
+
+          {/* Quick-filter tabs */}
+          <div className="flex gap-1 mt-3 flex-wrap">
+            {SKU_TABS.map(tab => (
+              <button
+                key={tab.value}
+                onClick={() => setSkuFilter(tab.value)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                  skuFilter === tab.value
+                    ? "text-[#3A3A3A] dark:text-[#1a1208]"
+                    : "text-[#3A3A3A]/50 hover:bg-[#FFBC80]/10"
+                }`}
+                style={skuFilter === tab.value ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Store counts note */}
+        <div className="px-5 py-2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 border-b border-[#FFBC80]/10 flex items-center gap-1">
+          <Info size={10} />
+          Store counts are estimates used for DPSW calculations. Store-level data will be used automatically when available.
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#FFBC80]/10 bg-[#FFF9F2]/50 dark:bg-[#120d06]/30">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Product · SKU</th>
+                <th
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  onClick={() => toggleSort("totalRevenue")}
+                >
+                  <span className="inline-flex items-center gap-1 justify-end">Revenue <SortIcon col="totalRevenue" /></span>
+                </th>
+                <th
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  onClick={() => toggleSort("totalUnits")}
+                >
+                  <span className="inline-flex items-center gap-1 justify-end">Units <SortIcon col="totalUnits" /></span>
+                </th>
+                <th
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  onClick={() => toggleSort("avgDpsw")}
+                >
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Avg DPSW
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                      </TooltipTrigger>
+                      <TooltipContent>Weighted avg dollars per store per week across all retailers carrying this SKU</TooltipContent>
+                    </UITooltip>
+                    <SortIcon col="avgDpsw" />
+                  </span>
+                </th>
+                <th
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  onClick={() => toggleSort("targetDpsw")}
+                >
+                  <span className="inline-flex items-center gap-1 justify-end">Target DPSW <SortIcon col="targetDpsw" /></span>
+                </th>
+                <th
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  onClick={() => toggleSort("vsRetailAvg")}
+                >
+                  <span className="inline-flex items-center gap-1 justify-end">vs Retail Avg <SortIcon col="vsRetailAvg" /></span>
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">vs Target Benchmark</th>
+                <th
+                  className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  onClick={() => toggleSort("retailers")}
+                >
+                  <span className="inline-flex items-center gap-1"># Retailers <SortIcon col="retailers" /></span>
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Data</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
+              ) : isError ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
+                    Unable to load data. Check Snowflake connectivity.
+                  </td>
+                </tr>
+              ) : sortedSkus.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
+                    No SKUs found for the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                sortedSkus.map(sku => (
+                  <tr
+                    key={sku.sku}
+                    className="border-b border-[#FFBC80]/08 hover:bg-[#FFBC80]/5 cursor-pointer transition-colors"
+                    onClick={() => setDrawerSku(sku)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2] text-sm leading-tight">{sku.productName}</div>
+                      <div className="text-[10px] text-[#3A3A3A]/45 mt-0.5">{sku.sku}</div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#FFF9F2]/70 tabular-nums">
+                      {fmtCurrency(sku.totalRevenue)}
+                      {includesSellIn && (
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <Info size={10} className="inline ml-1 text-[#3A3A3A]/25 hover:text-[#FFBC80] cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>Sell-in data — reflects shipments to retailer, not consumer purchases.</TooltipContent>
+                        </UITooltip>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 tabular-nums">{fmtUnits(sku.totalUnits)}</td>
+                    <td className={`px-4 py-3 text-right text-sm tabular-nums ${dpswColor(sku.vsRetailAvg)}`}>
+                      {fmtDpsw(sku.avgDpsw)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                      {sku.targetDpsw > 0 ? fmtDpsw(sku.targetDpsw) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right"><DeltaBadge value={sku.vsRetailAvg} /></td>
+                    <td className="px-4 py-3 text-right"><DeltaBadge value={sku.vsTargetBenchmark} /></td>
+                    <td className="px-4 py-3 text-center text-sm text-[#3A3A3A]/60">{sku.retailerCount}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center"><DataSourceBadges sources={sku.dataSources} /></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center" onClick={e => e.stopPropagation()}>
+                        <Sparkline data={sku.weeklyTrend} />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Retailer Velocity Overview ───────────────────────────────────── */}
+      {data?.retailers && data.retailers.length > 0 && (
+        <div className="bg-white dark:bg-[#1a1208] rounded-xl border border-[#FFBC80]/20 shadow-sm">
+          <div className="px-5 pt-5 pb-3 border-b border-[#FFBC80]/15">
+            <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Retailer Velocity Overview</h2>
+            <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">Aggregate performance across all SKUs by retailer</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#FFBC80]/10 bg-[#FFF9F2]/50 dark:bg-[#120d06]/30">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Retailer</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Total Revenue</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Total Units</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40"># SKUs</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Avg DPSW (all SKUs)</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Data Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const allDpswVals = data.retailers.filter(r => r.avgDpsw != null).map(r => r.avgDpsw as number);
+                  const crossAvg = allDpswVals.length ? allDpswVals.reduce((s, v) => s + v, 0) / allDpswVals.length : 0;
+                  return data.retailers.map(r => (
+                    <tr key={r.entityId} className="border-b border-[#FFBC80]/08 hover:bg-[#FFBC80]/5 transition-colors">
+                      <td className="px-4 py-3 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{r.name}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#FFF9F2]/70 tabular-nums">{fmtCurrency(r.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 tabular-nums">{fmtUnits(r.totalUnits)}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{r.skuCount}</td>
+                      <td className={`px-4 py-3 text-right tabular-nums ${r.avgDpsw != null ? dpswColor((r.avgDpsw ?? 0) - crossAvg) : "text-[#3A3A3A]/40"}`}>
+                        {fmtDpsw(r.avgDpsw)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#3A3A3A]/10 text-[#3A3A3A]/60 uppercase tracking-wide">
+                          {r.dataSource === "sellin" ? "Sell-In" : r.dataSource === "pos" ? "POS" : r.dataSource}
+                        </span>
+                      </td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── SKU Drawer ──────────────────────────────────────────────────── */}
+      {drawerSku && (
+        <SkuDrawer
+          sku={drawerSku}
+          onClose={() => setDrawerSku(null)}
+          numWeeks={numWeeks}
+        />
+      )}
+
+      {/* Close dropdowns on outside click */}
+      {(periodOpen || retailerOpen) && (
+        <div
+          className="fixed inset-0 z-20"
+          onClick={() => { setPeriodOpen(false); setRetailerOpen(false); }}
+        />
+      )}
+    </DashboardLayout>
+  );
+}
