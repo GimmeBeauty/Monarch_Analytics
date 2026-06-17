@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
@@ -22,6 +23,7 @@ import {
   TrendingDown,
   Minus,
   AlertTriangle,
+  Download,
 } from "lucide-react";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -35,6 +37,7 @@ interface RetailerBreakdown {
   units: number;
   dpsw: number | null;
   dataSource: string;
+  itemNumber: string;
 }
 interface SkuRow {
   sku: string;
@@ -152,14 +155,16 @@ function DeltaBadge({ value }: { value: number }) {
 // ─── Data Source Badges ───────────────────────────────────────────────────────
 
 function DataSourceBadges({ sources }: { sources: string[] }) {
+  const hasSellIn = sources.some(s => s.includes("sellin"));
+  const hasPOS    = sources.some(s => s.includes("pos"));
   return (
     <div className="flex gap-1">
-      {sources.includes("sellin") && (
+      {hasSellIn && (
         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#3A3A3A]/10 text-[#3A3A3A]/60 uppercase tracking-wide">
           S
         </span>
       )}
-      {sources.includes("pos") && (
+      {hasPOS && (
         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 uppercase tracking-wide">
           P
         </span>
@@ -315,6 +320,7 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                   <thead>
                     <tr className="bg-[#FFBC80]/10">
                       <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Retailer</th>
+                      <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Item #</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Revenue</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Units</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">DPSW</th>
@@ -326,6 +332,7 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                     {sku.byRetailer.map(r => (
                       <tr key={r.entityId} className="border-t border-[#FFBC80]/10 hover:bg-[#FFBC80]/5">
                         <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{r.name}</td>
+                        <td className="px-3 py-2 text-[#3A3A3A]/50 text-[10px] font-mono">{r.itemNumber || "—"}</td>
                         <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtCurrency(r.revenue)}</td>
                         <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtUnits(r.units)}</td>
                         <td className="px-3 py-2 text-right">{fmtDpsw(r.dpsw)}</td>
@@ -426,24 +433,124 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
   );
 }
 
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function getRecentWeeks(count = 12): Array<{ label: string; start: string; end: string }> {
+  const weeks = [];
+  for (let i = 0; i < count; i++) {
+    const mon = new Date();
+    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7) - i * 7);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    const fmt   = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const toISO = (d: Date) => d.toISOString().split("T")[0];
+    weeks.push({ label: `${fmt(mon)} – ${fmt(sun)}`, start: toISO(mon), end: toISO(sun) });
+  }
+  return weeks;
+}
+
+const RECENT_WEEKS = getRecentWeeks();
+
+// ─── Export helpers ───────────────────────────────────────────────────────────
+
+function skuToRow(s: SkuRow): (string | number)[] {
+  return [
+    s.productName, s.sku, s.upc,
+    s.totalRevenue, s.totalUnits,
+    +s.avgDpsw.toFixed(4),
+    s.targetDpsw > 0 ? +s.targetDpsw.toFixed(4) : "",
+    +s.vsRetailAvg.toFixed(4),
+    +s.vsTargetBenchmark.toFixed(4),
+    s.retailerCount,
+    s.dataSources.join("+"),
+  ];
+}
+
+const EXPORT_HEADERS = [
+  "Product Name", "SKU", "UPC",
+  "Total Revenue", "Total Units",
+  "Avg DPSW", "Target DPSW",
+  "vs Retail Avg", "vs Target Benchmark",
+  "# Retailers", "Data Sources",
+];
+
+function downloadCSV(skus: SkuRow[], filename: string) {
+  const csv = [EXPORT_HEADERS, ...skus.map(skuToRow)]
+    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = filename;
+  a.click();
+}
+
+function downloadExcel(skus: SkuRow[], filename: string) {
+  const wb = XLSX.utils.book_new();
+  const retailerIds = [...new Set(skus.flatMap(s => s.byRetailer.map(r => r.entityId)))];
+  const sheetOrder  = RETAILER_OPTIONS.map(o => o.value).filter(id => retailerIds.includes(id));
+
+  for (const entityId of sheetOrder) {
+    const opt   = RETAILER_OPTIONS.find(o => o.value === entityId);
+    const label = opt?.label ?? String(entityId);
+    const rSkus = skus.filter(s => s.byRetailer.some(r => r.entityId === entityId));
+    const headers = [
+      "Product Name", "SKU", "UPC",
+      `${label} Revenue`, `${label} Units`, `${label} DPSW`, `${label} Item #`,
+      "Total Revenue (All)", "Total Units (All)", "Avg DPSW (All)", "Data Sources",
+    ];
+    const rows = rSkus.map(s => {
+      const rb = s.byRetailer.find(r => r.entityId === entityId);
+      return [
+        s.productName, s.sku, s.upc,
+        rb?.revenue ?? 0, rb?.units ?? 0,
+        rb?.dpsw != null ? +rb.dpsw.toFixed(4) : "",
+        rb?.itemNumber ?? "",
+        s.totalRevenue, s.totalUnits,
+        +s.avgDpsw.toFixed(4),
+        s.dataSources.join("+"),
+      ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, label.substring(0, 31));
+  }
+
+  XLSX.writeFile(wb, filename);
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ItemPerformance() {
-  const [period,     setPeriod]     = useState<string>("4w");
-  const [retailers,  setRetailers]  = useState<number[]>([]);
-  const [dataSource, setDataSource] = useState<string>("all");
-  const [skuFilter,  setSkuFilter]  = useState<string>("all");
-  const [sortCol,    setSortCol]    = useState<string>("avgDpsw");
-  const [sortDir,    setSortDir]    = useState<"asc" | "desc">("desc");
-  const [drawerSku,  setDrawerSku]  = useState<SkuRow | null>(null);
+  const [period,       setPeriod]       = useState<string>("4w");
+  const [dateMode,     setDateMode]     = useState<"period" | "week" | "custom">("period");
+  const [selectedWeek, setSelectedWeek] = useState<{ label: string; start: string; end: string } | null>(null);
+  const [customStart,  setCustomStart]  = useState("");
+  const [customEnd,    setCustomEnd]    = useState("");
+  const [retailers,    setRetailers]    = useState<number[]>([]);
+  const [dataSource,   setDataSource]   = useState<string>("all");
+  const [skuFilter,    setSkuFilter]    = useState<string>("all");
+  const [sortCol,      setSortCol]      = useState<string>("avgDpsw");
+  const [sortDir,      setSortDir]      = useState<"asc" | "desc">("desc");
+  const [drawerSku,    setDrawerSku]    = useState<SkuRow | null>(null);
   const [retailerOpen, setRetailerOpen] = useState(false);
   const [periodOpen,   setPeriodOpen]   = useState(false);
 
-  const queryParams = new URLSearchParams({ period, dataSource });
-  if (retailers.length) queryParams.set("retailers", retailers.join(","));
+  const queryParams = useMemo(() => {
+    const p = new URLSearchParams({ dataSource });
+    if (dateMode === "week" && selectedWeek) {
+      p.set("start", selectedWeek.start);
+      p.set("end",   selectedWeek.end);
+    } else if (dateMode === "custom" && customStart && customEnd) {
+      p.set("start", customStart);
+      p.set("end",   customEnd);
+    } else {
+      p.set("period", period);
+    }
+    if (retailers.length) p.set("retailers", retailers.join(","));
+    return p;
+  }, [dateMode, period, selectedWeek, customStart, customEnd, dataSource, retailers]);
 
   const { data, isLoading, isError } = useQuery<ApiResponse>({
-    queryKey: ["item-performance", period, retailers.join(","), dataSource],
+    queryKey: ["item-performance", queryParams.toString()],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/item-performance?${queryParams.toString()}`, {
         credentials: "include",
@@ -454,13 +561,18 @@ export default function ItemPerformance() {
   });
 
   const numWeeks = useMemo(() => {
+    if (dateMode === "week" && selectedWeek) return 1;
+    if (dateMode === "custom" && customStart && customEnd) {
+      const diff = new Date(customEnd).getTime() - new Date(customStart).getTime();
+      return Math.max(1, Math.round(diff / (7 * 24 * 60 * 60 * 1000)));
+    }
     if (period === "ytd") {
       const now = new Date();
       const soy = new Date(now.getFullYear(), 0, 1);
       return Math.max(1, Math.ceil((now.getTime() - soy.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     }
     return parseInt(period) || 4;
-  }, [period]);
+  }, [dateMode, period, selectedWeek, customStart, customEnd]);
 
   // Client-side sort
   const sortedSkus = useMemo(() => {
@@ -501,7 +613,11 @@ export default function ItemPerformance() {
     ? "All Retailers"
     : RETAILER_OPTIONS.filter(o => retailers.includes(o.value)).map(o => o.label).join(", ");
 
-  const periodLabelStr = PERIOD_OPTIONS.find(o => o.value === period)?.label ?? period;
+  const periodLabelStr = dateMode === "week" && selectedWeek
+    ? selectedWeek.label
+    : dateMode === "custom" && customStart && customEnd
+      ? `${customStart} – ${customEnd}`
+      : (PERIOD_OPTIONS.find(o => o.value === period)?.label ?? period);
 
   return (
     <DashboardLayout
@@ -517,20 +633,55 @@ export default function ItemPerformance() {
             onClick={() => { setPeriodOpen(o => !o); setRetailerOpen(false); }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:border-[#FFBC80]/60 transition-colors"
           >
-            {periodLabelStr}
-            <ChevronDown size={14} className={`transition-transform ${periodOpen ? "rotate-180" : ""}`} />
+            <span className="max-w-[160px] truncate">{periodLabelStr}</span>
+            <ChevronDown size={14} className={`shrink-0 transition-transform ${periodOpen ? "rotate-180" : ""}`} />
           </button>
           {periodOpen && (
-            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[160px]">
+            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[220px] max-h-[400px] overflow-y-auto">
+              <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider">Rolling Period</div>
               {PERIOD_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
-                  onClick={() => { setPeriod(opt.value); setPeriodOpen(false); }}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                  onClick={() => { setPeriod(opt.value); setDateMode("period"); setPeriodOpen(false); }}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "period" && period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
                 >
                   {opt.label}
                 </button>
               ))}
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Weekly</div>
+              {RECENT_WEEKS.map(w => (
+                <button
+                  key={w.start}
+                  onClick={() => { setSelectedWeek(w); setDateMode("week"); setPeriodOpen(false); }}
+                  className={`w-full text-left px-4 py-1.5 text-xs hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "week" && selectedWeek?.start === w.start ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                >
+                  {w.label}
+                </button>
+              ))}
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Custom Range</div>
+              <div className="px-3 pb-3 flex flex-col gap-1.5">
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={e => { setCustomStart(e.target.value); setDateMode("custom"); }}
+                  className="w-full px-2 py-1 text-xs rounded border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2]"
+                />
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={e => { setCustomEnd(e.target.value); setDateMode("custom"); }}
+                  className="w-full px-2 py-1 text-xs rounded border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2]"
+                />
+                {customStart && customEnd && (
+                  <button
+                    onClick={() => { setDateMode("custom"); setPeriodOpen(false); }}
+                    className="w-full px-2 py-1 text-xs rounded font-medium text-[#3A3A3A] dark:text-[#1a1208]"
+                    style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                  >
+                    Apply Range
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -610,6 +761,24 @@ export default function ItemPerformance() {
           </TooltipTrigger>
           <TooltipContent>Store-level filtering coming soon</TooltipContent>
         </UITooltip>
+
+        {data?.skus && data.skus.length > 0 && (
+          <button
+            onClick={() => {
+              const ts = periodLabelStr.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-");
+              if (retailers.length === 1) {
+                const opt = RETAILER_OPTIONS.find(o => o.value === retailers[0]);
+                downloadCSV(data.skus, `item-performance-${opt?.label ?? "retailer"}-${ts}.csv`);
+              } else {
+                downloadExcel(data.skus, `item-performance-${ts}.xlsx`);
+              }
+            }}
+            className="ml-auto flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 hover:border-[#FFBC80]/70 hover:text-[#3A3A3A] transition-colors"
+          >
+            <Download size={14} />
+            Export
+          </button>
+        )}
       </div>
 
       {/* ── Sell-In Banner ───────────────────────────────────────────────── */}

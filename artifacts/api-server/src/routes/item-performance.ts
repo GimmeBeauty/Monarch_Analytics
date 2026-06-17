@@ -45,6 +45,35 @@ const STORE_COUNTS_BY_ENTITY: Record<number, number> = {
   227:  500,    // Meijer
 };
 
+// Velocity benchmark factors (Target = 1.0 baseline $/store/week)
+const VELOCITY_FACTORS: Record<number, number> = {
+  229:  1.00,  // Target — baseline
+  231:  0.70,  // Walmart
+  230:  0.70,  // Ulta Beauty
+  228:  0.50,  // Kroger (grocery)
+  633:  0.50,  // Publix (grocery)
+  222:  0.20,  // CVS (drug)
+  1068: 0.20,  // Walgreens (drug)
+  227:  0.50,  // Meijer (grocery)
+};
+
+// Circana retailer display name → entity ID
+const CIRCANA_ENTITY_IDS: Record<string, number> = {
+  "Meijer Corp-RMA - Food":    227,
+  "Publix Corp-RMA - Food":    633,
+  "CVS Corp Total-RMA - Drug": 222,
+  "Walgreens Corp-RMA - Drug": 1068,
+};
+
+// Circana time period strings by period key
+const CIRCANA_TIME_PERIODS: Record<string, string> = {
+  "4w":  "Latest 4 Week Pd Ending 04-19-26",
+  "13w": "Latest 13 Week Pd Ending 04-19-26",
+  "26w": "Latest 26 Week Pd Ending 04-19-26",
+  "52w": "Latest 52 Week Pd Ending 04-19-26",
+  "ytd": "Building Calendar Year 2026 Ending 05-10-26",
+};
+
 // Retailers to exclude from DPSW (DTC channels)
 const DTC_ENTITY_IDS = [850, 49270]; // Shopify, Amazon Pattern
 
@@ -68,6 +97,18 @@ function periodToDateFilter(period: Period): string {
   return `TRANDATE >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
 }
 
+function periodToTargetDateFilter(period: Period): string {
+  if (period === "ytd") return `summary_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  const weeks = periodToWeeks(period);
+  return `summary_date >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
+}
+
+function periodToWalmartDateFilter(period: Period): string {
+  if (period === "ytd") return `week_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  const weeks = periodToWeeks(period);
+  return `week_date >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
+}
+
 function periodLabel(period: Period): string {
   if (period === "4w")  return "Last 4 Weeks";
   if (period === "13w") return "Last 13 Weeks";
@@ -88,21 +129,38 @@ router.get("/", async (req, res) => {
     const period     = (req.query.period     as Period)  || "4w";
     const dataSource = (req.query.dataSource as string)  || "all";
     const skuFilter  = (req.query.skuFilter  as string)  || "all";
+    const startParam = req.query.start as string | undefined;
+    const endParam   = req.query.end   as string | undefined;
 
     const rawRetailers = req.query.retailers as string | undefined;
     const retailerIds: number[] = rawRetailers
       ? rawRetailers.split(",").map(Number).filter(Boolean)
       : [];
 
-    // Compute number of weeks for DPSW denominator
-    let numWeeks = periodToWeeks(period);
-    if (period === "ytd") {
+    // Compute number of weeks and date filters
+    let numWeeks          = periodToWeeks(period);
+    let dateFilter        = periodToDateFilter(period);
+    let targetDateFilter  = periodToTargetDateFilter(period);
+    let walmartDateFilter = periodToWalmartDateFilter(period);
+    let circanaTimePeriod = CIRCANA_TIME_PERIODS[period] ?? CIRCANA_TIME_PERIODS["4w"];
+
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (startParam && endParam && dateRe.test(startParam) && dateRe.test(endParam)) {
+      const s = new Date(startParam), e = new Date(endParam);
+      const days    = Math.round((e.getTime() - s.getTime()) / 86_400_000);
+      numWeeks          = Math.max(1, Math.round(days / 7));
+      dateFilter        = `TRANDATE BETWEEN '${startParam}' AND '${endParam}'`;
+      targetDateFilter  = `summary_date BETWEEN '${startParam}' AND '${endParam}'`;
+      walmartDateFilter = `week_date BETWEEN '${startParam}' AND '${endParam}'`;
+      if (days <= 35)       circanaTimePeriod = CIRCANA_TIME_PERIODS["4w"];
+      else if (days <= 100) circanaTimePeriod = CIRCANA_TIME_PERIODS["13w"];
+      else if (days <= 190) circanaTimePeriod = CIRCANA_TIME_PERIODS["26w"];
+      else                  circanaTimePeriod = CIRCANA_TIME_PERIODS["52w"];
+    } else if (period === "ytd") {
       const now = new Date();
       const startOfYear = new Date(now.getFullYear(), 0, 1);
       numWeeks = Math.max(1, Math.ceil((now.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     }
-
-    const dateFilter = periodToDateFilter(period);
 
     // Build optional retailer filter
     const dtcList = DTC_ENTITY_IDS.join(", ");
@@ -152,7 +210,7 @@ router.get("/", async (req, res) => {
             ORDER BY LOADED_AT DESC
           ) AS rn
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
-        WHERE TRANDATE >= DATEADD('week', -8, CURRENT_DATE())
+        WHERE ${dateFilter}
       ),
       weekly AS (
         SELECT
@@ -170,17 +228,75 @@ router.get("/", async (req, res) => {
       FETCH FIRST 5000 ROWS ONLY
     `;
 
-    // Run both queries in parallel
+    // ── Sell-through: Target (TARGET_PRODUCT_DAILY, keyed by UPC/barcode) ────────
+    const targetPosSql = `
+      SELECT
+        barcode,
+        tcin,
+        item_description,
+        SUM(revenue)    AS revenue,
+        SUM(units_sold) AS units_sold
+      FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
+      WHERE ${targetDateFilter}
+      GROUP BY barcode, tcin, item_description
+      ORDER BY revenue DESC
+      FETCH FIRST 2000 ROWS ONLY
+    `;
+
+    // ── Sell-through: Walmart (WALMART_STORE_PRODUCT_WEEKLY, keyed by UPC) ───────
+    const walmartPosSql = `
+      SELECT
+        walmart_upc,
+        walmart_item_number,
+        product_description,
+        SUM(revenue)    AS revenue,
+        SUM(units_sold) AS units_sold
+      FROM ${DB_NAME}.RETAIL.WALMART_STORE_PRODUCT_WEEKLY
+      WHERE ${walmartDateFilter}
+      GROUP BY walmart_upc, walmart_item_number, product_description
+      ORDER BY revenue DESC
+      FETCH FIRST 2000 ROWS ONLY
+    `;
+
+    // ── Sell-through: Circana (CVS, Walgreens, Publix, Meijer) ───────────────────
+    const circanaPosSql = `
+      SELECT
+        upc,
+        product,
+        retailer,
+        SUM(dollar_sales)   AS revenue,
+        SUM(unit_sales)     AS units,
+        MAX(stores_selling) AS store_count
+      FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
+      WHERE time_period = '${circanaTimePeriod}'
+        AND retailer IN (
+          'Meijer Corp-RMA - Food',
+          'Publix Corp-RMA - Food',
+          'CVS Corp Total-RMA - Drug',
+          'Walgreens Corp-RMA - Drug'
+        )
+      GROUP BY upc, product, retailer
+      ORDER BY revenue DESC
+      FETCH FIRST 5000 ROWS ONLY
+    `;
+
+    const includePOS = dataSource !== "sellin";
+
     let skuRetailerRows: Record<string, unknown>[] = [];
     let weeklyRows: Record<string, unknown>[] = [];
+    let targetPosRows: Record<string, unknown>[] = [];
+    let walmartPosRows: Record<string, unknown>[] = [];
+    let circanaRows: Record<string, unknown>[] = [];
 
     try {
-      [skuRetailerRows, weeklyRows] = await Promise.all([
+      [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows] = await Promise.all([
         querySnowflake(skuRetailerSql),
         querySnowflake(weeklyTrendSql),
+        includePOS ? querySnowflake(targetPosSql)  : Promise.resolve([]),
+        includePOS ? querySnowflake(walmartPosSql) : Promise.resolve([]),
+        includePOS ? querySnowflake(circanaPosSql) : Promise.resolve([]),
       ]);
     } catch (sfErr) {
-      // Snowflake unavailable — return empty structure with error flag
       return res.status(503).json({
         error: "Data warehouse unavailable",
         summary: null,
@@ -189,6 +305,51 @@ router.get("/", async (req, res) => {
         storeCountsUsed: STORE_COUNTS_BY_ENTITY,
         periodLabel: periodLabel(period),
         dataSourceNote: "NetSuite data reflects sell-in (shipments to retailer). Target and Circana data reflects consumer sell-through.",
+      });
+    }
+
+    // ── Build POS lookup maps keyed by UPC ───────────────────────────────────
+
+    const targetPosByUpc = new Map<string, { title: string; tcin: string; revenue: number; units: number }>();
+    for (const row of targetPosRows) {
+      const upc = String(row["BARCODE"] ?? row["barcode"] ?? "").trim();
+      if (!upc) continue;
+      const prev = targetPosByUpc.get(upc);
+      targetPosByUpc.set(upc, {
+        title:   String(row["ITEM_DESCRIPTION"]  ?? row["item_description"]  ?? prev?.title  ?? ""),
+        tcin:    String(row["TCIN"]              ?? row["tcin"]              ?? prev?.tcin   ?? ""),
+        revenue: (prev?.revenue ?? 0) + safeNum(row["REVENUE"]   ?? row["revenue"]),
+        units:   (prev?.units   ?? 0) + safeNum(row["UNITS_SOLD"] ?? row["units_sold"]),
+      });
+    }
+
+    const walmartPosByUpc = new Map<string, { title: string; itemNumber: string; revenue: number; units: number }>();
+    for (const row of walmartPosRows) {
+      const upc = String(row["WALMART_UPC"] ?? row["walmart_upc"] ?? "").trim();
+      if (!upc) continue;
+      const prev = walmartPosByUpc.get(upc);
+      walmartPosByUpc.set(upc, {
+        title:      String(row["PRODUCT_DESCRIPTION"] ?? row["product_description"] ?? prev?.title      ?? ""),
+        itemNumber: String(row["WALMART_ITEM_NUMBER"] ?? row["walmart_item_number"] ?? prev?.itemNumber ?? ""),
+        revenue:    (prev?.revenue ?? 0) + safeNum(row["REVENUE"]    ?? row["revenue"]),
+        units:      (prev?.units   ?? 0) + safeNum(row["UNITS_SOLD"] ?? row["units_sold"]),
+      });
+    }
+
+    const circanaByUpc = new Map<string, Map<number, { title: string; revenue: number; units: number; storeCount: number }>>();
+    for (const row of circanaRows) {
+      const upc        = String(row["UPC"]      ?? row["upc"]      ?? "").trim();
+      const retailName = String(row["RETAILER"] ?? row["retailer"] ?? "");
+      const entityId   = CIRCANA_ENTITY_IDS[retailName];
+      if (!upc || !entityId) continue;
+      if (!circanaByUpc.has(upc)) circanaByUpc.set(upc, new Map());
+      const entityMap = circanaByUpc.get(upc)!;
+      const prev = entityMap.get(entityId);
+      entityMap.set(entityId, {
+        title:      String(row["PRODUCT"] ?? row["product"] ?? prev?.title ?? ""),
+        revenue:    (prev?.revenue    ?? 0) + safeNum(row["REVENUE"] ?? row["revenue"]),
+        units:      (prev?.units      ?? 0) + safeNum(row["UNITS"]   ?? row["units"]),
+        storeCount: Math.max(prev?.storeCount ?? 0, safeNum(row["STORE_COUNT"] ?? row["store_count"])),
       });
     }
 
@@ -293,71 +454,136 @@ router.get("/", async (req, res) => {
 
     // ── Compute DPSW values ───────────────────────────────────────────────────
 
-    // Total weighted store count across all carrying retailers (for retail avg DPSW)
-    function computeWeightedStoreDenominator(retailerRevenueMap: Map<number, number>): number {
-      let totalRevenue = 0;
-      let weightedStores = 0;
-      for (const [entityId, rev] of retailerRevenueMap) {
+    // Velocity-factor-adjusted denominator: store count × retailer velocity factor
+    function computeVelocityAdjustedDenom(retailerRevenueMap: Map<number, number>): number {
+      let denom = 0;
+      for (const [entityId] of retailerRevenueMap) {
         const stores = STORE_COUNTS_BY_ENTITY[entityId];
+        const vf     = VELOCITY_FACTORS[entityId] ?? 1.0;
         if (!stores) continue;
-        totalRevenue  += rev;
-        weightedStores += stores;
+        denom += stores * vf;
       }
-      return weightedStores;
+      return denom;
     }
 
     const skuResults = Array.from(skuMap.values()).map(agg => {
-      const weightedStores = computeWeightedStoreDenominator(agg.retailerRevenue);
-      const avgDpsw     = weightedStores > 0 ? agg.totalRevenue / weightedStores / numWeeks : 0;
-      const targetDpsw  = agg.targetRevenue / STORE_COUNTS_BY_ENTITY[229] / numWeeks;
+      const adjDenom    = computeVelocityAdjustedDenom(agg.retailerRevenue);
+      const avgDpsw     = adjDenom > 0 ? agg.totalRevenue / adjDenom / numWeeks : 0;
+      const targetDpsw  = agg.targetRevenue > 0 ? agg.targetRevenue / STORE_COUNTS_BY_ENTITY[229] / numWeeks : 0;
       const weeklyTrend = weeklyBySku.get(agg.sku) ?? [];
+
+      // Product title: Target POS > Walmart POS > NetSuite
+      const targetPos  = agg.upc ? targetPosByUpc.get(agg.upc)  : undefined;
+      const walmartPos = agg.upc ? walmartPosByUpc.get(agg.upc) : undefined;
+      const resolvedTitle = targetPos?.title || walmartPos?.title || agg.productName;
+
+      // Build byRetailer: seed from sell-in, then merge POS
+      const byRetailerMap = new Map<number, {
+        entityId: number; name: string; revenue: number; units: number;
+        dpsw: number | null; dataSource: string; itemNumber: string;
+      }>();
+
+      for (const [entityId, rev] of agg.retailerRevenue.entries()) {
+        const stores = STORE_COUNTS_BY_ENTITY[entityId];
+        byRetailerMap.set(entityId, {
+          entityId,
+          name:       ENTITY_MAP[entityId] ?? String(entityId),
+          revenue:    rev,
+          units:      agg.retailerUnits.get(entityId) ?? 0,
+          dpsw:       stores ? rev / stores / numWeeks : null,
+          dataSource: "sellin",
+          itemNumber: "",
+        });
+      }
+
+      if (includePOS && agg.upc) {
+        if (targetPos) {
+          const ex = byRetailerMap.get(229);
+          byRetailerMap.set(229, {
+            entityId:   229,
+            name:       "Target",
+            revenue:    ex ? ex.revenue : targetPos.revenue,
+            units:      ex ? ex.units   : targetPos.units,
+            dpsw:       targetPos.revenue / STORE_COUNTS_BY_ENTITY[229] / numWeeks,
+            dataSource: ex ? "sellin+pos" : "pos",
+            itemNumber: targetPos.tcin,
+          });
+        }
+
+        if (walmartPos) {
+          const ex = byRetailerMap.get(231);
+          byRetailerMap.set(231, {
+            entityId:   231,
+            name:       "Walmart",
+            revenue:    ex ? ex.revenue : walmartPos.revenue,
+            units:      ex ? ex.units   : walmartPos.units,
+            dpsw:       walmartPos.revenue / STORE_COUNTS_BY_ENTITY[231] / numWeeks,
+            dataSource: ex ? "sellin+pos" : "pos",
+            itemNumber: walmartPos.itemNumber,
+          });
+        }
+
+        const circanaForUpc = circanaByUpc.get(agg.upc);
+        if (circanaForUpc) {
+          for (const [entityId, posData] of circanaForUpc.entries()) {
+            const ex     = byRetailerMap.get(entityId);
+            const stores = STORE_COUNTS_BY_ENTITY[entityId] ?? posData.storeCount;
+            byRetailerMap.set(entityId, {
+              entityId,
+              name:       ENTITY_MAP[entityId] ?? String(entityId),
+              revenue:    ex ? ex.revenue : posData.revenue,
+              units:      ex ? ex.units   : posData.units,
+              dpsw:       stores > 0 ? posData.revenue / stores / numWeeks : null,
+              dataSource: ex ? "sellin+pos" : "pos",
+              itemNumber: "",
+            });
+          }
+        }
+      }
+
+      const byRetailerArr = Array.from(byRetailerMap.values());
+      const hasPOS    = byRetailerArr.some(r => r.dataSource.includes("pos"));
+      const hasSellIn = byRetailerArr.some(r => r.dataSource.includes("sellin"));
+      const dataSources: string[] = [];
+      if (hasSellIn) dataSources.push("sellin");
+      if (hasPOS)    dataSources.push("pos");
+      if (!dataSources.length) dataSources.push("sellin");
 
       return {
         sku:          agg.sku,
-        productName:  agg.productName,
+        productName:  resolvedTitle,
         upc:          agg.upc,
         totalRevenue: agg.totalRevenue,
         totalUnits:   agg.totalUnits,
         avgDpsw,
         targetDpsw,
-        vsTargetBenchmark: 0, // filled in pass 2
-        vsRetailAvg:       0, // filled in pass 2
+        vsTargetBenchmark: 0,
+        vsRetailAvg:       0,
         retailerCount: agg.retailerCount.size,
-        dataSources:   ["sellin"] as string[],
+        dataSources,
         weeklyTrend,
-        // retailer breakdown for drawer
-        byRetailer: Array.from(agg.retailerRevenue.entries()).map(([entityId, rev]) => ({
-          entityId,
-          name:       ENTITY_MAP[entityId] ?? String(entityId),
-          revenue:    rev,
-          units:      agg.retailerUnits.get(entityId) ?? 0,
-          dpsw:       STORE_COUNTS_BY_ENTITY[entityId]
-                        ? rev / STORE_COUNTS_BY_ENTITY[entityId] / numWeeks
-                        : null,
-          dataSource: "sellin",
-        })),
+        byRetailer: byRetailerArr,
       };
     });
 
-    // ── Pass 2: compute retail avg DPSW and benchmark deltas ─────────────────
+    // ── Pass 2: retail avg DPSW and velocity-adjusted benchmark deltas ────────
     const totalRevAll    = skuResults.reduce((s, r) => s + r.totalRevenue, 0);
     const totalStoresAll = Array.from(retailerMap.values()).reduce((s, r) => {
       return s + (STORE_COUNTS_BY_ENTITY[r.entityId] ?? 0);
     }, 0);
     const retailAvgDpsw = totalStoresAll > 0 ? totalRevAll / totalStoresAll / numWeeks : 0;
-    const targetAvgDpsw = skuResults.reduce((s, r) => s + r.targetDpsw, 0) / Math.max(1, skuResults.length);
 
     for (const sku of skuResults) {
       sku.vsRetailAvg       = sku.avgDpsw - retailAvgDpsw;
-      sku.vsTargetBenchmark = sku.targetDpsw - targetAvgDpsw;
+      sku.vsTargetBenchmark = sku.targetDpsw - VELOCITY_FACTORS[229]; // vs $1.00/store/week benchmark
     }
 
     // Apply skuFilter
     let filtered = skuResults;
     if (skuFilter === "above_avg")    filtered = skuResults.filter(s => s.avgDpsw > retailAvgDpsw);
     if (skuFilter === "below_avg")    filtered = skuResults.filter(s => s.avgDpsw < retailAvgDpsw);
-    if (skuFilter === "above_target") filtered = skuResults.filter(s => s.targetDpsw > targetAvgDpsw);
-    if (skuFilter === "below_target") filtered = skuResults.filter(s => s.targetDpsw < targetAvgDpsw);
+    if (skuFilter === "above_target") filtered = skuResults.filter(s => s.targetDpsw > VELOCITY_FACTORS[229]);
+    if (skuFilter === "below_target") filtered = skuResults.filter(s => s.targetDpsw < VELOCITY_FACTORS[229]);
 
     // ── Summary KPI cards ─────────────────────────────────────────────────────
     const sorted        = [...skuResults].sort((a, b) => b.avgDpsw - a.avgDpsw);

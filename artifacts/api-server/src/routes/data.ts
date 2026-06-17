@@ -112,6 +112,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
+  amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
@@ -552,7 +553,7 @@ router.get("/meta", authenticate, async (req, res) => {
 // ─── GET /api/data/overview ───────────────────────────────────────────────────
 
 router.get("/overview", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, priorStart: priorStartRaw, priorEnd: priorEndRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, priorStart: priorStartRaw, priorEnd: priorEndRaw, isWholesale: isWholesaleRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
@@ -561,12 +562,15 @@ router.get("/overview", authenticate, async (req, res) => {
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
   const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
-  const isUltaSelected = storeIds.length === 0 || storeIds.includes("ulta");
+  const isUltaSelected    = storeIds.length === 0 || storeIds.includes("ulta");
+  const isAmazonSelected  = storeIds.length === 0 || storeIds.includes("amazon");
+  const isWholesaleMode   = isWholesaleRaw === "true";
 
   const activeChannels: string[] = [];
-  if (isShopifySelected) activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
-  if (isUltaSelected)    activeChannels.push("criteo_ads");
-  if (includesTarget)    activeChannels.push("roundel_target");
+  if (isShopifySelected)                   activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
+  if (isUltaSelected)                      activeChannels.push("criteo_ads");
+  if (includesTarget)                      activeChannels.push("roundel_target");
+  if (isAmazonSelected && !isWholesaleMode) activeChannels.push("amazon_ads");
   const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
 
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
@@ -624,6 +628,14 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    const amazonSummaryQuery = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS amazon_revenue, SUM(units_shipped) AS amazon_units
+          FROM ${DB_NAME}.COMMERCE.AMAZON_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     const targetDailyQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
           SELECT summary_date, SUM(sale_amount) AS total_revenue
@@ -676,7 +688,7 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value and spend from DAILY_AD_SUMMARY (filtered to active channels)
@@ -717,6 +729,7 @@ router.get("/overview", authenticate, async (req, res) => {
       `),
       targetSummaryQuery,
       walmartSummaryQuery,
+      amazonSummaryQuery,
       targetDailyQuery,
       shopifySummaryQuery,
       priorShopifyQuery,
@@ -785,7 +798,7 @@ router.get("/overview", authenticate, async (req, res) => {
     const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
     const cvr           = (isShopifySelected && totalSessions > 0) ? webOrders / totalSessions : 0;
 
-    const roas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
+    const roas = totalDailyAdSpend > 0 ? totalAdRevenue / totalDailyAdSpend : 0;
 
     const targetSummaryAgg = (targetSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
     const targetRev   = isTargetOnly
@@ -810,12 +823,16 @@ router.get("/overview", authenticate, async (req, res) => {
     const walmartRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartSummaryAgg["WALMART_REVENUE"] ?? walmartSummaryAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
     const walmartUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartSummaryAgg["WALMART_UNITS"] ?? walmartSummaryAgg["walmart_units"] ?? 0) : 0;
 
-    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev + walmartRev;
+    const amazonSummaryAgg = (amazonSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const amazonRev   = (isAmazonSelected && !isWholesaleMode && !isTargetOnly) ? Math.round(Number(amazonSummaryAgg["AMAZON_REVENUE"] ?? amazonSummaryAgg["amazon_revenue"] ?? 0) * 100) / 100 : 0;
+    const amazonUnits = (isAmazonSelected && !isWholesaleMode && !isTargetOnly) ? Number(amazonSummaryAgg["AMAZON_UNITS"] ?? amazonSummaryAgg["amazon_units"] ?? 0) : 0;
+
+    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev + walmartRev + amazonRev;
     const mer = totalDailyAdSpend > 0 ? effectiveTotalRevenue / totalDailyAdSpend : 0;
     const effectiveOrders = isShopifySelected ? shopifyOrders : 0;
     const effectiveUnits  = isTargetOnly
       ? totalUnits
-      : (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0) + (isWalmartSelected ? walmartUnits : 0);
+      : (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0) + (isWalmartSelected ? walmartUnits : 0) + amazonUnits;
     const asp = effectiveUnits > 0 ? effectiveTotalRevenue / effectiveUnits : 0;
 
     const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
@@ -852,16 +869,17 @@ router.get("/overview", authenticate, async (req, res) => {
           ...(shopifyRev  > 0 ? [{ storeId: "shopify",  revenue: shopifyRev  }] : []),
           ...(targetRev   > 0 ? [{ storeId: "target",   revenue: targetRev   }] : []),
           ...(walmartRev  > 0 ? [{ storeId: "walmart",  revenue: walmartRev  }] : []),
+          ...(amazonRev   > 0 ? [{ storeId: "amazon",   revenue: amazonRev   }] : []),
         ];
 
-    const isEmpty = effectiveTotalRevenue === 0 && totalSpend === 0;
+    const isEmpty = effectiveTotalRevenue === 0 && totalDailyAdSpend === 0;
 
     res.json({
       revenue:   Math.round(effectiveTotalRevenue * 100) / 100,
       orders:    effectiveOrders,
       units:     effectiveUnits,
       asp:       Math.round(asp            * 100) / 100,
-      spend:     Math.round(totalSpend     * 100) / 100,
+      spend:     Math.round(totalDailyAdSpend * 100) / 100,
       adRevenue: Math.round(totalAdRevenue * 100) / 100,
       mer:       Math.round(mer            * 1000) / 1000,
       roas:      Math.round(roas           * 1000) / 1000,
@@ -967,7 +985,7 @@ router.get("/attribution", authenticate, async (req, res) => {
 // ─── GET /api/data/traffic ────────────────────────────────────────────────────
 
 router.get("/traffic", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, priorStart: priorStartRaw, priorEnd: priorEndRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, priorStart: priorStartRaw, priorEnd: priorEndRaw, isWholesale: isWholesaleRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
@@ -976,6 +994,8 @@ router.get("/traffic", authenticate, async (req, res) => {
   const includesTarget = storeIds.length === 0 || storeIds.includes("target");
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
   const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
+  const isAmazonSelected  = storeIds.length === 0 || storeIds.includes("amazon");
+  const isWholesaleMode   = isWholesaleRaw === "true";
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
   const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
   const hasPrior   = !!(priorStart && priorEnd);
@@ -1049,7 +1069,7 @@ router.get("/traffic", authenticate, async (req, res) => {
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `);
 
-    const [summaryRows, productRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows] = await Promise.all([
+    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
@@ -1067,6 +1087,19 @@ router.get("/traffic", authenticate, async (req, res) => {
         ORDER BY revenue DESC
         LIMIT 50
       `),
+      // Amazon products from AMAZON_SALES_DAILY (MSRP mode only)
+      (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+        ? querySnowflake(`
+            SELECT sku, asin, title,
+              SUM(revenue)       AS revenue,
+              SUM(units_shipped) AS units
+            FROM ${DB_NAME}.COMMERCE.AMAZON_SALES_DAILY
+            WHERE sale_date BETWEEN '${start}' AND '${end}'
+            GROUP BY sku, asin, title
+            ORDER BY revenue DESC
+            LIMIT 50
+          `)
+        : Promise.resolve([]),
       // Geographic breakdown from SHOPIFY_GEO_DAILY
       querySnowflake(`
         SELECT state, SUM(revenue) AS revenue, SUM(order_count) AS order_count
@@ -1109,14 +1142,22 @@ router.get("/traffic", authenticate, async (req, res) => {
     const walmartTrafficRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartTrafficAgg["WALMART_REVENUE"] ?? walmartTrafficAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
     const walmartTrafficUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartTrafficAgg["WALMART_UNITS"] ?? walmartTrafficAgg["walmart_units"] ?? 0) : 0;
     const shopifyTrafficRev = isShopifySelected && !isTargetOnly ? totalRevenue : 0;
+
+    const amazonTrafficRev   = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+      ? Math.round((amazonProductRows as Array<Record<string, unknown>>).reduce((s, r) => s + Number(r["REVENUE"] ?? r["revenue"] ?? 0), 0) * 100) / 100
+      : 0;
+    const amazonTrafficUnits = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+      ? (amazonProductRows as Array<Record<string, unknown>>).reduce((s, r) => s + Number(r["UNITS"] ?? r["units"] ?? 0), 0)
+      : 0;
+
     const effectiveRevenue = isTargetOnly
       ? totalRevenue
-      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0) + (isWalmartSelected ? walmartTrafficRev : 0);
+      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0) + (isWalmartSelected ? walmartTrafficRev : 0) + amazonTrafficRev;
 
     const effectiveOrders = isShopifySelected ? totalOrders : 0;
     const effectiveUnits  = isTargetOnly
       ? totalOrders
-      : (isShopifySelected ? totalUnits : 0) + (includesTarget ? targetTrafficUnits : 0) + (isWalmartSelected ? walmartTrafficUnits : 0);
+      : (isShopifySelected ? totalUnits : 0) + (includesTarget ? targetTrafficUnits : 0) + (isWalmartSelected ? walmartTrafficUnits : 0) + amazonTrafficUnits;
     const asp = effectiveUnits > 0 ? effectiveRevenue / effectiveUnits : 0;
 
     const ga4Agg        = ga4Rows[0] ?? {};
@@ -1146,7 +1187,7 @@ router.get("/traffic", authenticate, async (req, res) => {
     const priorWebOrders    = Number(priorWebOrdersAgg["WEB_ORDERS"] ?? priorWebOrdersAgg["web_orders"] ?? 0);
     const priorCvr = (isShopifySelected && priorSessions > 0) ? priorWebOrders / priorSessions : 0;
 
-    const products = productRows.map(row => ({
+    const shopifyProducts = productRows.map(row => ({
       id:          String(row["PRODUCT_ID"]  ?? row["product_id"]  ?? ""),
       productName: String(row["TITLE"]       ?? row["title"]       ?? "Unknown Product"),
       sku:         String(row["SKU"]         ?? row["sku"]         ?? ""),
@@ -1154,6 +1195,15 @@ router.get("/traffic", authenticate, async (req, res) => {
       orders:      Number(row["ORDER_COUNT"] ?? row["order_count"] ?? 0),
       units:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
     }));
+    const amazonProducts = (amazonProductRows as Array<Record<string, unknown>>).map(row => ({
+      id:          `amazon-${String(row["SKU"] ?? row["sku"] ?? row["ASIN"] ?? row["asin"] ?? "")}`,
+      productName: String(row["TITLE"]   ?? row["title"]   ?? "Amazon Product"),
+      sku:         String(row["SKU"]     ?? row["sku"]     ?? ""),
+      revenue:     Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
+      orders:      0,
+      units:       Number(row["UNITS"]   ?? row["units"]   ?? 0),
+    }));
+    const products = [...shopifyProducts, ...amazonProducts].sort((a, b) => b.revenue - a.revenue);
 
     const stateRevenue = geoRows.map(row => ({
       stateCode: String(row["STATE"]       ?? row["state"]       ?? "").toUpperCase(),
@@ -2068,7 +2118,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
   const has = (id: string) => allStores || storeIds.includes(id);
 
   const CIRCANA_IDS = ["cvs", "walgreens", "publix", "meijer"] as const;
-  const NETSUITE_IDS = ["ulta", "kroger", "amazon"] as const;
+  const NETSUITE_IDS = ["ulta", "kroger"] as const;
   const activeCircana = CIRCANA_IDS.filter(id => has(id));
   const activeNetsuite = NETSUITE_IDS.filter(id => has(id));
 
@@ -2186,6 +2236,29 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
             color: TREND_STORE_COLORS["walmart"],
             data: rows.map(r => ({
               date:    toDateStr(r["WEEK_DATE"] ?? r["week_date"]),
+              revenue: Math.round(Number(r["REVENUE"] ?? r["revenue"] ?? 0) * 100) / 100,
+              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
+            })),
+          });
+        }),
+      );
+    }
+
+    if (!isWholesale && has("amazon")) {
+      queries.push(
+        querySnowflake(`
+          SELECT sale_date, SUM(revenue) AS revenue, SUM(units_shipped) AS units
+          FROM ${DB_NAME}.COMMERCE.AMAZON_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+          GROUP BY sale_date
+          ORDER BY sale_date ASC
+        `).then(rows => {
+          results.push({
+            storeId:   "amazon",
+            storeName: "Amazon (Pattern)",
+            color:     TREND_STORE_COLORS["amazon"],
+            data: rows.map(r => ({
+              date:    toDateStr(r["SALE_DATE"] ?? r["sale_date"]),
               revenue: Math.round(Number(r["REVENUE"] ?? r["revenue"] ?? 0) * 100) / 100,
               units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
             })),

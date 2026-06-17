@@ -149,11 +149,11 @@ export default function Traffic() {
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly, "| isWalmartSelected:", isWalmartSelected);
 
   const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
-    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
+    queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`,
+        `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}&isWholesale=${isWholesale}`,
         { credentials: "include" },
       );
       if (!res.ok) {

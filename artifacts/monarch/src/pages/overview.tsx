@@ -96,11 +96,11 @@ export default function Overview() {
   const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
 
   const { data: apiData, isLoading, error } = useQuery<OverviewApiResponse>({
-    queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
+    queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/overview?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`,
+        `${API_BASE}/api/data/overview?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}&isWholesale=${isWholesale}`,
         { credentials: "include" },
       );
       if (!res.ok) {
