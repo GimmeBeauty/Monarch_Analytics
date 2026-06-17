@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "react-simple-maps": "^3.0.0",
-    "us-atlas": "^3.0.1"
+    "us-atlas": "^3.0.1",
+    "xlsx": "^0.18.5"
   }
 }
