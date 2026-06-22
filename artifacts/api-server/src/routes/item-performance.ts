@@ -67,11 +67,13 @@ const CIRCANA_ENTITY_IDS: Record<string, number> = {
 
 // Circana time period strings by period key
 const CIRCANA_TIME_PERIODS: Record<string, string> = {
-  "4w":  "Latest 4 Week Pd Ending 04-19-26",
-  "13w": "Latest 13 Week Pd Ending 04-19-26",
-  "26w": "Latest 26 Week Pd Ending 04-19-26",
-  "52w": "Latest 52 Week Pd Ending 04-19-26",
-  "ytd": "Building Calendar Year 2026 Ending 05-10-26",
+  "4w":   "Latest 4 Week Pd Ending 04-19-26",
+  "13w":  "Latest 13 Week Pd Ending 04-19-26",
+  "26w":  "Latest 26 Week Pd Ending 04-19-26",
+  "52w":  "Latest 52 Week Pd Ending 04-19-26",
+  "ytd":  "Building Calendar Year 2026 Ending 05-10-26",
+  "2026": "Building Calendar Year 2026 Ending 05-10-26",
+  "2025": "Latest 52 Week Pd Ending 04-19-26",
 };
 
 // Retailers to exclude from DPSW (DTC channels)
@@ -79,41 +81,48 @@ const DTC_ENTITY_IDS = [850, 49270]; // Shopify, Amazon Pattern
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type Period = "4w" | "13w" | "26w" | "52w" | "ytd";
+type Period = "4w" | "13w" | "26w" | "52w" | "ytd" | "2025" | "2026";
 
 function periodToWeeks(period: Period): number {
-  if (period === "4w")  return 4;
-  if (period === "13w") return 13;
-  if (period === "26w") return 26;
-  if (period === "52w") return 52;
-  return 0; // ytd — computed dynamically
+  if (period === "4w")   return 4;
+  if (period === "13w")  return 13;
+  if (period === "26w")  return 26;
+  if (period === "52w")  return 52;
+  if (period === "2025") return 52;
+  return 0; // ytd, 2026 — computed dynamically
 }
 
 function periodToDateFilter(period: Period): string {
-  if (period === "ytd") {
-    return `TRANDATE >= DATE_TRUNC('year', CURRENT_DATE())`;
-  }
+  if (period === "ytd")  return `TRANDATE >= DATE_TRUNC('year', CURRENT_DATE())`;
+  if (period === "2025") return `TRANDATE BETWEEN '2025-01-01' AND '2025-12-31'`;
+  if (period === "2026") return `TRANDATE >= '2026-01-01'`;
   const weeks = periodToWeeks(period);
   return `TRANDATE >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
 }
 
 function periodToTargetDateFilter(period: Period): string {
-  if (period === "ytd") return `summary_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  if (period === "ytd")  return `summary_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  if (period === "2025") return `summary_date BETWEEN '2025-01-01' AND '2025-12-31'`;
+  if (period === "2026") return `summary_date >= '2026-01-01'`;
   const weeks = periodToWeeks(period);
   return `summary_date >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
 }
 
 function periodToWalmartDateFilter(period: Period): string {
-  if (period === "ytd") return `week_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  if (period === "ytd")  return `week_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  if (period === "2025") return `week_date BETWEEN '2025-01-01' AND '2025-12-31'`;
+  if (period === "2026") return `week_date >= '2026-01-01'`;
   const weeks = periodToWeeks(period);
   return `week_date >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
 }
 
 function periodLabel(period: Period): string {
-  if (period === "4w")  return "Last 4 Weeks";
-  if (period === "13w") return "Last 13 Weeks";
-  if (period === "26w") return "Last 26 Weeks";
-  if (period === "52w") return "Last 52 Weeks";
+  if (period === "4w")   return "Last 4 Weeks";
+  if (period === "13w")  return "Last 13 Weeks";
+  if (period === "26w")  return "Last 26 Weeks";
+  if (period === "52w")  return "Last 52 Weeks";
+  if (period === "2025") return "Calendar 2025";
+  if (period === "2026") return "Building 2026";
   return "Year to Date";
 }
 
@@ -160,6 +169,10 @@ router.get("/", async (req, res) => {
       const now = new Date();
       const startOfYear = new Date(now.getFullYear(), 0, 1);
       numWeeks = Math.max(1, Math.ceil((now.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+    } else if (period === "2026") {
+      const now = new Date();
+      const start2026 = new Date(2026, 0, 1);
+      numWeeks = Math.max(1, Math.ceil((now.getTime() - start2026.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     }
 
     // Build optional retailer filter
@@ -292,8 +305,8 @@ router.get("/", async (req, res) => {
       [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows] = await Promise.all([
         querySnowflake(skuRetailerSql),
         querySnowflake(weeklyTrendSql),
-        includePOS ? querySnowflake(targetPosSql)  : Promise.resolve([]),
-        includePOS ? querySnowflake(walmartPosSql) : Promise.resolve([]),
+        querySnowflake(targetPosSql),   // always run — needed for title lookup
+        querySnowflake(walmartPosSql),  // always run — needed for title lookup
         includePOS ? querySnowflake(circanaPosSql) : Promise.resolve([]),
       ]);
     } catch (sfErr) {
@@ -549,14 +562,45 @@ router.get("/", async (req, res) => {
       if (hasPOS)    dataSources.push("pos");
       if (!dataSources.length) dataSources.push("sellin");
 
+      // Revenue-weighted velocity benchmark across all retailers carrying this SKU
+      let benchNumer = 0, benchDenom = 0;
+      for (const [entityId, rev] of agg.retailerRevenue.entries()) {
+        const vf = VELOCITY_FACTORS[entityId];
+        if (vf == null) continue;
+        benchNumer += rev * vf;
+        benchDenom += rev;
+      }
+      const velocityBenchmark = benchDenom > 0 ? benchNumer / benchDenom : VELOCITY_FACTORS[229];
+
+      // POS totals (used for sell-through mode in the frontend)
+      const posTotalRevenue = includePOS && agg.upc ? (
+        (targetPosByUpc.get(agg.upc)?.revenue ?? 0) +
+        (walmartPosByUpc.get(agg.upc)?.revenue ?? 0) +
+        (() => {
+          const cf = circanaByUpc.get(agg.upc!);
+          return cf ? Array.from(cf.values()).reduce((s, v) => s + v.revenue, 0) : 0;
+        })()
+      ) : 0;
+      const posTotalUnits = includePOS && agg.upc ? (
+        (targetPosByUpc.get(agg.upc)?.units ?? 0) +
+        (walmartPosByUpc.get(agg.upc)?.units ?? 0) +
+        (() => {
+          const cf = circanaByUpc.get(agg.upc!);
+          return cf ? Array.from(cf.values()).reduce((s, v) => s + v.units, 0) : 0;
+        })()
+      ) : 0;
+
       return {
-        sku:          agg.sku,
-        productName:  resolvedTitle,
-        upc:          agg.upc,
-        totalRevenue: agg.totalRevenue,
-        totalUnits:   agg.totalUnits,
+        sku:              agg.sku,
+        productName:      resolvedTitle,
+        upc:              agg.upc,
+        totalRevenue:     agg.totalRevenue,
+        totalUnits:       agg.totalUnits,
+        posTotalRevenue,
+        posTotalUnits,
         avgDpsw,
         targetDpsw,
+        velocityBenchmark,
         vsTargetBenchmark: 0,
         vsRetailAvg:       0,
         retailerCount: agg.retailerCount.size,
@@ -566,24 +610,22 @@ router.get("/", async (req, res) => {
       };
     });
 
-    // ── Pass 2: retail avg DPSW and velocity-adjusted benchmark deltas ────────
-    const totalRevAll    = skuResults.reduce((s, r) => s + r.totalRevenue, 0);
-    const totalStoresAll = Array.from(retailerMap.values()).reduce((s, r) => {
-      return s + (STORE_COUNTS_BY_ENTITY[r.entityId] ?? 0);
-    }, 0);
-    const retailAvgDpsw = totalStoresAll > 0 ? totalRevAll / totalStoresAll / numWeeks : 0;
+    // ── Pass 2: retail avg DPSW (simple mean of all SKU avgDpsw) and benchmark deltas ──
+    const retailAvgDpsw = skuResults.length > 0
+      ? skuResults.reduce((s, r) => s + r.avgDpsw, 0) / skuResults.length
+      : 0;
 
     for (const sku of skuResults) {
       sku.vsRetailAvg       = sku.avgDpsw - retailAvgDpsw;
-      sku.vsTargetBenchmark = sku.targetDpsw - VELOCITY_FACTORS[229]; // vs $1.00/store/week benchmark
+      sku.vsTargetBenchmark = sku.avgDpsw - sku.velocityBenchmark;
     }
 
     // Apply skuFilter
     let filtered = skuResults;
     if (skuFilter === "above_avg")    filtered = skuResults.filter(s => s.avgDpsw > retailAvgDpsw);
     if (skuFilter === "below_avg")    filtered = skuResults.filter(s => s.avgDpsw < retailAvgDpsw);
-    if (skuFilter === "above_target") filtered = skuResults.filter(s => s.targetDpsw > VELOCITY_FACTORS[229]);
-    if (skuFilter === "below_target") filtered = skuResults.filter(s => s.targetDpsw < VELOCITY_FACTORS[229]);
+    if (skuFilter === "above_target") filtered = skuResults.filter(s => s.vsTargetBenchmark > 0);
+    if (skuFilter === "below_target") filtered = skuResults.filter(s => s.vsTargetBenchmark < 0);
 
     // ── Summary KPI cards ─────────────────────────────────────────────────────
     const sorted        = [...skuResults].sort((a, b) => b.avgDpsw - a.avgDpsw);

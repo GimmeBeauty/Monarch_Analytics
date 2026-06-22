@@ -45,6 +45,8 @@ interface SkuRow {
   upc: string;
   totalRevenue: number;
   totalUnits: number;
+  posTotalRevenue?: number;
+  posTotalUnits?: number;
   avgDpsw: number;
   targetDpsw: number;
   vsTargetBenchmark: number;
@@ -100,11 +102,13 @@ function fmtUnits(v: number): string {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PERIOD_OPTIONS = [
-  { value: "4w",  label: "Last 4 Weeks" },
-  { value: "13w", label: "Last 13 Weeks" },
-  { value: "26w", label: "Last 26 Weeks" },
-  { value: "52w", label: "Last 52 Weeks" },
-  { value: "ytd", label: "Year to Date" },
+  { value: "4w",   label: "Last 4 Weeks",   group: "rolling" },
+  { value: "13w",  label: "Last 13 Weeks",  group: "rolling" },
+  { value: "26w",  label: "Last 26 Weeks",  group: "rolling" },
+  { value: "52w",  label: "Last 52 Weeks",  group: "rolling" },
+  { value: "2025", label: "Calendar 2025",  group: "annual"  },
+  { value: "2026", label: "Building 2026",  group: "annual"  },
+  { value: "lw",   label: "Last Week",      group: "specific"},
 ];
 
 const RETAILER_OPTIONS = [
@@ -226,18 +230,21 @@ interface KpiCardProps {
   sub?: string;
   note?: string;
   highlight?: boolean;
+  onClick?: () => void;
 }
 
-function KpiCard({ title, value, sub, note, highlight }: KpiCardProps) {
+function KpiCard({ title, value, sub, note, highlight, onClick }: KpiCardProps) {
   return (
     <div
-      className="rounded-xl p-4 bg-white dark:bg-[#1a1208] shadow-sm border border-[#FFBC80]/20"
+      className={`rounded-xl p-4 bg-white dark:bg-[#1a1208] shadow-sm border border-[#FFBC80]/20 ${onClick ? "cursor-pointer hover:border-[#FFBC80]/60 hover:shadow-md transition-all" : ""}`}
       style={highlight ? { background: "linear-gradient(135deg, rgba(255,188,128,0.12), rgba(255,226,154,0.12))" } : {}}
+      onClick={onClick}
     >
       <div className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-1">{title}</div>
       <div className="text-xl font-bold text-[#3A3A3A] dark:text-[#FFF9F2] leading-tight">{value}</div>
       {sub  && <div className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 mt-0.5 truncate">{sub}</div>}
       {note && <div className="text-[10px] text-[#3A3A3A]/40 mt-1">{note}</div>}
+      {onClick && <div className="text-[10px] text-[#FFBC80] mt-1.5">View top 10 →</div>}
     </div>
   );
 }
@@ -433,23 +440,82 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
   );
 }
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
+// ─── Summary Modal (Fix 6) ────────────────────────────────────────────────────
 
-function getRecentWeeks(count = 12): Array<{ label: string; start: string; end: string }> {
-  const weeks = [];
-  for (let i = 0; i < count; i++) {
-    const mon = new Date();
-    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7) - i * 7);
-    const sun = new Date(mon);
-    sun.setDate(sun.getDate() + 6);
-    const fmt   = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const toISO = (d: Date) => d.toISOString().split("T")[0];
-    weeks.push({ label: `${fmt(mon)} – ${fmt(sun)}`, start: toISO(mon), end: toISO(sun) });
-  }
-  return weeks;
+type ModalType = "dpsw" | "aboveAvg" | "revenue" | "opportunity";
+
+function SummaryModal({ type, skus, retailAvgDpsw, onClose }: {
+  type: ModalType; skus: SkuRow[]; retailAvgDpsw: number; onClose: () => void;
+}) {
+  const items = useMemo(() => {
+    if (type === "dpsw")    return [...skus].sort((a, b) => b.avgDpsw - a.avgDpsw).slice(0, 10);
+    if (type === "aboveAvg") return [...skus].filter(s => s.avgDpsw > retailAvgDpsw).sort((a, b) => b.avgDpsw - a.avgDpsw).slice(0, 10);
+    if (type === "revenue") return [...skus].sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 10);
+    return [...skus]
+      .filter(s => s.retailerCount > 1 && s.targetDpsw > 0 && s.targetDpsw < s.avgDpsw)
+      .sort((a, b) => (b.avgDpsw - b.targetDpsw) - (a.avgDpsw - a.targetDpsw))
+      .slice(0, 10);
+  }, [type, skus, retailAvgDpsw]);
+
+  const config: Record<ModalType, { title: string; col: string; val: (s: SkuRow) => string }> = {
+    dpsw:        { title: "Top 10 SKUs by DPSW",        col: "Avg DPSW",  val: s => fmtDpsw(s.avgDpsw) },
+    aboveAvg:    { title: "SKUs Above Retail Average",   col: "Avg DPSW",  val: s => fmtDpsw(s.avgDpsw) },
+    revenue:     { title: "Top 10 SKUs by Revenue",      col: "Revenue",   val: s => fmtCurrency(s.totalRevenue) },
+    opportunity: { title: "Biggest Opportunities",       col: "DPSW Gap",  val: s => fmtDpsw(s.avgDpsw - s.targetDpsw) },
+  };
+  const cfg = config[type];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-[#FFF9F2] dark:bg-[#1a1208] rounded-2xl shadow-2xl border border-[#FFBC80]/30 w-full max-w-lg mx-4 overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#FFBC80]/15 flex items-center justify-between">
+          <h3 className="font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{cfg.title}</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#FFBC80]/15 text-[#3A3A3A]/50 hover:text-[#3A3A3A]"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto max-h-[420px]">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-[#FFF9F2] dark:bg-[#1a1208]">
+              <tr className="border-b border-[#FFBC80]/10">
+                <th className="px-4 py-2 text-left text-xs font-semibold text-[#3A3A3A]/50">#</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-[#3A3A3A]/50">SKU</th>
+                <th className="px-4 py-2 text-right text-xs font-semibold text-[#3A3A3A]/50">{cfg.col}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((s, i) => (
+                <tr key={s.sku} className="border-b border-[#FFBC80]/08 hover:bg-[#FFBC80]/5">
+                  <td className="px-4 py-2.5 text-xs text-[#3A3A3A]/40">{i + 1}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2] text-xs leading-tight">{s.productName}</div>
+                    <div className="text-[10px] text-[#3A3A3A]/40">{s.sku}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{cfg.val(s)}</td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr><td colSpan={3} className="px-4 py-8 text-center text-[#3A3A3A]/40 text-sm">No data</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-const RECENT_WEEKS = getRecentWeeks();
+// ─── Item # helper ────────────────────────────────────────────────────────────
+
+function getPrimaryItemNumber(sku: SkuRow, selectedRetailers: number[]): string {
+  if (selectedRetailers.length === 1) {
+    return sku.byRetailer.find(r => r.entityId === selectedRetailers[0])?.itemNumber || "—";
+  }
+  const target  = sku.byRetailer.find(r => r.entityId === 229 && r.itemNumber);
+  if (target?.itemNumber)  return target.itemNumber;
+  const walmart = sku.byRetailer.find(r => r.entityId === 231 && r.itemNumber);
+  if (walmart?.itemNumber) return walmart.itemNumber;
+  return sku.byRetailer.find(r => r.itemNumber)?.itemNumber || "—";
+}
 
 // ─── Export helpers ───────────────────────────────────────────────────────────
 
@@ -521,10 +587,10 @@ function downloadExcel(skus: SkuRow[], filename: string) {
 
 export default function ItemPerformance() {
   const [period,       setPeriod]       = useState<string>("4w");
-  const [dateMode,     setDateMode]     = useState<"period" | "week" | "custom">("period");
-  const [selectedWeek, setSelectedWeek] = useState<{ label: string; start: string; end: string } | null>(null);
+  const [dateMode,     setDateMode]     = useState<"period" | "custom">("period");
   const [customStart,  setCustomStart]  = useState("");
   const [customEnd,    setCustomEnd]    = useState("");
+  const [modalType,    setModalType]    = useState<ModalType | null>(null);
   const [retailers,    setRetailers]    = useState<number[]>([]);
   const [dataSource,   setDataSource]   = useState<string>("all");
   const [skuFilter,    setSkuFilter]    = useState<string>("all");
@@ -536,9 +602,17 @@ export default function ItemPerformance() {
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams({ dataSource });
-    if (dateMode === "week" && selectedWeek) {
-      p.set("start", selectedWeek.start);
-      p.set("end",   selectedWeek.end);
+    if (period === "lw") {
+      const today = new Date();
+      const dow = today.getDay(); // 0=Sun
+      const daysToThisMon = dow === 0 ? 6 : dow - 1;
+      const lastMon = new Date(today);
+      lastMon.setDate(today.getDate() - daysToThisMon - 7);
+      const lastSun = new Date(lastMon);
+      lastSun.setDate(lastMon.getDate() + 6);
+      const toISO = (d: Date) => d.toISOString().split("T")[0];
+      p.set("start", toISO(lastMon));
+      p.set("end",   toISO(lastSun));
     } else if (dateMode === "custom" && customStart && customEnd) {
       p.set("start", customStart);
       p.set("end",   customEnd);
@@ -547,7 +621,7 @@ export default function ItemPerformance() {
     }
     if (retailers.length) p.set("retailers", retailers.join(","));
     return p;
-  }, [dateMode, period, selectedWeek, customStart, customEnd, dataSource, retailers]);
+  }, [dateMode, period, customStart, customEnd, dataSource, retailers]);
 
   const { data, isLoading, isError } = useQuery<ApiResponse>({
     queryKey: ["item-performance", queryParams.toString()],
@@ -561,7 +635,13 @@ export default function ItemPerformance() {
   });
 
   const numWeeks = useMemo(() => {
-    if (dateMode === "week" && selectedWeek) return 1;
+    if (period === "lw") return 1;
+    if (period === "2025") return 52;
+    if (period === "2026") {
+      const now = new Date();
+      const start2026 = new Date(2026, 0, 1);
+      return Math.max(1, Math.ceil((now.getTime() - start2026.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+    }
     if (dateMode === "custom" && customStart && customEnd) {
       const diff = new Date(customEnd).getTime() - new Date(customStart).getTime();
       return Math.max(1, Math.round(diff / (7 * 24 * 60 * 60 * 1000)));
@@ -572,7 +652,7 @@ export default function ItemPerformance() {
       return Math.max(1, Math.ceil((now.getTime() - soy.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     }
     return parseInt(period) || 4;
-  }, [dateMode, period, selectedWeek, customStart, customEnd]);
+  }, [dateMode, period, customStart, customEnd]);
 
   // Client-side sort
   const sortedSkus = useMemo(() => {
@@ -583,7 +663,7 @@ export default function ItemPerformance() {
       else if (sortCol === "targetDpsw")   { va = a.targetDpsw;        vb = b.targetDpsw; }
       else if (sortCol === "totalRevenue") { va = a.totalRevenue;       vb = b.totalRevenue; }
       else if (sortCol === "totalUnits")   { va = a.totalUnits;         vb = b.totalUnits; }
-      else if (sortCol === "vsRetailAvg")  { va = a.vsRetailAvg;        vb = b.vsRetailAvg; }
+      else if (sortCol === "vsTargetBench"){ va = a.vsTargetBenchmark;   vb = b.vsTargetBenchmark; }
       else if (sortCol === "retailers")    { va = a.retailerCount;      vb = b.retailerCount; }
       else { va = a.avgDpsw; vb = b.avgDpsw; }
       return sortDir === "desc" ? vb - va : va - vb;
@@ -613,11 +693,9 @@ export default function ItemPerformance() {
     ? "All Retailers"
     : RETAILER_OPTIONS.filter(o => retailers.includes(o.value)).map(o => o.label).join(", ");
 
-  const periodLabelStr = dateMode === "week" && selectedWeek
-    ? selectedWeek.label
-    : dateMode === "custom" && customStart && customEnd
-      ? `${customStart} – ${customEnd}`
-      : (PERIOD_OPTIONS.find(o => o.value === period)?.label ?? period);
+  const periodLabelStr = dateMode === "custom" && customStart && customEnd
+    ? `${customStart} – ${customEnd}`
+    : (PERIOD_OPTIONS.find(o => o.value === period)?.label ?? period);
 
   return (
     <DashboardLayout
@@ -639,7 +717,7 @@ export default function ItemPerformance() {
           {periodOpen && (
             <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[220px] max-h-[400px] overflow-y-auto">
               <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider">Rolling Period</div>
-              {PERIOD_OPTIONS.map(opt => (
+              {PERIOD_OPTIONS.filter(o => o.group === "rolling").map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => { setPeriod(opt.value); setDateMode("period"); setPeriodOpen(false); }}
@@ -648,16 +726,23 @@ export default function ItemPerformance() {
                   {opt.label}
                 </button>
               ))}
-              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Weekly</div>
-              {RECENT_WEEKS.map(w => (
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Annual</div>
+              {PERIOD_OPTIONS.filter(o => o.group === "annual").map(opt => (
                 <button
-                  key={w.start}
-                  onClick={() => { setSelectedWeek(w); setDateMode("week"); setPeriodOpen(false); }}
-                  className={`w-full text-left px-4 py-1.5 text-xs hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "week" && selectedWeek?.start === w.start ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                  key={opt.value}
+                  onClick={() => { setPeriod(opt.value); setDateMode("period"); setPeriodOpen(false); }}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "period" && period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
                 >
-                  {w.label}
+                  {opt.label}
                 </button>
               ))}
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Specific</div>
+              <button
+                onClick={() => { setPeriod("lw"); setDateMode("period"); setPeriodOpen(false); }}
+                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "period" && period === "lw" ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+              >
+                Last Week
+              </button>
               <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Custom Range</div>
               <div className="px-3 pb-3 flex flex-col gap-1.5">
                 <input
@@ -748,20 +833,6 @@ export default function ItemPerformance() {
           ))}
         </div>
 
-        {/* Store Filter — placeholder */}
-        <UITooltip>
-          <TooltipTrigger asChild>
-            <button
-              disabled
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/20 bg-white/50 dark:bg-[#1a1208]/50 text-sm text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 cursor-not-allowed"
-            >
-              Store Filter
-              <ChevronDown size={14} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Store-level filtering coming soon</TooltipContent>
-        </UITooltip>
-
         {data?.skus && data.skus.length > 0 && (
           <button
             onClick={() => {
@@ -812,23 +883,27 @@ export default function ItemPerformance() {
               sub={data.summary.topSkuByDpsw?.productName}
               note={`SKU: ${data.summary.topSkuByDpsw?.sku ?? "—"}`}
               highlight
+              onClick={() => setModalType("dpsw")}
             />
             <KpiCard
               title="SKUs Above Retail Avg"
               value={String(data.summary.skusAboveAvg.count)}
               sub={`${data.summary.skusAboveAvg.pct.toFixed(0)}% of all SKUs`}
+              onClick={() => setModalType("aboveAvg")}
             />
             <KpiCard
               title="Highest Volume SKU"
               value={fmtCurrency(data.summary.highestVolumeSku?.revenue ?? 0)}
               sub={data.summary.highestVolumeSku?.productName}
               note={`SKU: ${data.summary.highestVolumeSku?.sku ?? "—"}`}
+              onClick={() => setModalType("revenue")}
             />
             <KpiCard
               title="Biggest Opportunity"
               value={data.summary.biggestOpportunity ? `${fmtDpsw(data.summary.biggestOpportunity.gap)} gap` : "—"}
               sub={data.summary.biggestOpportunity?.productName}
               note="Target DPSW vs. retail avg"
+              onClick={() => setModalType("opportunity")}
             />
           </>
         ) : null}
@@ -926,13 +1001,7 @@ export default function ItemPerformance() {
                 >
                   <span className="inline-flex items-center gap-1 justify-end">Target DPSW <SortIcon col="targetDpsw" /></span>
                 </th>
-                <th
-                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
-                  onClick={() => toggleSort("vsRetailAvg")}
-                >
-                  <span className="inline-flex items-center gap-1 justify-end">vs Retail Avg <SortIcon col="vsRetailAvg" /></span>
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">vs Target Benchmark</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">vs Benchmark</th>
                 <th
                   className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("retailers")}
@@ -941,6 +1010,7 @@ export default function ItemPerformance() {
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Data</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Trend</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Retailer Item #</th>
               </tr>
             </thead>
             <tbody>
@@ -970,8 +1040,8 @@ export default function ItemPerformance() {
                       <div className="text-[10px] text-[#3A3A3A]/45 mt-0.5">{sku.sku}</div>
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#FFF9F2]/70 tabular-nums">
-                      {fmtCurrency(sku.totalRevenue)}
-                      {includesSellIn && (
+                      {fmtCurrency(dataSource === "pos" && sku.posTotalRevenue != null ? sku.posTotalRevenue : sku.totalRevenue)}
+                      {dataSource !== "pos" && includesSellIn && (
                         <UITooltip>
                           <TooltipTrigger asChild>
                             <Info size={10} className="inline ml-1 text-[#3A3A3A]/25 hover:text-[#FFBC80] cursor-help" />
@@ -980,14 +1050,15 @@ export default function ItemPerformance() {
                         </UITooltip>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 tabular-nums">{fmtUnits(sku.totalUnits)}</td>
+                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 tabular-nums">
+                      {fmtUnits(dataSource === "pos" && sku.posTotalUnits != null ? sku.posTotalUnits : sku.totalUnits)}
+                    </td>
                     <td className={`px-4 py-3 text-right text-sm tabular-nums ${dpswColor(sku.vsRetailAvg)}`}>
                       {fmtDpsw(sku.avgDpsw)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
                       {sku.targetDpsw > 0 ? fmtDpsw(sku.targetDpsw) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right"><DeltaBadge value={sku.vsRetailAvg} /></td>
                     <td className="px-4 py-3 text-right"><DeltaBadge value={sku.vsTargetBenchmark} /></td>
                     <td className="px-4 py-3 text-center text-sm text-[#3A3A3A]/60">{sku.retailerCount}</td>
                     <td className="px-4 py-3">
@@ -997,6 +1068,9 @@ export default function ItemPerformance() {
                       <div className="flex justify-center" onClick={e => e.stopPropagation()}>
                         <Sparkline data={sku.weeklyTrend} />
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-left text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 font-mono">
+                      {getPrimaryItemNumber(sku, retailers)}
                     </td>
                   </tr>
                 ))
@@ -1058,6 +1132,16 @@ export default function ItemPerformance() {
           sku={drawerSku}
           onClose={() => setDrawerSku(null)}
           numWeeks={numWeeks}
+        />
+      )}
+
+      {/* ── Summary Modal ───────────────────────────────────────────────── */}
+      {modalType && data?.skus && (
+        <SummaryModal
+          type={modalType}
+          skus={data.skus}
+          retailAvgDpsw={retailAvgDpsw}
+          onClose={() => setModalType(null)}
         />
       )}
 
