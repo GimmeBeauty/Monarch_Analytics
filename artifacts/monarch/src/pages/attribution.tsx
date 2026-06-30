@@ -276,12 +276,26 @@ interface RoundelDetailData {
   isEmpty: boolean;
 }
 
+interface AgilityRow {
+  campaign: string; channel: string;
+  spend: number; impressions: number; clicks: number;
+  trafficConversions: number; highIntentTraffic: number;
+  realizedSales: number; realizedRevenue: number;
+}
+interface AgilityDetailData {
+  channel: "agility";
+  kpis: { impressions: number; spend: number; realizedRevenue: number; roas: number; highIntentTraffic: number; trafficConversions: number };
+  rows: AgilityRow[];
+  isEmpty: boolean;
+}
+
 type ChannelDetailData =
   | MetaDetailData
   | GoogleDetailData
   | PinterestDetailData
   | CriteoDetailData
-  | RoundelDetailData;
+  | RoundelDetailData
+  | AgilityDetailData;
 
 const CHANNEL_ID_TO_PARAM: Record<string, string> = {
   "meta-ads":       "meta",
@@ -289,6 +303,7 @@ const CHANNEL_ID_TO_PARAM: Record<string, string> = {
   "pinterest-ads":  "pinterest",
   "criteo-ads":     "criteo",
   "roundel-target": "roundel",
+  "agility-ads":    "agility",
 };
 
 // ─── Channel Detail Hook ──────────────────────────────────────────────────────
@@ -579,6 +594,71 @@ function RoundelDetailPanel({ data }: { data: RoundelDetailData }) {
   );
 }
 
+// ─── Agility Detail Panel ─────────────────────────────────────────────────────
+
+function AgilityDetailPanel({ data }: { data: AgilityDetailData }) {
+  const k = data.kpis;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <SmallKpiCard label="Impressions"       value={fmtNumber(k.impressions)} />
+        <SmallKpiCard label="Spend"             value={fmtCurrency(k.spend)} />
+        <SmallKpiCard label="Realized Revenue"  value={fmtCurrency(k.realizedRevenue)} />
+        <SmallKpiCard
+          label="ROAS"
+          value={`${k.roas.toFixed(2)}x`}
+          sub="Upper-funnel — see note"
+        />
+        <SmallKpiCard label="High-Intent Traffic"   value={fmtNumber(k.highIntentTraffic)} />
+        <SmallKpiCard label="Traffic Conversions"   value={fmtNumber(k.trafficConversions)} />
+      </div>
+      <div className="flex items-start gap-1.5 px-1 py-2 rounded-lg bg-[#6B46C1]/8 border border-[#6B46C1]/20">
+        <Info size={12} className="text-[#6B46C1] flex-shrink-0 mt-0.5" />
+        <p className="text-[10px] text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 leading-relaxed">
+          Agility drives upper-funnel awareness and in-store lift that is not fully captured in last-touch attribution.
+          ROAS reflects only directly attributed realized revenue and will appear low relative to direct-response channels.
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+        <table className="w-full text-xs min-w-[740px]">
+          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+            <tr>
+              <th className={`${TH} min-w-[200px]`}>Campaign</th>
+              <th className={TH}>Channel</th>
+              <th className={THR}>Spend</th>
+              <th className={THR}>Impr.</th>
+              <th className={THR}>Clicks</th>
+              <th className={THR}>Traffic Conv.</th>
+              <th className={THR}>Realized Sales</th>
+              <th className={THR}>Realized Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((r, i) => (
+              <tr key={i} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+                <td className={TDL}>
+                  <span className="line-clamp-1 max-w-[240px] block">{r.campaign}</span>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 whitespace-nowrap">
+                  {r.channel}
+                </td>
+                <td className={TD}>{fmtCurrency(r.spend)}</td>
+                <td className={TD}>{fmtNumber(r.impressions)}</td>
+                <td className={TD}>{fmtNumber(r.clicks)}</td>
+                <td className={TD}>{fmtNumber(r.trafficConversions)}</td>
+                <td className={TD}>{r.realizedSales.toFixed(1)}</td>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                  {fmtCurrency(r.realizedRevenue)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Channel Detail Panel (discriminated router) ──────────────────────────────
 
 function ChannelDetailPanel({ channelId, start, end }: { channelId: string; start: string; end: string }) {
@@ -595,6 +675,7 @@ function ChannelDetailPanel({ channelId, start, end }: { channelId: string; star
   if (data.channel === "pinterest") return <PinterestDetailPanel data={data} />;
   if (data.channel === "criteo")    return <CriteoDetailPanel    data={data} />;
   if (data.channel === "roundel")   return <RoundelDetailPanel   data={data} />;
+  if (data.channel === "agility")   return <AgilityDetailPanel   data={data} />;
 
   return <DetailEmpty />;
 }

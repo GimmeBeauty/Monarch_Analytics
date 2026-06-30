@@ -113,6 +113,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
   amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
+  agility_ads:    { channelId: "agility-ads",    channelLabel: "Agility (CTV/Programmatic)", color: "#6B46C1", channelFamily: "core", storeIds: ["shopify"] },
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
@@ -2828,7 +2829,7 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
 
 // ─── GET /api/data/ads/channel-detail ────────────────────────────────────────
 
-const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel"]);
+const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "agility"]);
 
 router.get("/ads/channel-detail", authenticate, async (req, res) => {
   const { channel: channelRaw, start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
@@ -2838,7 +2839,7 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
 
   const channel = channelRaw?.toLowerCase().trim() ?? "";
   if (!VALID_DETAIL_CHANNELS.has(channel)) {
-    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel" });
+    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, agility" });
     return;
   }
 
@@ -3071,8 +3072,7 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
         isEmpty: campaigns.length === 0,
       });
 
-    } else {
-      // roundel
+    } else if (channel === "roundel") {
       const rows = await querySnowflake(`
         SELECT
           raw_data:"Week"::STRING                                                                              AS week,
@@ -3115,6 +3115,71 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
         },
         weeks,
         isEmpty: weeks.length === 0,
+      });
+
+    } else {
+      // agility
+      const [kpiRows, campaignRows] = await Promise.all([
+        querySnowflake(`
+          SELECT
+            SUM(impressions)      AS impressions,
+            SUM(spend)            AS spend,
+            SUM(realized_revenue) AS realized_revenue,
+            SUM(clicks)           AS clicks,
+            SUM(high_intent_traffic)  AS high_intent_traffic,
+            SUM(traffic_conversions)  AS traffic_conversions,
+            SUM(realized_sales)       AS realized_sales,
+            CASE WHEN SUM(spend) > 0 THEN SUM(realized_revenue) / SUM(spend) ELSE 0 END AS roas
+          FROM ${DB_NAME}.ADS.AGILITY_ADS_RAW
+          WHERE ad_date BETWEEN '${start}' AND '${end}'
+        `),
+        querySnowflake(`
+          SELECT
+            campaign,
+            channel,
+            SUM(spend)                AS spend,
+            SUM(impressions)          AS impressions,
+            SUM(clicks)               AS clicks,
+            SUM(traffic_conversions)  AS traffic_conversions,
+            SUM(high_intent_traffic)  AS high_intent_traffic,
+            SUM(realized_sales)       AS realized_sales,
+            SUM(realized_revenue)     AS realized_revenue
+          FROM ${DB_NAME}.ADS.AGILITY_ADS_RAW
+          WHERE ad_date BETWEEN '${start}' AND '${end}'
+          GROUP BY campaign, channel
+          ORDER BY spend DESC
+          LIMIT 50
+        `),
+      ]);
+
+      const agg = kpiRows[0] ?? {};
+      const tSpend   = Number(agg["SPEND"]            ?? agg["spend"]            ?? 0);
+      const tRevenue = Number(agg["REALIZED_REVENUE"]  ?? agg["realized_revenue"] ?? 0);
+
+      const rows = campaignRows.map(r => ({
+        campaign:          String(r["CAMPAIGN"]            ?? r["campaign"]            ?? ""),
+        channel:           String(r["CHANNEL"]             ?? r["channel"]             ?? ""),
+        spend:             Math.round(Number(r["SPEND"]               ?? r["spend"]               ?? 0) * 100) / 100,
+        impressions:       Math.round(Number(r["IMPRESSIONS"]         ?? r["impressions"]         ?? 0)),
+        clicks:            Math.round(Number(r["CLICKS"]              ?? r["clicks"]              ?? 0)),
+        trafficConversions: Math.round(Number(r["TRAFFIC_CONVERSIONS"] ?? r["traffic_conversions"] ?? 0)),
+        highIntentTraffic:  Math.round(Number(r["HIGH_INTENT_TRAFFIC"] ?? r["high_intent_traffic"] ?? 0)),
+        realizedSales:     Math.round(Number(r["REALIZED_SALES"]      ?? r["realized_sales"]      ?? 0) * 10) / 10,
+        realizedRevenue:   Math.round(Number(r["REALIZED_REVENUE"]    ?? r["realized_revenue"]    ?? 0) * 100) / 100,
+      }));
+
+      res.json({
+        channel: "agility",
+        kpis: {
+          impressions:       Math.round(Number(agg["IMPRESSIONS"]         ?? agg["impressions"]         ?? 0)),
+          spend:             Math.round(tSpend   * 100) / 100,
+          realizedRevenue:   Math.round(tRevenue * 100) / 100,
+          roas:              Math.round(Number(agg["ROAS"]                ?? agg["roas"]                ?? 0) * 100) / 100,
+          highIntentTraffic: Math.round(Number(agg["HIGH_INTENT_TRAFFIC"] ?? agg["high_intent_traffic"] ?? 0)),
+          trafficConversions: Math.round(Number(agg["TRAFFIC_CONVERSIONS"] ?? agg["traffic_conversions"] ?? 0)),
+        },
+        rows,
+        isEmpty: rows.length === 0 && tSpend === 0,
       });
     }
   } catch (e) {
