@@ -42,8 +42,18 @@ def run_walmart_s3():
     except Exception as e:
         print(f"  ❌ Walmart S3 error: {e}")
 
+def run_agility():
+    print("\n[4/4] Agility (CTV/Programmatic/Display)...")
+    try:
+        from ingestion.sources.agility_ads import run_agility_ingestion
+        run_agility_ingestion()
+        print("  ✅ Agility done")
+    except Exception as e:
+        print(f"  ❌ Agility error: {e}")
+
 if __name__ == "__main__":
     run_netsuite()
     run_circana()
     run_walmart_s3()
+    run_agility()
     print("\n✅ Weekly scheduler complete!")
