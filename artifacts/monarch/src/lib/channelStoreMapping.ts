@@ -154,6 +154,15 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     color: "#FF6900",
     channelFamily: "rmn",
   },
+  {
+    channelId: "agility-ads",
+    channelLabel: "Agility (CTV/Programmatic)",
+    storeIds: ["target", "amazon"],
+    dailySpendBaseline: 4500,
+    baseRoas: 2.8,
+    color: "#6B46C1",
+    channelFamily: "core",
+  },
 ];
 
 /** O(1) lookup map from channelId → mapping */

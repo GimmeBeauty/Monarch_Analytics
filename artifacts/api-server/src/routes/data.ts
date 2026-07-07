@@ -113,7 +113,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
   amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
-  agility_ads:    { channelId: "agility-ads",    channelLabel: "Agility (CTV/Programmatic)", color: "#6B46C1", channelFamily: "core", storeIds: ["shopify"] },
+  agility_ads:    { channelId: "agility-ads",    channelLabel: "Agility (CTV/Programmatic)", color: "#6B46C1", channelFamily: "core", storeIds: ["target", "amazon"] },
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
@@ -572,6 +572,7 @@ router.get("/overview", authenticate, async (req, res) => {
   if (isUltaSelected)                      activeChannels.push("criteo_ads");
   if (includesTarget)                      activeChannels.push("roundel_target");
   if (isAmazonSelected && !isWholesaleMode) activeChannels.push("amazon_ads");
+  if (includesTarget || isAmazonSelected)   activeChannels.push("agility_ads");
   const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
 
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
