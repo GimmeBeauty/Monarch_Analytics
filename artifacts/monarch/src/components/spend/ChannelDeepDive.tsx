@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { ChannelMMM, SaturationStatus, Recommendation, Confidence } from "@/lib/spendData";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,17 @@ const CONF_CONFIG: Record<Confidence, { dots: number; color: string; label: stri
   medium: { dots: 2, color: "bg-amber-400",   label: "Medium" },
   low:    { dots: 1, color: "bg-red-400",      label: "Low" },
 };
+
+// ─── Chip label with optional tooltip ─────────────────────────────────────────
+
+function ChipLabel({ label, tooltip }: { label: string; tooltip?: string }) {
+  return (
+    <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wide flex items-center gap-0.5">
+      {label}
+      {tooltip && <MetricTooltip content={tooltip} />}
+    </p>
+  );
+}
 
 // ─── Saturation Curve Mini Chart ──────────────────────────────────────────────
 
@@ -85,13 +97,13 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
           <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Model Quality</p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "R²",   value: channel.rSquared.toFixed(3) },
-              { label: "MAPE", value: fmtPct(channel.mape * 100) },
-              { label: "p-value", value: channel.pValue < 0.001 ? "<0.001" : channel.pValue.toFixed(3) },
-              { label: "Confidence", value: CONF_CONFIG[channel.confidence].label },
-            ].map(({ label, value }) => (
+              { label: "R²",         value: channel.rSquared.toFixed(3),                                             tooltip: "Coefficient of determination — proportion of revenue variance explained by the model. Closer to 1.0 = better fit." },
+              { label: "MAPE",       value: fmtPct(channel.mape * 100),                                              tooltip: "Mean Absolute Percentage Error — average forecast accuracy across the holdout period. Under 10% is excellent; above 15% warrants review." },
+              { label: "P-Value",    value: channel.pValue < 0.001 ? "<0.001" : channel.pValue.toFixed(3),           tooltip: "Statistical significance of this channel's revenue contribution. Values below 0.05 indicate a reliable, non-random signal." },
+              { label: "Confidence", value: CONF_CONFIG[channel.confidence].label,                                   tooltip: "Overall model confidence for this channel, derived from p-value, coefficient stability, and cross-validation performance." },
+            ].map(({ label, value, tooltip }) => (
               <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 px-2.5 py-2">
-                <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wide">{label}</p>
+                <ChipLabel label={label} tooltip={tooltip} />
                 <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{value}</p>
               </div>
             ))}
@@ -102,13 +114,13 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
           <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Adstock & Lag</p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Decay",    value: fmtPct(channel.adstockDecay * 100) + "/wk" },
-              { label: "Peak Lag", value: `${channel.peakLagDays}d` },
-              { label: "Eff. Spend", value: fmtCurrency(channel.effectiveSpend) },
-              { label: "mROAS",    value: fmtRoas(channel.marginalRoas) },
-            ].map(({ label, value }) => (
+              { label: "Decay",      value: fmtPct(channel.adstockDecay * 100) + "/wk",  tooltip: "Weekly adstock decay rate — how quickly advertising effects fade after a campaign ends. 80%/wk means 20% of effect carries into the next week." },
+              { label: "Peak Lag",   value: `${channel.peakLagDays}d`,                    tooltip: "Days from ad exposure to peak revenue response. Accounts for consideration and purchase delay." },
+              { label: "Eff. Spend", value: fmtCurrency(channel.effectiveSpend),          tooltip: "Adstock-adjusted effective spend — actual spend plus carryover effects from prior periods, reflecting the true advertising pressure on consumers." },
+              { label: "mROAS",      value: fmtRoas(channel.marginalRoas),                tooltip: "Marginal ROAS at the current spend level — the return on the last dollar invested in this channel." },
+            ].map(({ label, value, tooltip }) => (
               <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 px-2.5 py-2">
-                <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wide">{label}</p>
+                <ChipLabel label={label} tooltip={tooltip} />
                 <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{value}</p>
               </div>
             ))}
@@ -117,9 +129,12 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
 
         {channel.haloRevenue > 0 && (
           <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 px-3 py-2">
-            <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-0.5">
-              Halo effect: {fmtCurrency(channel.haloRevenue)}
-            </p>
+            <div className="flex items-center gap-1 mb-0.5">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                Halo effect: {fmtCurrency(channel.haloRevenue)}
+              </p>
+              <MetricTooltip content="Indirect revenue lift on adjacent channels (e.g. branded search) that can be attributed to this channel's advertising driving awareness." />
+            </div>
             <p className="text-[11px] text-blue-600/70 dark:text-blue-400/60">
               Indirect revenue on {channel.haloChannels.join(", ")}
             </p>
@@ -273,12 +288,21 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
 
 // ─── Table Container ──────────────────────────────────────────────────────────
 
-
 interface ChannelDeepDiveProps {
   channels: ChannelMMM[];
 }
 
 type SortKey = "spend" | "iroas" | "marginalRoas" | "saturationLevelPct" | "incrementalRevenue";
+
+// Column header with optional tooltip (non-sortable columns)
+function HeaderLabel({ label, tooltip }: { label: string; tooltip?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+      {label}
+      {tooltip && <MetricTooltip content={tooltip} />}
+    </span>
+  );
+}
 
 export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
   const [sortKey, setSortKey] = useState<SortKey>("spend");
@@ -298,7 +322,7 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
     return sortDir === "desc" ? -diff : diff;
   });
 
-  function SortBtn({ label, k }: { label: string; k: SortKey }) {
+  function SortBtn({ label, k, tooltip }: { label: string; k: SortKey; tooltip?: string }) {
     const active = sortKey === k;
     return (
       <button
@@ -309,6 +333,7 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
       >
         {label}
         {active && (sortDir === "desc" ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />)}
+        {tooltip && <MetricTooltip content={tooltip} />}
       </button>
     );
   }
@@ -327,23 +352,25 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
           <thead>
             <tr className="border-b border-[#FFBC80]/20">
               {[
-                { label: "Channel",          th: "px-4 pb-2 text-left" },
-                { label: "Type",             th: "px-3 pb-2 text-left" },
-                { label: "Spend",             th: "px-3 pb-2 text-right", k: "spend" as SortKey },
-                { label: "Revenue",           th: "px-3 pb-2 text-right" },
-                { label: "Incremental Rev",   th: "px-3 pb-2 text-right", k: "incrementalRevenue" as SortKey },
-                { label: "ROAS",             th: "px-3 pb-2 text-right" },
-                { label: "iROAS [95% CI]",   th: "px-3 pb-2 text-right", k: "iroas" as SortKey },
-                { label: "mROAS",            th: "px-3 pb-2 text-right", k: "marginalRoas" as SortKey },
-                { label: "Saturation",       th: "px-3 pb-2 text-left", k: "saturationLevelPct" as SortKey },
-                { label: "Action",           th: "px-3 pb-2 text-left" },
-                { label: "Confidence",       th: "px-3 pb-2 text-left" },
-                { label: "",                 th: "px-3 pb-2" },
-              ].map(({ label, th, k }) => (
-                <th key={label} className={`text-xs font-medium uppercase tracking-wider ${th}`}>
-                  {k ? <SortBtn label={label} k={k} /> : (
-                    <span className="text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">{label}</span>
-                  )}
+                { label: "Channel",        th: "px-4 pb-2 text-left" },
+                { label: "Type",           th: "px-3 pb-2 text-left" },
+                { label: "Spend",          th: "px-3 pb-2 text-right",  k: "spend" as SortKey },
+                { label: "Revenue",        th: "px-3 pb-2 text-right" },
+                { label: "Incremental Rev",th: "px-3 pb-2 text-right",  k: "incrementalRevenue" as SortKey, tooltip: "Revenue causally attributed to this channel's spend above what would occur organically — the true incremental lift." },
+                { label: "ROAS",           th: "px-3 pb-2 text-right",  tooltip: "Return on Ad Spend — total attributed revenue divided by channel spend. Includes organic halo effects." },
+                { label: "iROAS [95% CI]", th: "px-3 pb-2 text-right",  k: "iroas" as SortKey,             tooltip: "Incremental ROAS — causal revenue lift divided by spend. 95% confidence interval shown in brackets; tighter intervals = more reliable estimate." },
+                { label: "mROAS",          th: "px-3 pb-2 text-right",  k: "marginalRoas" as SortKey,      tooltip: "Marginal ROAS — revenue generated by the next dollar spent at the current investment level. Declining mROAS signals saturation." },
+                { label: "Saturation",     th: "px-3 pb-2 text-left",   k: "saturationLevelPct" as SortKey,tooltip: "Where the channel sits on its diminishing-returns curve. Over-invested = mROAS falling sharply; Under-invested = significant headroom remains." },
+                { label: "Action",         th: "px-3 pb-2 text-left",   tooltip: "Model-recommended budget direction based on comparing this channel's marginal ROAS to the blended portfolio target." },
+                { label: "Confidence",     th: "px-3 pb-2 text-left",   tooltip: "Statistical confidence in this channel's model coefficient, based on p-value and coefficient stability across model runs." },
+                { label: "",               th: "px-3 pb-2" },
+              ].map(({ label, th, k, tooltip }) => (
+                <th key={label || "_expand"} className={`text-xs font-medium uppercase tracking-wider ${th}`}>
+                  {k ? (
+                    <SortBtn label={label} k={k} tooltip={tooltip} />
+                  ) : label ? (
+                    <HeaderLabel label={label} tooltip={tooltip} />
+                  ) : null}
                 </th>
               ))}
             </tr>

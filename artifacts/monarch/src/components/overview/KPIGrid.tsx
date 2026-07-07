@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, Minus, DollarSign, BarChart2, ShoppingCart, Package, Users, Percent, Zap } from "lucide-react";
 import type { KPIMetric } from "@/lib/overviewData";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 const KPI_ICONS: Record<string, React.FC<{ className?: string }>> = {
   revenue:  DollarSign,
@@ -45,14 +46,16 @@ function KPICard({ kpi }: { kpi: KPIMetric }) {
 
   return (
     <div
-      title={kpi.description}
       className="relative rounded-2xl p-4 sm:p-5 monarch-card overflow-hidden group hover:shadow-md transition-shadow duration-200 cursor-default"
     >
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider leading-none">
-          {kpi.label}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider leading-none truncate">
+            {kpi.label}
+          </span>
+          {kpi.description && <MetricTooltip content={kpi.description} />}
+        </div>
         <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#FFBC80]/15 dark:bg-[#FFBC80]/10 shrink-0">
           <Icon className="w-3.5 h-3.5 text-[#FFBC80] dark:text-[#FFE29A]" />
         </div>
