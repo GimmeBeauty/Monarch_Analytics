@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { ChevronUp, ChevronDown, ChevronsUpDown, Settings2, Search, SlidersHorizontal, Star, ChevronRight } from "lucide-react";
 import type { ProductRow } from "@/lib/trafficData";
 import { STORES } from "@/lib/storeData";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,14 +128,14 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
   const visible = filtered.slice(0, limit);
   const hasMore = filtered.length > limit;
 
-  function Th({ col, label }: { col: SortKey; label: string }) {
+  function Th({ col, label, tooltip }: { col: SortKey; label: string; tooltip?: string }) {
     return (
       <th
         onClick={() => toggleSort(col)}
         className="px-3 py-2.5 text-left cursor-pointer select-none group"
       >
         <span className="flex items-center gap-1 text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider group-hover:text-[#3A3A3A]/70 dark:group-hover:text-[#FFF9F2]/60 transition-colors whitespace-nowrap">
-          {label} <SortIcon col={col} sortKey={sortKey} sortDir={sortDir}/>
+          {label} {tooltip && <MetricTooltip content={tooltip} />} <SortIcon col={col} sortKey={sortKey} sortDir={sortDir}/>
         </span>
       </th>
     );
@@ -267,19 +268,25 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
               <th className="px-3 py-2.5 w-8"></th>
               <Th col="productName" label="Product"/>
               <th className="px-3 py-2.5 text-left">
-                <span className="text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">SKU</span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                  SKU
+                  <MetricTooltip content="Stock Keeping Unit — a unique identifier assigned to each product variant." />
+                </span>
               </th>
               {isWholesale && (
                 <th className="px-3 py-2.5 text-left">
-                  <span className="text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">UPC</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                    UPC
+                    <MetricTooltip content="Universal Product Code — the 12-digit barcode identifier used in wholesale and retail." />
+                  </span>
                 </th>
               )}
               <Th col="storeName"   label="Store"/>
-              <Th col="sales"       label="Sales"/>
-              <Th col="units"       label="Units"/>
-              {hasStoreCount && !isWholesale && <Th col="storeCount" label="Store Count"/>}
-              {visibleCols.avgSellPrice  && <Th col="avgSellPrice"   label="Avg Price"/>}
-              {visibleCols.pctSalesOnline && <Th col="pctSalesOnline" label="Online %"/>}
+              <Th col="sales"       label="Sales"       tooltip="Total net revenue for this product in the selected date range." />
+              <Th col="units"       label="Units"       tooltip="Number of units sold. Badge shows % change vs the prior period." />
+              {hasStoreCount && !isWholesale && <Th col="storeCount" label="Store Count" tooltip="Number of store locations that carried this product during the period." />}
+              {visibleCols.avgSellPrice  && <Th col="avgSellPrice"   label="Avg Price"    tooltip="Average selling price per unit (Revenue ÷ Units)." />}
+              {visibleCols.pctSalesOnline && <Th col="pctSalesOnline" label="Online %"    tooltip="Percentage of total sales generated through online / e-commerce channels." />}
             </tr>
           </thead>
           <tbody>

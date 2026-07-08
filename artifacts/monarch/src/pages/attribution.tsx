@@ -12,6 +12,7 @@ import { useStoreFilter } from "@/context/StoreFilterContext";
 import { getChannelsForStores, type ChannelMapping } from "@/lib/channelStoreMapping";
 import { type BlendedMetric, type AdSignal, type ChannelFunnel, type AdvancedRow, type SignalType } from "@/lib/adAttributionData";
 import { API_BASE } from "@/lib/apiBase";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -187,11 +188,12 @@ function BlendedMetricCard({ m }: { m: BlendedMetric }) {
     : "text-red-500 dark:text-red-400";
 
   return (
-    <div className={`${CARD_CLASS} p-4 relative overflow-hidden`} title={m.description}>
+    <div className={`${CARD_CLASS} p-4 relative overflow-hidden`}>
       <div className="absolute top-0 right-0 w-16 h-16 opacity-8 rounded-bl-full"
         style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
-      <p className="text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
+      <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
         {m.label}
+        <MetricTooltip content={m.description} />
       </p>
       <p className="text-xl font-black tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2] mb-2 leading-none">
         {m.formatted}
@@ -722,13 +724,13 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
               <th className={`${thCls} min-w-[160px] sticky left-0 bg-white dark:bg-[#231a0e]`}>
                 Channel
               </th>
-              <th className={thRCls}>Spend</th>
-              <th className={thRCls}>Revenue</th>
-              <th className={thRCls}>ROAS</th>
-              <th className={thRCls}>Purchases</th>
-              <th className={thRCls}>Impressions</th>
-              <th className={thRCls}>CTR</th>
-              <th className={thRCls}>CPC</th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">Spend <MetricTooltip content="Total ad spend across all campaigns for this channel in the selected period." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">Revenue <MetricTooltip content="Total attributed revenue driven by this channel's advertising." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">ROAS <MetricTooltip content="Return On Ad Spend — Revenue ÷ Spend. Higher is better; ≥3x is generally strong." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">Purchases <MetricTooltip content="Total purchase conversions attributed to this channel." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">Impressions <MetricTooltip content="Total number of times ads from this channel were shown to users." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">CTR <MetricTooltip content="Click-Through Rate — Clicks ÷ Impressions. Measures how compelling the ad creative is." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">CPC <MetricTooltip content="Cost Per Click — Spend ÷ Clicks. Lower means you're paying less for each visit." /></span></th>
               <th className="px-4 py-3 w-10" />
             </tr>
           </thead>
@@ -990,9 +992,9 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
               <th className={thCls + " min-w-[150px]"}>Channel</th>
               {(["elasticity", "incrementalLift", "impressionsPerClick", "efficiencyDecay"] as const).map((key, i) => (
                 <th key={key} className={thCls + " text-right"}>
-                  <span title={TOOLTIPS[key]} className="flex items-center justify-end gap-1 cursor-help">
+                  <span className="flex items-center justify-end gap-1">
                     {["Elasticity", "Incr. Lift %", "Impr. / Click", "Eff. Decay %"][i]}
-                    <Info size={10} className="opacity-40" />
+                    <MetricTooltip content={TOOLTIPS[key]} />
                   </span>
                 </th>
               ))}

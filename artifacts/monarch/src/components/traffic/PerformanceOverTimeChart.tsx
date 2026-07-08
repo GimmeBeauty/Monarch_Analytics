@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { API_BASE } from "@/lib/apiBase";
 import { useAuth } from "@/context/AuthContext";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 type Metric = "revenue" | "volume" | "efficiency";
 
@@ -472,19 +473,28 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
           )}
           {/* Metric toggle */}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#FFF9F2]/5">
-            {(["revenue", "volume", "efficiency"] as Metric[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMetric(m)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${
-                  metric === m
-                    ? "bg-white dark:bg-[#2a1f0f] text-[#3A3A3A] dark:text-[#FFF9F2] shadow-sm"
-                    : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/60"
-                }`}
-              >
-                {m.charAt(0).toUpperCase() + m.slice(1)}
-              </button>
-            ))}
+            {(["revenue", "volume", "efficiency"] as Metric[]).map((m) => {
+              const tooltips: Record<Metric, string> = {
+                revenue:    "Total net revenue per day across selected stores.",
+                volume:     "Units sold per day alongside revenue — dual-axis view.",
+                efficiency: "Average Selling Price (Revenue ÷ Units) alongside revenue — highlights pricing trends.",
+              };
+              return (
+                <span key={m} className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setMetric(m)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${
+                      metric === m
+                        ? "bg-white dark:bg-[#2a1f0f] text-[#3A3A3A] dark:text-[#FFF9F2] shadow-sm"
+                        : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/60"
+                    }`}
+                  >
+                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </button>
+                  <MetricTooltip content={tooltips[m]} />
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>

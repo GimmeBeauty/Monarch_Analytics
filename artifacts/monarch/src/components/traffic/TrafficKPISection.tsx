@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, Minus, DollarSign, Package, Store, Megaphone, TrendingUp as AdRev, BarChart2 } from "lucide-react";
 import type { TrafficKPI } from "@/lib/trafficData";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 const KPI_ICONS: Record<string, React.FC<{ className?: string }>> = {
   revenue:   DollarSign,
@@ -36,7 +37,6 @@ function KPICard({ kpi }: { kpi: TrafficKPI }) {
 
   return (
     <div
-      title={kpi.description}
       className="relative rounded-2xl p-4 sm:p-5 monarch-card overflow-hidden group hover:shadow-md transition-shadow duration-200 cursor-default"
     >
 
@@ -46,8 +46,9 @@ function KPICard({ kpi }: { kpi: TrafficKPI }) {
 
       <div className="relative">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider">
+          <span className="flex items-center gap-1 text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider">
             {kpi.label}
+            <MetricTooltip content={kpi.description} />
           </span>
           <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#FFBC80]/15 dark:bg-[#FFBC80]/10 shrink-0">
             <Icon className="w-3.5 h-3.5 text-[#FFBC80] dark:text-[#FFE29A]" />

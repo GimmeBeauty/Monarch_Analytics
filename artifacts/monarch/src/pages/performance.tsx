@@ -37,6 +37,7 @@ import {
   ChevronDown, SlidersHorizontal, Info,
 } from "lucide-react";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
@@ -969,9 +970,9 @@ export default function Performance() {
               <span className="w-2.5" />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-28">Channel</span>
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-14">Date</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-12">ROAS</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 flex-1 hidden sm:block">Period Avg</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 ml-auto">Deviation</span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-12">ROAS <MetricTooltip content="Return On Ad Spend on this specific day — Revenue ÷ Spend." /></span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 flex-1 hidden sm:block">Period Avg <MetricTooltip content="Average ROAS for this channel across the full selected date range." /></span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 ml-auto">Deviation <MetricTooltip content="How far this day's ROAS strays from the period average, as a percentage. Anomalies are flagged at ≥40%." /></span>
               <span className="w-14" />
             </div>
           )}
