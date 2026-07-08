@@ -94,13 +94,13 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
       {/* Model details */}
       <div className="space-y-3">
         <div>
-          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Model Quality</p>
+          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Model Quality <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">(Est.)</span></p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "R²",         value: channel.rSquared.toFixed(3),                                             tooltip: "Coefficient of determination — proportion of revenue variance explained by the model. Closer to 1.0 = better fit." },
-              { label: "MAPE",       value: fmtPct(channel.mape * 100),                                              tooltip: "Mean Absolute Percentage Error — average forecast accuracy across the holdout period. Under 10% is excellent; above 15% warrants review." },
-              { label: "P-Value",    value: channel.pValue < 0.001 ? "<0.001" : channel.pValue.toFixed(3),           tooltip: "Statistical significance of this channel's revenue contribution. Values below 0.05 indicate a reliable, non-random signal." },
-              { label: "Confidence", value: CONF_CONFIG[channel.confidence].label,                                   tooltip: "Overall model confidence for this channel, derived from p-value, coefficient stability, and cross-validation performance." },
+              { label: "R²",         value: channel.rSquared.toFixed(3),                                             tooltip: "Estimated coefficient of determination — proportion of revenue variance this model explains. Based on industry benchmarks for this channel type, not fitted to Durham Brands data. Will reflect a real fit once holdout data is ingested." },
+              { label: "MAPE",       value: fmtPct(channel.mape * 100),                                              tooltip: "Estimated Mean Absolute Percentage Error — industry-benchmark forecast accuracy for this channel type. Under 10% is excellent; above 15% warrants review. Will update with real regression residuals once holdout data is available." },
+              { label: "P-Value",    value: channel.pValue < 0.001 ? "<0.001" : channel.pValue.toFixed(3),           tooltip: "Estimated statistical significance of this channel's revenue contribution. Based on industry benchmarks — not derived from a holdout experiment on Durham Brands' campaigns. Treat as directional until real lift data is ingested." },
+              { label: "Confidence", value: CONF_CONFIG[channel.confidence].label,                                   tooltip: "Model confidence tier derived from the estimated p-value and R² benchmarks above. High/Medium/Low reflects benchmark assumptions, not measured coefficient stability. Will be recalibrated when holdout experiment results are available." },
             ].map(({ label, value, tooltip }) => (
               <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 px-2.5 py-2">
                 <ChipLabel label={label} tooltip={tooltip} />
@@ -111,13 +111,13 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
         </div>
 
         <div>
-          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Adstock & Lag</p>
+          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Adstock & Lag <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">(Est.)</span></p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Decay",      value: fmtPct(channel.adstockDecay * 100) + "/wk",  tooltip: "Weekly adstock decay rate — how quickly advertising effects fade after a campaign ends. 80%/wk means 20% of effect carries into the next week." },
-              { label: "Peak Lag",   value: `${channel.peakLagDays}d`,                    tooltip: "Days from ad exposure to peak revenue response. Accounts for consideration and purchase delay." },
-              { label: "Eff. Spend", value: fmtCurrency(channel.effectiveSpend),          tooltip: "Adstock-adjusted effective spend — actual spend plus carryover effects from prior periods, reflecting the true advertising pressure on consumers." },
-              { label: "mROAS",      value: fmtRoas(channel.marginalRoas),                tooltip: "Marginal ROAS at the current spend level — the return on the last dollar invested in this channel." },
+              { label: "Decay",      value: fmtPct(channel.adstockDecay * 100) + "/wk",  tooltip: "Estimated weekly adstock decay — how quickly ad effects fade after a campaign ends. Based on industry benchmarks for this channel type, not measured from Durham Brands' own data." },
+              { label: "Peak Lag",   value: `${channel.peakLagDays}d`,                    tooltip: "Estimated days from ad exposure to peak revenue response. Industry benchmark for this channel type — accounts for typical consideration and purchase delay patterns." },
+              { label: "Eff. Spend", value: fmtCurrency(channel.effectiveSpend),          tooltip: "Adstock-adjusted effective spend — nominal spend scaled up by the estimated decay rate to reflect carryover pressure from prior periods." },
+              { label: "mROAS",      value: fmtRoas(channel.marginalRoas),                tooltip: "Model-estimated Marginal ROAS at current spend — the return on the last dollar invested in this channel. Derived from the Hill saturation curve using benchmark gamma and saturation parameters." },
             ].map(({ label, value, tooltip }) => (
               <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 px-2.5 py-2">
                 <ChipLabel label={label} tooltip={tooltip} />
@@ -212,9 +212,12 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
         {/* iROAS */}
         <td className="py-3 px-3 text-right">
           <div className="flex flex-col items-end">
-            <span className="text-sm font-semibold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">
-              {fmtRoas(channel.iroas)}
-            </span>
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] font-medium text-amber-500 dark:text-amber-400">Est.</span>
+              <span className="text-sm font-semibold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">
+                {fmtRoas(channel.iroas)}
+              </span>
+            </div>
             <span className="text-[10px] tabular-nums text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">
               [{fmtRoas(channel.iroasLow)}–{fmtRoas(channel.iroasHigh)}]
             </span>
@@ -361,13 +364,13 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
                 { label: "Type",           th: "px-3 pb-2 text-left" },
                 { label: "Spend",          th: "px-3 pb-2 text-right",  k: "spend" as SortKey },
                 { label: "Revenue",        th: "px-3 pb-2 text-right" },
-                { label: "Incremental Rev",th: "px-3 pb-2 text-right",  k: "incrementalRevenue" as SortKey, tooltip: "Revenue causally attributed to this channel's spend above what would occur organically — the true incremental lift." },
-                { label: "ROAS",           th: "px-3 pb-2 text-right",  tooltip: "Return on Ad Spend — total attributed revenue divided by channel spend. Includes organic halo effects." },
-                { label: "iROAS [95% CI]", th: "px-3 pb-2 text-right",  k: "iroas" as SortKey,             tooltip: "Incremental ROAS — causal revenue lift divided by spend. 95% confidence interval shown in brackets; tighter intervals = more reliable estimate." },
-                { label: "mROAS",          th: "px-3 pb-2 text-right",  k: "marginalRoas" as SortKey,      tooltip: "Marginal ROAS — revenue generated by the next dollar spent at the current investment level. Declining mROAS signals saturation." },
-                { label: "Saturation",     th: "px-3 pb-2 text-left",   k: "saturationLevelPct" as SortKey,tooltip: "Where the channel sits on its diminishing-returns curve. Over-invested = mROAS falling sharply; Under-invested = significant headroom remains." },
-                { label: "Action",         th: "px-3 pb-2 text-left",   tooltip: "Model-recommended budget direction based on comparing this channel's marginal ROAS to the blended portfolio target." },
-                { label: "Confidence",     th: "px-3 pb-2 text-left",   tooltip: "Statistical confidence in this channel's model coefficient, based on p-value and coefficient stability across model runs." },
+                { label: "Incremental Rev",th: "px-3 pb-2 text-right",  k: "incrementalRevenue" as SortKey, tooltip: "Model-estimated revenue causally driven by this channel's spend above the organic baseline. Derived by applying an industry-benchmark incrementality factor to attributed revenue — not measured from a holdout experiment." },
+                { label: "ROAS",           th: "px-3 pb-2 text-right",  tooltip: "Return on Ad Spend — platform-reported attributed revenue divided by spend. Both numbers are real Snowflake data." },
+                { label: "iROAS [95% CI]", th: "px-3 pb-2 text-right",  k: "iroas" as SortKey,             tooltip: "Model-estimated Incremental ROAS — causal revenue lift divided by spend. Incrementality factor is an industry benchmark, not a measured holdout result. CI width is derived from the estimated p-value — treat as directional until real lift data is available." },
+                { label: "mROAS",          th: "px-3 pb-2 text-right",  k: "marginalRoas" as SortKey,      tooltip: "Model-estimated Marginal ROAS — revenue from the next dollar at current spend, derived from the Hill saturation curve using benchmark parameters. Declining mROAS signals saturation." },
+                { label: "Saturation",     th: "px-3 pb-2 text-left",   k: "saturationLevelPct" as SortKey,tooltip: "Model-estimated position on the diminishing-returns curve, using industry-benchmark Hill exponents and saturation ratios. Treat as directional — Over-invested = mROAS falling sharply; Under-invested = headroom remaining." },
+                { label: "Action",         th: "px-3 pb-2 text-left",   tooltip: "Model-recommended budget direction based on comparing this channel's estimated marginal ROAS to the blended portfolio benchmark. Directional guidance — not a hard budget prescription." },
+                { label: "Confidence",     th: "px-3 pb-2 text-left",   tooltip: "Model confidence tier derived from industry-benchmark R² and p-value estimates. High/Medium/Low indicates relative reliability of the model assumptions for this channel type, not measured coefficient stability." },
                 { label: "",               th: "px-3 pb-2" },
               ].map(({ label, th, k, tooltip }) => (
                 <th key={label || "_expand"} className={`text-xs font-medium uppercase tracking-wider ${th}`}>

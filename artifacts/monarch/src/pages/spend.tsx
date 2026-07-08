@@ -128,7 +128,14 @@ export default function Spend() {
         {!error && data && (
           <>
             <div className="px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-700/40 text-xs text-emerald-700 dark:text-emerald-400">
-              Using real spend data from Snowflake — MMM model calibrated to actual channel spend.
+              Spend and attributed revenue sourced from Snowflake — ROAS and MER reflect real data.
+            </div>
+
+            <div className="px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-700/40 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <span className="shrink-0 mt-0.5">⚠</span>
+              <span>
+                <strong>Model estimates:</strong> iROAS, incrementality, saturation, mROAS, confidence, R², MAPE, adstock, halo, and reallocation upside are calculated using industry-benchmark parameters per channel type — not fitted to Durham Brands&apos; own data. They are directional guidance. Hover any <strong className="underline decoration-dotted">(?)</strong> tooltip for details. These will automatically upgrade to real statistics once holdout experiment data is ingested.
+              </span>
             </div>
 
             <ChannelFamilyFilter
