@@ -168,8 +168,7 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
   return (
     <>
       <tr
-        className="border-b border-[#FFBC80]/10 hover:bg-[#FFBC80]/4 dark:hover:bg-[#FFBC80]/5 cursor-pointer transition-colors"
-        onClick={() => setExpanded((v) => !v)}
+        className="border-b border-[#FFBC80]/10 hover:bg-[#FFBC80]/4 dark:hover:bg-[#FFBC80]/5 transition-colors"
       >
         {/* Channel */}
         <td className="py-3 px-4 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">
@@ -267,10 +266,16 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
 
         {/* Expand toggle */}
         <td className="py-3 px-3 text-right">
-          {expanded
-            ? <ChevronUp className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 ml-auto" />
-            : <ChevronDown className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 ml-auto" />
-          }
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="ml-auto flex items-center justify-center cursor-pointer"
+            aria-label={expanded ? "Collapse row" : "Expand row"}
+          >
+            {expanded
+              ? <ChevronUp className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" />
+              : <ChevronDown className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" />
+            }
+          </button>
         </td>
       </tr>
 
@@ -343,7 +348,7 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
       <div className="px-5 pt-5 pb-3">
         <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Channel Deep Dive</h3>
         <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
-          Full MMM metrics — click any row to expand saturation curve and model details
+          Full MMM metrics — click the chevron to expand saturation curve and model details
         </p>
       </div>
 
