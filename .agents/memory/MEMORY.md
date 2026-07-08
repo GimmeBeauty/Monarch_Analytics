@@ -1,2 +1,3 @@
 - [API error responses must never include `detail`](api-error-detail-leak.md) — audit ALL `res.status(...).json({error, detail})` call sites, not just the obvious ones; leaks hide in NODE_ENV branches and third-party proxy error passthroughs too.
 - [React Query error vs empty-data anti-pattern](query-error-vs-empty.md) — a queryFn that swallows non-ok responses into `{isEmpty:true}` makes real failures indistinguishable from "no data"; always throw and let the UI branch on `error`.
+- [Monarch owner login credential mismatch](monarch-owner-credential.md) — replit.md documents a stale owner password; real one is seeded in api-server bootstrap code.

@@ -571,11 +571,11 @@ router.get("/overview", authenticate, async (req, res) => {
   const isWholesaleMode   = isWholesaleRaw === "true";
 
   const activeChannels: string[] = [];
-  if (isShopifySelected)                   activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
-  if (isUltaSelected)                      activeChannels.push("criteo_ads");
-  if (includesTarget)                      activeChannels.push("roundel_target");
-  if (isAmazonSelected && !isWholesaleMode) activeChannels.push("amazon_ads");
-  if (includesTarget || isAmazonSelected)   activeChannels.push("agility_ads");
+  if (isShopifySelected)                 activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
+  if (isUltaSelected)                    activeChannels.push("criteo_ads");
+  if (includesTarget)                    activeChannels.push("roundel_target");
+  if (isAmazonSelected)                  activeChannels.push("amazon_ads");
+  if (includesTarget || isAmazonSelected) activeChannels.push("agility_ads");
   const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
 
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
@@ -675,11 +675,21 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const priorGa4Query = hasPrior
+    const priorGa4Query = (hasPrior && isShopifySelected)
       ? querySnowflake(`
           SELECT SUM(sessions) AS total_sessions
           FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    // Sessions from GA4_DAILY_SUMMARY — GA4 only tracks the Shopify website, so
+    // this is skipped entirely (and reported as 0) when Shopify isn't selected.
+    const ga4Query = isShopifySelected
+      ? querySnowflake(`
+          SELECT SUM(sessions) AS total_sessions
+          FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
 
@@ -718,12 +728,7 @@ router.get("/overview", authenticate, async (req, res) => {
             ORDER BY spend DESC
           `)
         : Promise.resolve([]),
-      // Sessions from GA4_DAILY_SUMMARY
-      querySnowflake(`
-        SELECT SUM(sessions) AS total_sessions
-        FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-      `),
+      ga4Query,
       // Web orders from SHOPIFY_ORDERS_RAW (for CVR numerator)
       querySnowflake(`
         SELECT COUNT(*) AS web_orders
