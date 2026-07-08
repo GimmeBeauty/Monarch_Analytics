@@ -87,11 +87,6 @@ function fmtNum(v: number): string {
   return Math.round(v).toLocaleString();
 }
 
-function safeError(e: unknown): string {
-  if (process.env.NODE_ENV === "development") return String(e);
-  return "Query failed";
-}
-
 // ─── GET /api/analytics/overview ─────────────────────────────────────────────
 
 /** Build a UNION of all selected store revenue branches for the given date range.
@@ -232,7 +227,8 @@ router.get("/overview", async (req, res) => {
       topChannels,
     });
   } catch (e) {
-    res.status(500).json({ error: "Failed to query overview data", detail: safeError(e) });
+    req.log.error({ err: e }, "Failed to query overview data");
+    res.status(500).json({ error: "Failed to query overview data" });
   }
 });
 
@@ -289,7 +285,8 @@ router.get("/traffic", async (req, res) => {
       topPages: [],
     });
   } catch (e) {
-    res.status(500).json({ error: "Failed to query traffic data", detail: safeError(e) });
+    req.log.error({ err: e }, "Failed to query traffic data");
+    res.status(500).json({ error: "Failed to query traffic data" });
   }
 });
 
@@ -363,7 +360,8 @@ router.get("/spend", async (req, res) => {
       spendTimeSeries,
     });
   } catch (e) {
-    res.status(500).json({ error: "Failed to query spend data", detail: safeError(e) });
+    req.log.error({ err: e }, "Failed to query spend data");
+    res.status(500).json({ error: "Failed to query spend data" });
   }
 });
 
@@ -413,7 +411,8 @@ router.get("/attribution", async (req, res) => {
       conversionPaths: [],
     });
   } catch (e) {
-    res.status(500).json({ error: "Failed to query attribution data", detail: safeError(e) });
+    req.log.error({ err: e }, "Failed to query attribution data");
+    res.status(500).json({ error: "Failed to query attribution data" });
   }
 });
 
@@ -499,7 +498,8 @@ router.get("/performance", async (req, res) => {
       channelPerformance,
     });
   } catch (e) {
-    res.status(500).json({ error: "Failed to query performance data", detail: safeError(e) });
+    req.log.error({ err: e }, "Failed to query performance data");
+    res.status(500).json({ error: "Failed to query performance data" });
   }
 });
 
@@ -599,7 +599,8 @@ router.get("/forecast", async (req, res) => {
       ],
     });
   } catch (e) {
-    res.status(500).json({ error: "Failed to query forecast data", detail: safeError(e) });
+    req.log.error({ err: e }, "Failed to query forecast data");
+    res.status(500).json({ error: "Failed to query forecast data" });
   }
 });
 

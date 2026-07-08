@@ -262,7 +262,7 @@ router.get("/shopify", authenticate, async (req, res) => {
       return;
     }
   } catch (snowflakeErr) {
-    console.error("[data/shopify] Snowflake error:", snowflakeErr);
+    req.log.error({ err: snowflakeErr }, "[data/shopify] Snowflake error:");
   }
 
   const rows = await db.select().from(integrationsTable)
@@ -297,7 +297,8 @@ router.get("/shopify", authenticate, async (req, res) => {
       });
       if (!r.ok) {
         const errBody = await r.text().catch(() => "");
-        res.status(r.status).json({ error: "Shopify API error", detail: errBody }); return;
+        req.log.error({ status: r.status, body: errBody }, "Shopify API error");
+        res.status(r.status).json({ error: "Shopify API error" }); return;
       }
 
       const d = await r.json() as { orders: Array<{ created_at: string; total_price: string; financial_status?: string }> };
@@ -419,7 +420,8 @@ router.get("/google_ads", authenticate, async (req, res) => {
 
   if (!gRes.ok) {
     const body = await gRes.text();
-    res.status(gRes.status).json({ error: "Google Ads API error", detail: body }); return;
+    req.log.error({ status: gRes.status, body }, "Google Ads API error");
+    res.status(gRes.status).json({ error: "Google Ads API error" }); return;
   }
 
   type GRow = {
@@ -506,7 +508,8 @@ router.get("/meta", authenticate, async (req, res) => {
 
   if (!mRes.ok) {
     const body = await mRes.text();
-    res.status(mRes.status).json({ error: "Meta API error", detail: body }); return;
+    req.log.error({ status: mRes.status, body }, "Meta API error");
+    res.status(mRes.status).json({ error: "Meta API error" }); return;
   }
 
   type MRow = {
@@ -899,8 +902,8 @@ router.get("/overview", authenticate, async (req, res) => {
       source: "snowflake-summary",
     });
   } catch (e) {
-    console.error("[data/overview] Error:", e);
-    res.status(500).json({ error: "Failed to query overview data", detail: String(e) });
+    req.log.error({ err: e }, "[data/overview] Error:");
+    res.status(500).json({ error: "Failed to query overview data" });
   }
 });
 
@@ -979,8 +982,8 @@ router.get("/attribution", authenticate, async (req, res) => {
 
     res.json({ channels, isEmpty: channels.length === 0 });
   } catch (e) {
-    console.error("[data/attribution] Error:", e);
-    res.status(500).json({ error: "Failed to query attribution data", detail: String(e) });
+    req.log.error({ err: e }, "[data/attribution] Error:");
+    res.status(500).json({ error: "Failed to query attribution data" });
   }
 });
 
@@ -1167,7 +1170,7 @@ router.get("/traffic", authenticate, async (req, res) => {
     const webOrderAgg   = webOrderRows[0] ?? {};
     const webOrders     = Number(webOrderAgg["WEB_ORDERS"] ?? webOrderAgg["web_orders"] ?? 0);
     const cvr           = (isShopifySelected && totalSessions > 0) ? webOrders / totalSessions : 0;
-    console.log("[data/traffic] totalSessions:", totalSessions);
+    req.log.debug({ totalSessions }, "[data/traffic] totalSessions");
 
     const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
     const priorSummaryAgg   = (priorSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
@@ -1233,8 +1236,8 @@ router.get("/traffic", authenticate, async (req, res) => {
       source: "snowflake-summary",
     });
   } catch (e) {
-    console.error("[data/traffic] Error:", e);
-    res.status(500).json({ error: "Failed to query traffic data", detail: String(e) });
+    req.log.error({ err: e }, "[data/traffic] Error:");
+    res.status(500).json({ error: "Failed to query traffic data" });
   }
 });
 
@@ -1276,12 +1279,12 @@ router.get("/spend", authenticate, async (req, res) => {
       totalConversionValue: Math.round(v.totalConversionValue * 100) / 100,
       dailySpend:           v.dailySpend,
     }));
-    console.log("[data/spend] conversionValue by channel:", channels.map(c => `${c.channelId}=${c.totalConversionValue}`).join(", "));
+    req.log.debug({ conversionValueByChannel: channels.map(c => `${c.channelId}=${c.totalConversionValue}`).join(", ") }, "[data/spend] conversionValue by channel");
 
     res.json({ channels, isEmpty: channels.length === 0 });
   } catch (e) {
-    console.error("[data/spend] Error:", e);
-    res.status(500).json({ error: "Failed to query spend data", detail: String(e) });
+    req.log.error({ err: e }, "[data/spend] Error:");
+    res.status(500).json({ error: "Failed to query spend data" });
   }
 });
 
@@ -1357,8 +1360,8 @@ router.get("/performance", authenticate, async (req, res) => {
 
     res.json({ channels, isEmpty: channels.length === 0 });
   } catch (e) {
-    console.error("[data/performance] Error:", e);
-    res.status(500).json({ error: "Failed to query performance data", detail: String(e) });
+    req.log.error({ err: e }, "[data/performance] Error:");
+    res.status(500).json({ error: "Failed to query performance data" });
   }
 });
 
@@ -1396,8 +1399,8 @@ router.get("/target/products", authenticate, async (req, res) => {
 
     res.json({ products, isEmpty: products.length === 0 });
   } catch (e) {
-    console.error("[data/target/products] Error:", e);
-    res.status(500).json({ error: "Failed to query Target product data", detail: String(e) });
+    req.log.error({ err: e }, "[data/target/products] Error:");
+    res.status(500).json({ error: "Failed to query Target product data" });
   }
 });
 
@@ -1428,8 +1431,8 @@ router.get("/target/fulfillment", authenticate, async (req, res) => {
 
     res.json({ fulfillment, isEmpty: fulfillment.length === 0 });
   } catch (e) {
-    console.error("[data/target/fulfillment] Error:", e);
-    res.status(500).json({ error: "Failed to query Target fulfillment data", detail: String(e) });
+    req.log.error({ err: e }, "[data/target/fulfillment] Error:");
+    res.status(500).json({ error: "Failed to query Target fulfillment data" });
   }
 });
 
@@ -1463,8 +1466,8 @@ router.get("/target/geographic", authenticate, async (req, res) => {
 
     res.json({ locations, isEmpty: locations.length === 0 });
   } catch (e) {
-    console.error("[data/target/geographic] Error:", e);
-    res.status(500).json({ error: "Failed to query Target geographic data", detail: String(e) });
+    req.log.error({ err: e }, "[data/target/geographic] Error:");
+    res.status(500).json({ error: "Failed to query Target geographic data" });
   }
 });
 
@@ -1507,8 +1510,8 @@ router.get("/target/locations", authenticate, async (req, res) => {
 
     res.json({ locations, isEmpty: locations.length === 0 });
   } catch (e) {
-    console.error("[data/target/locations] Error:", e);
-    res.status(500).json({ error: "Failed to query Target location data", detail: String(e) });
+    req.log.error({ err: e }, "[data/target/locations] Error:");
+    res.status(500).json({ error: "Failed to query Target location data" });
   }
 });
 
@@ -1539,8 +1542,8 @@ router.get("/walmart/summary", authenticate, async (req, res) => {
 
     res.json({ revenue, unitsSold, storeCount, cogs, isEmpty: revenue === 0 && unitsSold === 0 });
   } catch (e) {
-    console.error("[data/walmart/summary] Error:", e);
-    res.status(500).json({ error: "Failed to query Walmart summary data", detail: String(e) });
+    req.log.error({ err: e }, "[data/walmart/summary] Error:");
+    res.status(500).json({ error: "Failed to query Walmart summary data" });
   }
 });
 
@@ -1577,8 +1580,8 @@ router.get("/walmart/products", authenticate, async (req, res) => {
 
     res.json({ products, isEmpty: products.length === 0 });
   } catch (e) {
-    console.error("[data/walmart/products] Error:", e);
-    res.status(500).json({ error: "Failed to query Walmart product data", detail: String(e) });
+    req.log.error({ err: e }, "[data/walmart/products] Error:");
+    res.status(500).json({ error: "Failed to query Walmart product data" });
   }
 });
 
@@ -1612,8 +1615,8 @@ router.get("/walmart/geographic", authenticate, async (req, res) => {
 
     res.json({ locations, isEmpty: locations.length === 0 });
   } catch (e) {
-    console.error("[data/walmart/geographic] Error:", e);
-    res.status(500).json({ error: "Failed to query Walmart geographic data", detail: String(e) });
+    req.log.error({ err: e }, "[data/walmart/geographic] Error:");
+    res.status(500).json({ error: "Failed to query Walmart geographic data" });
   }
 });
 
@@ -1650,13 +1653,13 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
       GROUP BY loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code
       ORDER BY revenue DESC
     `;
-    console.log("[DEBUG walmart/stores] SQL:", sql);
+    req.log.debug({ sql }, "[DEBUG walmart/stores] SQL");
     let rows: Awaited<ReturnType<typeof querySnowflake>>;
     try {
       rows = await querySnowflake(sql);
-      console.log("[DEBUG walmart/stores] rows returned:", rows.length);
+      req.log.debug({ rowCount: rows.length }, "[DEBUG walmart/stores] rows returned");
     } catch (queryErr) {
-      console.error("[DEBUG walmart/stores] querySnowflake threw:", queryErr);
+      req.log.error({ err: queryErr }, "[DEBUG walmart/stores] querySnowflake threw:");
       throw queryErr;
     }
 
@@ -1673,8 +1676,8 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
 
     res.json({ stores, isEmpty: stores.length === 0 });
   } catch (e) {
-    console.error("[data/walmart/stores] Error:", e);
-    res.status(500).json({ error: "Failed to query Walmart store data", detail: String(e) });
+    req.log.error({ err: e }, "[data/walmart/stores] Error:");
+    res.status(500).json({ error: "Failed to query Walmart store data" });
   }
 });
 
@@ -1796,8 +1799,8 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
       source:   "snowflake-netsuite",
     });
   } catch (e) {
-    console.error("[data/netsuite/sales] Error:", e);
-    res.status(500).json({ error: "Failed to query NetSuite sales data", detail: String(e) });
+    req.log.error({ err: e }, "[data/netsuite/sales] Error:");
+    res.status(500).json({ error: "Failed to query NetSuite sales data" });
   }
 });
 
@@ -1847,8 +1850,8 @@ router.get("/netsuite/sync-status", authenticate, async (req, res) => {
       source:      "snowflake-netsuite-sync",
     });
   } catch (e) {
-    console.error("[data/netsuite/sync-status] Error:", e);
-    res.status(500).json({ error: "Failed to query NetSuite sync status", detail: String(e) });
+    req.log.error({ err: e }, "[data/netsuite/sync-status] Error:");
+    res.status(500).json({ error: "Failed to query NetSuite sync status" });
   }
 });
 
@@ -1891,8 +1894,8 @@ router.get("/roundel/summary", authenticate, async (req, res) => {
     const totalRoas = totalSpend > 0 ? Math.round((totalRevenue / totalSpend) * 100) / 100 : 0;
     res.json({ weeks, totalSpend: Math.round(totalSpend * 100) / 100, totalRevenue: Math.round(totalRevenue * 100) / 100, totalRoas, totalClicks, totalImpressions, isEmpty: weeks.length === 0 });
   } catch (e) {
-    console.error("[data/roundel/summary] Error:", e);
-    res.status(500).json({ error: "Failed to query Roundel summary data", detail: String(e) });
+    req.log.error({ err: e }, "[data/roundel/summary] Error:");
+    res.status(500).json({ error: "Failed to query Roundel summary data" });
   }
 });
 
@@ -1970,8 +1973,8 @@ router.get("/circana/summary", authenticate, async (req, res) => {
 
     res.json(result);
   } catch (e) {
-    console.error("[data/circana/summary] Error:", e);
-    res.status(500).json({ error: "Failed to query Circana summary data", detail: String(e) });
+    req.log.error({ err: e }, "[data/circana/summary] Error:");
+    res.status(500).json({ error: "Failed to query Circana summary data" });
   }
 });
 
@@ -2045,8 +2048,8 @@ router.get("/circana/products", authenticate, async (req, res) => {
 
     res.json({ products, isEmpty: products.length === 0 });
   } catch (e) {
-    console.error("[data/circana/products] Error:", e);
-    res.status(500).json({ error: "Failed to query Circana products data", detail: String(e) });
+    req.log.error({ err: e }, "[data/circana/products] Error:");
+    res.status(500).json({ error: "Failed to query Circana products data" });
   }
 });
 
@@ -2353,8 +2356,8 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     await Promise.all(queries);
     res.json(results);
   } catch (e) {
-    console.error("[data/traffic/trends] Error:", e);
-    res.status(500).json({ error: "Failed to query traffic trends", detail: String(e) });
+    req.log.error({ err: e }, "[data/traffic/trends] Error:");
+    res.status(500).json({ error: "Failed to query traffic trends" });
   }
 });
 
@@ -2388,8 +2391,8 @@ router.get("/notes", authenticate, async (req, res) => {
       createdAt: String(r["CREATED_AT"] ?? r["created_at"] ?? ""),
     })));
   } catch (e) {
-    console.error("[data/notes GET] Error:", e);
-    res.status(400).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/notes GET] Error:");
+    res.status(400).json({ error: "Invalid request or failed to load notes" });
   }
 });
 
@@ -2417,8 +2420,8 @@ router.post("/notes", authenticate, async (req, res) => {
 
     return res.json({ id, storeId: sid, noteDate: safeDate, title: safeTitle, body: safeBody, createdBy: safeCreator });
   } catch (e) {
-    console.error("[data/notes POST] Error:", e);
-    return res.status(400).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/notes POST] Error:");
+    return res.status(400).json({ error: "Invalid request or failed to save note" });
   }
 });
 
@@ -2431,8 +2434,8 @@ router.delete("/notes/:id", authenticate, async (req, res) => {
     await querySnowflake(`DELETE FROM ${DB_NAME}.COMMERCE.MONARCH_NOTES WHERE id = '${id}'`);
     return res.json({ ok: true });
   } catch (e) {
-    console.error("[data/notes DELETE] Error:", e);
-    return res.status(400).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/notes DELETE] Error:");
+    return res.status(400).json({ error: "Invalid request or failed to delete note" });
   }
 });
 
@@ -2480,8 +2483,8 @@ router.get("/forecast/settings", authenticate, async (req, res) => {
 
     return res.json({ year, stores: storeMap });
   } catch (e) {
-    console.error("[data/forecast/settings GET]", e);
-    return res.status(500).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/forecast/settings GET]");
+    return res.status(500).json({ error: "Failed to load forecast settings" });
   }
 });
 
@@ -2525,8 +2528,8 @@ router.post("/forecast/settings", authenticate, async (req, res) => {
 
     return res.json({ ok: true });
   } catch (e) {
-    console.error("[data/forecast/settings POST]", e);
-    return res.status(500).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/forecast/settings POST]");
+    return res.status(500).json({ error: "Failed to save forecast settings" });
   }
 });
 
@@ -2702,8 +2705,8 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       totalMonthlyGoal,
     });
   } catch (e) {
-    console.error("[data/forecast/summary]", e);
-    return res.status(500).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/forecast/summary]");
+    return res.status(500).json({ error: "Failed to load forecast summary" });
   }
 });
 
@@ -2823,8 +2826,8 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
 
     return res.json({ year, granularity, series });
   } catch (e) {
-    console.error("[data/forecast/chart]", e);
-    return res.status(500).json({ error: String(e) });
+    req.log.error({ err: e }, "[data/forecast/chart]");
+    return res.status(500).json({ error: "Failed to load forecast chart data" });
   }
 });
 
@@ -3184,8 +3187,8 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
       });
     }
   } catch (e) {
-    console.error("[data/ads/channel-detail] Error:", e);
-    res.status(500).json({ error: "Failed to query channel detail", detail: String(e) });
+    req.log.error({ err: e }, "[data/ads/channel-detail] Error:");
+    res.status(500).json({ error: "Failed to query channel detail" });
   }
 });
 

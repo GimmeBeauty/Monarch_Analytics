@@ -12,6 +12,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import ErrorState from "@/components/ErrorState";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -73,17 +74,20 @@ export default function Forecast() {
 
   const { storeWeight: sw } = useStoreFilter();
 
-  const { data: summary, isLoading: summaryLoading } = useQuery<ForecastSummary>({
+  const { data: summary, isLoading: summaryLoading, isFetching: summaryFetching, error: summaryError, refetch: refetchSummary } = useQuery<ForecastSummary>({
     queryKey: ["forecast-summary", selectedYear],
     queryFn: async () => {
       const p = new URLSearchParams({ year: String(selectedYear) });
       const r = await fetch(`/api/data/forecast/summary?${p}`);
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${r.status}`);
+      }
       return r.json() as Promise<ForecastSummary>;
     },
   });
 
-  const { data: chartResp, isLoading: chartLoading } = useQuery<ForecastChartResp>({
+  const { data: chartResp, isLoading: chartLoading, isFetching: chartFetching, error: chartError, refetch: refetchChart } = useQuery<ForecastChartResp>({
     queryKey: ["forecast-chart", selectedYear, granularity, showPriorYear],
     queryFn: async () => {
       const p = new URLSearchParams({
@@ -92,12 +96,18 @@ export default function Forecast() {
         priorYear: String(showPriorYear),
       });
       const r = await fetch(`/api/data/forecast/chart?${p}`);
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${r.status}`);
+      }
       return r.json() as Promise<ForecastChartResp>;
     },
   });
 
   const isLoading = summaryLoading || chartLoading;
+  const error = summaryError || chartError;
+  const isRefetching = summaryFetching || chartFetching;
+  const refetchAll = () => { refetchSummary(); refetchChart(); };
 
   // Scale summary metrics by store weight (goals stay unscaled)
   const s = useMemo((): ForecastSummary | null => {
@@ -222,7 +232,13 @@ export default function Forecast() {
         </span>
       </div>
 
-      {isLoading ? (
+      {error ? (
+        <ErrorState
+          message="Unable to load data — check your data connections."
+          onRetry={refetchAll}
+          isRetrying={isRefetching}
+        />
+      ) : isLoading ? (
         <div className="animate-pulse space-y-6">
           <div className="grid grid-cols-5 gap-4">
             {[...Array(5)].map((_, i) => <div key={i} className="h-28 rounded-xl bg-[#FFBC80]/10" />)}

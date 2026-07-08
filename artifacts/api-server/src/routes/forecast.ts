@@ -225,7 +225,7 @@ router.patch("/forecasts/upsert", async (req, res) => {
 
     res.json(results.flat());
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, "Failed to upsert forecasts");
     res.status(500).json({ error: "Failed to upsert forecasts" });
   }
 });

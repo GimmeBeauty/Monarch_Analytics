@@ -42,7 +42,7 @@ router.get("/callback", async (req, res) => {
 
     if (!tokenRes.ok) {
       const detail = await tokenRes.text().catch(() => "");
-      console.error("[netsuite/callback] Token exchange failed:", tokenRes.status, detail);
+      req.log.error({ status: tokenRes.status, detail }, "[netsuite/callback] Token exchange failed");
       res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return;
     }
 
@@ -51,7 +51,7 @@ router.get("/callback", async (req, res) => {
     refreshToken = td.refresh_token ?? "";
     expiresIn    = td.expires_in ?? 3600;
   } catch (e) {
-    console.error("[netsuite/callback] Token exchange error:", e);
+    req.log.error({ err: e }, "[netsuite/callback] Token exchange error");
     res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return;
   }
 

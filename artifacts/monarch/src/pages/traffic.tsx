@@ -8,6 +8,7 @@ import TrafficKPISection from "@/components/traffic/TrafficKPISection";
 import ProductPerformanceTable from "@/components/traffic/ProductPerformanceTable";
 import USMap from "@/components/traffic/USMap";
 import PerformanceOverTimeChart from "@/components/traffic/PerformanceOverTimeChart";
+import ErrorState from "@/components/ErrorState";
 import { API_BASE } from "@/lib/apiBase";
 import type { TrafficKPI, ProductRow, StateRevenue, StoreLocation } from "@/lib/trafficData";
 import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
@@ -148,7 +149,7 @@ export default function Traffic() {
   const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
   console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly, "| isWalmartSelected:", isWalmartSelected);
 
-  const { data: apiData, isLoading, error } = useQuery<TrafficApiResponse>({
+  const { data: apiData, isLoading, error, refetch, isRefetching } = useQuery<TrafficApiResponse>({
     queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
@@ -612,9 +613,11 @@ export default function Traffic() {
     >
       <div className="space-y-6">
         {error && (
-          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/40 text-xs text-amber-700 dark:text-amber-400">
-            Unable to load data — {(error as Error).message}. Check your Snowflake connection.
-          </div>
+          <ErrorState
+            message="Unable to load data — check your data connections."
+            onRetry={() => refetch()}
+            isRetrying={isRefetching}
+          />
         )}
 
         {isEmpty && !error && (

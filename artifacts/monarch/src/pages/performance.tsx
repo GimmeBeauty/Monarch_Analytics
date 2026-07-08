@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
+import ErrorState from "@/components/ErrorState";
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
@@ -446,7 +447,7 @@ export default function Performance() {
   }
   interface PerfApiResponse { channels: PerfApiChannel[]; isEmpty: boolean; }
 
-  const { data: perfApiData, isLoading: perfLoading } = useQuery<PerfApiResponse>({
+  const { data: perfApiData, isLoading: perfLoading, error: perfError, refetch: refetchPerf, isRefetching: perfRefetching } = useQuery<PerfApiResponse>({
     queryKey: ["performance-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
@@ -454,7 +455,10 @@ export default function Performance() {
         `${API_BASE}/api/data/performance?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
       );
-      if (!res.ok) return { channels: [], isEmpty: true };
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
       return res.json() as Promise<PerfApiResponse>;
     },
     staleTime: 1000 * 60 * 15,
@@ -597,11 +601,18 @@ export default function Performance() {
           onClearAll={handleClearAll}
         />
 
-        {/* ── Empty / loading state ────────────────────────────────────── */}
-        {perfLoading && (
+        {/* ── Empty / loading / error state ────────────────────────────── */}
+        {perfError && (
+          <ErrorState
+            message="Unable to load data — check your data connections."
+            onRetry={() => refetchPerf()}
+            isRetrying={perfRefetching}
+          />
+        )}
+        {!perfError && perfLoading && (
           <div className="h-40 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
         )}
-        {!perfLoading && perfApiData?.isEmpty && (
+        {!perfError && !perfLoading && perfApiData?.isEmpty && (
           <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
             <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
               No data available — check your Snowflake connection and date range.
@@ -609,7 +620,7 @@ export default function Performance() {
           </div>
         )}
 
-        {!perfLoading && !perfApiData?.isEmpty && (
+        {!perfError && !perfLoading && !perfApiData?.isEmpty && (
           <>
         {/* ── Section 1: Daily Revenue vs Spend Composition ─────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">

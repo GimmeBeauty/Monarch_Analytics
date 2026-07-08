@@ -16,6 +16,7 @@ import { useDateRange } from "@/context/DateRangeContext";
 import { useStoreFilter } from "@/context/StoreFilterContext";
 import { usePricingMode } from "@/context/PricingModeContext";
 import { API_BASE } from "@/lib/apiBase";
+import ErrorState from "@/components/ErrorState";
 
 interface SpendApiResponse {
   channels: Array<{ channelId: string; totalSpend: number; totalConversionValue: number; dailySpend: Array<{ date: string; spend: number }> }>;
@@ -29,14 +30,17 @@ export default function Spend() {
 
   const [filterState, setFilterState] = useState<FamilyFilterState>(defaultFilterState);
 
-  const { data: spendApiData, isLoading } = useQuery<SpendApiResponse>({
+  const { data: spendApiData, isLoading, error, refetch, isRefetching } = useQuery<SpendApiResponse>({
     queryKey: ["spend-data", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       const res = await fetch(
         `${API_BASE}/api/data/spend?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
-      if (!res.ok) return { channels: [], isEmpty: true };
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
       return res.json() as Promise<SpendApiResponse>;
     },
     staleTime: 1000 * 60 * 15,
@@ -105,7 +109,15 @@ export default function Spend() {
       description="MMM-powered budget analysis — decomposition, incrementality, saturation curves, and scenario modeling."
     >
       <div className="space-y-5">
-        {isEmpty && (
+        {error && (
+          <ErrorState
+            message="Unable to load data — check your data connections."
+            onRetry={() => refetch()}
+            isRetrying={isRefetching}
+          />
+        )}
+
+        {!error && isEmpty && (
           <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
             <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
               No data available — check your Snowflake connection and date range.
@@ -113,7 +125,7 @@ export default function Spend() {
           </div>
         )}
 
-        {data && (
+        {!error && data && (
           <>
             <div className="px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-700/40 text-xs text-emerald-700 dark:text-emerald-400">
               Using real spend data from Snowflake — MMM model calibrated to actual channel spend.

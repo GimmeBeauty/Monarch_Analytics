@@ -684,7 +684,7 @@ router.get("/", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("[item-performance]", err);
+    req.log.error({ err }, "Failed to fetch item performance data");
     res.status(500).json({ error: "Failed to fetch item performance data" });
     return;
   }

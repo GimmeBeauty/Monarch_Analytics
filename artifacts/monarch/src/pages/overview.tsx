@@ -6,6 +6,7 @@ import PerformanceTrendChart from "@/components/overview/PerformanceTrendChart";
 import EfficiencyTrendChart from "@/components/overview/EfficiencyTrendChart";
 import BreakdownSection from "@/components/overview/BreakdownSection";
 import ActivityFeed from "@/components/overview/ActivityFeed";
+import ErrorState from "@/components/ErrorState";
 import { useDateRange } from "@/context/DateRangeContext";
 import { useStoreFilter } from "@/context/StoreFilterContext";
 import { usePricingMode } from "@/context/PricingModeContext";
@@ -95,7 +96,7 @@ export default function Overview() {
   const CIRCANA_STORE_IDS = ["meijer", "cvs", "walgreens", "publix"];
   const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
 
-  const { data: apiData, isLoading, error } = useQuery<OverviewApiResponse>({
+  const { data: apiData, isLoading, error, refetch, isRefetching } = useQuery<OverviewApiResponse>({
     queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
@@ -286,9 +287,11 @@ export default function Overview() {
     >
       <div className="space-y-5">
         {error && (
-          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/40 text-xs text-amber-700 dark:text-amber-400">
-            Unable to load data — {(error as Error).message}. Check your Snowflake connection.
-          </div>
+          <ErrorState
+            message="Unable to load data — check your data connections."
+            onRetry={() => refetch()}
+            isRetrying={isRefetching}
+          />
         )}
 
         {isEmpty && !error && (

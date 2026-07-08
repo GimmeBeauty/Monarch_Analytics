@@ -26,6 +26,7 @@ import {
   Download,
 } from "lucide-react";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import ErrorState from "@/components/ErrorState";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -623,13 +624,16 @@ export default function ItemPerformance() {
     return p;
   }, [dateMode, period, customStart, customEnd, dataSource, retailers]);
 
-  const { data, isLoading, isError } = useQuery<ApiResponse>({
+  const { data, isLoading, isError, refetch, isRefetching } = useQuery<ApiResponse>({
     queryKey: ["item-performance", queryParams.toString()],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/item-performance?${queryParams.toString()}`, {
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to fetch");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Failed to fetch");
+      }
       return res.json();
     },
   });
@@ -874,7 +878,13 @@ export default function ItemPerformance() {
             </div>
           ))
         ) : isError ? (
-          <div className="col-span-4 text-center py-4 text-[#3A3A3A]/40 text-sm">Unable to load summary</div>
+          <div className="col-span-4">
+            <ErrorState
+              message="Unable to load data — check your data connections."
+              onRetry={() => refetch()}
+              isRetrying={isRefetching}
+            />
+          </div>
         ) : data?.summary ? (
           <>
             <KpiCard
@@ -1018,8 +1028,12 @@ export default function ItemPerformance() {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : isError ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
-                    Unable to load data. Check Snowflake connectivity.
+                  <td colSpan={10} className="px-4 py-12">
+                    <ErrorState
+                      message="Unable to load data — check your data connections."
+                      onRetry={() => refetch()}
+                      isRetrying={isRefetching}
+                    />
                   </td>
                 </tr>
               ) : sortedSkus.length === 0 ? (

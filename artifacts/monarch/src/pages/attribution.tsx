@@ -13,6 +13,7 @@ import { getChannelsForStores, type ChannelMapping } from "@/lib/channelStoreMap
 import { type BlendedMetric, type AdSignal, type ChannelFunnel, type AdvancedRow, type SignalType } from "@/lib/adAttributionData";
 import { API_BASE } from "@/lib/apiBase";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
+import ErrorState from "@/components/ErrorState";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -1105,14 +1106,17 @@ export default function Attribution() {
   }
   interface AttrApiResponse { channels: AttrApiChannel[]; isEmpty: boolean; }
 
-  const { data: attrApiData, isLoading: attrLoading } = useQuery<AttrApiResponse>({
+  const { data: attrApiData, isLoading: attrLoading, error: attrError, refetch: refetchAttr, isRefetching: attrRefetching } = useQuery<AttrApiResponse>({
     queryKey: ["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(",")],
     queryFn: async () => {
       const res = await fetch(
         `${API_BASE}/api/data/attribution?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
       );
-      if (!res.ok) return { channels: [], isEmpty: true };
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
       return res.json() as Promise<AttrApiResponse>;
     },
     staleTime: 1000 * 60 * 15,
@@ -1273,7 +1277,13 @@ export default function Attribution() {
             />
           </section>
 
-          {isLoading ? (
+          {attrError ? (
+            <ErrorState
+              message="Unable to load data — check your data connections."
+              onRetry={() => refetchAttr()}
+              isRetrying={attrRefetching}
+            />
+          ) : isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Array.from({ length: 7 }).map((_, i) => (
                 <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
