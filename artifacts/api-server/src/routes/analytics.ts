@@ -1,176 +1,606 @@
 import { Router } from "express";
+import { authenticate } from "../middlewares/authenticate.js";
+import { querySnowflake } from "../lib/snowflake.js";
 
 const router = Router();
+router.use(authenticate);
 
-function generateTimeSeries(days: number, baseValue: number, variance: number) {
-  const points = [];
-  const now = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    const value = baseValue + (Math.random() - 0.5) * variance;
-    const compareValue = value * (0.85 + Math.random() * 0.3);
-    points.push({
-      date: date.toISOString().split("T")[0],
-      value: Math.round(value * 100) / 100,
-      compareValue: Math.round(compareValue * 100) / 100,
-    });
-  }
-  return points;
+const DB_NAME = process.env.SNOWFLAKE_DATABASE ?? "MONARCH_RAW";
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// ─── Store → Channel mapping (mirrors data.ts CHANNEL_META) ──────────────────
+
+/** Which channels are active given a set of storeIds.
+ *  Empty storeIds → all channels (no filter). */
+const CHANNEL_STORE_MAP: Record<string, string[]> = {
+  meta_ads:       ["shopify"],
+  google_ads:     ["shopify"],
+  pinterest_ads:  ["shopify"],
+  criteo_ads:     ["ulta"],
+  roundel_target: ["target"],
+  amazon_ads:     ["amazon"],
+  agility_ads:    ["target", "amazon"],
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  meta_ads:       "Meta Ads",
+  google_ads:     "Google Ads",
+  pinterest_ads:  "Pinterest Ads",
+  criteo_ads:     "Criteo (Ulta)",
+  roundel_target: "Roundel (Target)",
+  amazon_ads:     "Amazon Ads",
+  agility_ads:    "Agility (CTV/Programmatic)",
+};
+
+function activeChannels(storeIds: string[]): string[] {
+  if (!storeIds.length) return Object.keys(CHANNEL_STORE_MAP);
+  return Object.entries(CHANNEL_STORE_MAP)
+    .filter(([, stores]) => stores.some(s => storeIds.includes(s)))
+    .map(([ch]) => ch);
 }
 
-router.get("/overview", (req, res) => {
-  res.json({
-    metrics: [
-      { label: "Total Revenue", value: "$142,850", change: 12.4, changeLabel: "vs last period", trend: "up" },
-      { label: "Total Sessions", value: "284,320", change: 8.7, changeLabel: "vs last period", trend: "up" },
-      { label: "Conversion Rate", value: "3.24%", change: -0.8, changeLabel: "vs last period", trend: "down" },
-      { label: "Total Ad Spend", value: "$38,450", change: 5.2, changeLabel: "vs last period", trend: "up" },
-      { label: "ROAS", value: "3.71x", change: 6.9, changeLabel: "vs last period", trend: "up" },
-      { label: "Avg. CPA", value: "$24.30", change: -3.1, changeLabel: "vs last period", trend: "up" },
-    ],
-    revenueTimeSeries: generateTimeSeries(30, 4500, 1800),
-    conversionTimeSeries: generateTimeSeries(30, 3.2, 1.2),
-    topChannels: [
-      { channel: "Google Ads", revenue: 58400, share: 40.9 },
-      { channel: "Meta Ads", revenue: 42100, share: 29.5 },
-      { channel: "Email", revenue: 21300, share: 14.9 },
-      { channel: "Organic", revenue: 14200, share: 9.9 },
-      { channel: "Referral", revenue: 6850, share: 4.8 },
-    ],
-  });
-});
+function channelFilter(storeIds: string[]): string {
+  const channels = activeChannels(storeIds);
+  return channels.map(c => `'${c}'`).join(", ");
+}
 
-router.get("/traffic", (req, res) => {
-  res.json({
-    metrics: [
-      { label: "Total Sessions", value: "284,320", change: 8.7, changeLabel: "vs last period", trend: "up" },
-      { label: "Unique Visitors", value: "198,450", change: 11.2, changeLabel: "vs last period", trend: "up" },
-      { label: "Pageviews", value: "731,820", change: 7.4, changeLabel: "vs last period", trend: "up" },
-      { label: "Bounce Rate", value: "42.3%", change: -2.1, changeLabel: "vs last period", trend: "up" },
-      { label: "Avg. Session Duration", value: "3m 42s", change: 4.5, changeLabel: "vs last period", trend: "up" },
-      { label: "Pages per Session", value: "2.57", change: -0.3, changeLabel: "vs last period", trend: "down" },
-    ],
-    sessionTimeSeries: generateTimeSeries(30, 9400, 3200),
-    pageviewTimeSeries: generateTimeSeries(30, 24200, 8500),
-    sourceBreakdown: [
-      { source: "Organic Search", sessions: 98420, share: 34.6 },
-      { source: "Paid Search", sessions: 71280, share: 25.1 },
-      { source: "Direct", sessions: 52340, share: 18.4 },
-      { source: "Social", sessions: 38650, share: 13.6 },
-      { source: "Email", sessions: 14800, share: 5.2 },
-      { source: "Referral", sessions: 8830, share: 3.1 },
-    ],
-    topPages: [
-      { page: "/", views: 142300, avgTime: "1m 12s" },
-      { page: "/products", views: 98400, avgTime: "3m 45s" },
-      { page: "/pricing", views: 76200, avgTime: "4m 22s" },
-      { page: "/blog", views: 54800, avgTime: "6m 08s" },
-      { page: "/about", views: 32100, avgTime: "2m 34s" },
-      { page: "/contact", views: 18400, avgTime: "1m 58s" },
-      { page: "/checkout", views: 14200, avgTime: "5m 41s" },
-    ],
-  });
-});
+// ─── Query helpers ────────────────────────────────────────────────────────────
 
-router.get("/spend", (req, res) => {
-  res.json({
-    metrics: [
-      { label: "Total Spend", value: "$38,450", change: 5.2, changeLabel: "vs last period", trend: "up" },
-      { label: "Overall ROAS", value: "3.71x", change: 6.9, changeLabel: "vs last period", trend: "up" },
-      { label: "Avg. CPA", value: "$24.30", change: -3.1, changeLabel: "vs last period", trend: "up" },
-      { label: "Revenue Generated", value: "$142,850", change: 12.4, changeLabel: "vs last period", trend: "up" },
-    ],
-    spendByChannel: [
-      { channel: "Google Search", spend: 14200, roas: 4.12, cpa: 18.40, recommended: 16800 },
-      { channel: "Google Display", spend: 5800, roas: 2.84, cpa: 28.60, recommended: 4200 },
-      { channel: "Meta Feed", spend: 9600, roas: 3.94, cpa: 22.10, recommended: 11400 },
-      { channel: "Meta Stories", spend: 3200, roas: 2.41, cpa: 34.80, recommended: 2400 },
-      { channel: "TikTok", spend: 3850, roas: 3.18, cpa: 26.50, recommended: 4600 },
-      { channel: "YouTube", spend: 1800, roas: 2.65, cpa: 32.40, recommended: 1200 },
-    ],
-    spendTimeSeries: generateTimeSeries(30, 1250, 480),
-  });
-});
+function defaultDateRange(): { start: string; end: string } {
+  const end   = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end:   end.toISOString().slice(0, 10),
+  };
+}
 
-router.get("/attribution", (req, res) => {
-  res.json({
-    metrics: [
-      { label: "Total Conversions", value: "5,842", change: 9.3, changeLabel: "vs last period", trend: "up" },
-      { label: "Attributed Revenue", value: "$138,200", change: 11.8, changeLabel: "vs last period", trend: "up" },
-      { label: "Avg. Touchpoints", value: "4.2", change: 0.3, changeLabel: "vs last period", trend: "neutral" },
-      { label: "Avg. Path Length", value: "8.4 days", change: -1.2, changeLabel: "vs last period", trend: "up" },
-    ],
-    touchpointBreakdown: [
-      { touchpoint: "Google Search", conversions: 2140, revenue: 52800, model: "Last Click" },
-      { touchpoint: "Meta Feed", conversions: 1380, revenue: 38400, model: "Last Click" },
-      { touchpoint: "Email", conversions: 980, revenue: 24200, model: "Last Click" },
-      { touchpoint: "Organic Search", conversions: 740, revenue: 14800, model: "Last Click" },
-      { touchpoint: "Direct", conversions: 380, revenue: 6400, model: "Last Click" },
-      { touchpoint: "TikTok", conversions: 222, revenue: 1600, model: "Last Click" },
-    ],
-    conversionPaths: [
-      { path: "Google Search → Direct", count: 1240, conversionRate: 4.82 },
-      { path: "Meta Ad → Email → Direct", count: 890, conversionRate: 6.14 },
-      { path: "Organic → Google Search → Direct", count: 720, conversionRate: 5.37 },
-      { path: "TikTok → Meta → Direct", count: 540, conversionRate: 3.91 },
-      { path: "Email → Direct", count: 480, conversionRate: 7.24 },
-      { path: "Google Display → Search → Direct", count: 380, conversionRate: 4.12 },
-    ],
-  });
-});
+function parseParams(query: Record<string, string>): {
+  start: string; end: string; storeIds: string[];
+} {
+  const defaults = defaultDateRange();
+  return {
+    start:    DATE_RE.test(query.startDate ?? "") ? query.startDate : defaults.start,
+    end:      DATE_RE.test(query.endDate   ?? "") ? query.endDate   : defaults.end,
+    storeIds: query.storeIds
+      ? query.storeIds.split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+      : [],
+  };
+}
 
-router.get("/performance", (req, res) => {
-  res.json({
-    metrics: [
-      { label: "Total Impressions", value: "18.4M", change: 14.2, changeLabel: "vs last period", trend: "up" },
-      { label: "Total Clicks", value: "284,600", change: 9.8, changeLabel: "vs last period", trend: "up" },
-      { label: "Avg. CTR", value: "1.55%", change: -0.4, changeLabel: "vs last period", trend: "down" },
-      { label: "Avg. CPC", value: "$1.34", change: -4.2, changeLabel: "vs last period", trend: "up" },
-      { label: "Total Conversions", value: "5,842", change: 9.3, changeLabel: "vs last period", trend: "up" },
-      { label: "Cost per Conv.", value: "$24.30", change: -3.1, changeLabel: "vs last period", trend: "up" },
-    ],
-    kpiTimeSeries: generateTimeSeries(30, 1.55, 0.6),
-    channelPerformance: [
-      { channel: "Google Search", impressions: 4200000, clicks: 98400, ctr: 2.34, conversions: 2140, cpc: 1.44 },
-      { channel: "Google Display", impressions: 8400000, clicks: 42000, ctr: 0.50, conversions: 620, cpc: 1.38 },
-      { channel: "Meta Feed", impressions: 3100000, clicks: 78400, ctr: 2.53, conversions: 1380, cpc: 1.22 },
-      { channel: "Meta Stories", impressions: 1800000, clicks: 36000, ctr: 2.00, conversions: 480, cpc: 0.89 },
-      { channel: "TikTok", impressions: 620000, clicks: 24200, ctr: 3.90, conversions: 222, cpc: 1.59 },
-      { channel: "YouTube", impressions: 280000, clicks: 5600, ctr: 2.00, conversions: 80, cpc: 2.14 },
-    ],
-  });
-});
+function toDateStr(val: unknown): string {
+  if (!val) return "";
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  return String(val).slice(0, 10);
+}
 
-router.get("/forecast", (req, res) => {
-  const now = new Date();
-  const forecastTimeSeries = [];
-  for (let i = -15; i <= 30; i++) {
-    const date = new Date(now);
-    date.setDate(date.getDate() + i);
-    const isHistory = i <= 0;
-    const baseProjected = 4800 + i * 80 + (Math.random() - 0.5) * 600;
-    forecastTimeSeries.push({
-      date: date.toISOString().split("T")[0],
-      projected: Math.round(baseProjected),
-      lower: Math.round(baseProjected * 0.82),
-      upper: Math.round(baseProjected * 1.18),
-      actual: isHistory ? Math.round(baseProjected * (0.92 + Math.random() * 0.16)) : undefined,
-    });
+function fmt$(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000)     return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
+}
+
+function fmtNum(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}K`;
+  return Math.round(v).toLocaleString();
+}
+
+function safeError(e: unknown): string {
+  if (process.env.NODE_ENV === "development") return String(e);
+  return "Query failed";
+}
+
+// ─── GET /api/analytics/overview ─────────────────────────────────────────────
+
+/** Build a UNION of all selected store revenue branches for the given date range.
+ *  Each branch selects (summary_date, revenue, spend, orders) so the outer query
+ *  can SUM across all stores without branching. */
+function buildStoreCte(
+  dbName: string,
+  storeIds: string[],
+  start: string,
+  end: string,
+): string {
+  const all = !storeIds.length;
+  const branches: string[] = [];
+
+  if (all || storeIds.includes("shopify")) {
+    branches.push(`
+      SELECT summary_date,
+             COALESCE(total_revenue, 0) AS revenue,
+             COALESCE(ad_spend,      0) AS spend,
+             COALESCE(order_count,   0) AS orders
+      FROM ${dbName}.COMMERCE.MONARCH_DAILY_SUMMARY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'`);
+  }
+  if (all || storeIds.includes("target")) {
+    branches.push(`
+      SELECT summary_date,
+             COALESCE(sale_amount,   0) AS revenue,
+             0                         AS spend,
+             COALESCE(sale_quantity, 0) AS orders
+      FROM ${dbName}.RETAIL.TARGET_DAILY_SUMMARY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'`);
+  }
+  if (all || storeIds.includes("walmart")) {
+    branches.push(`
+      SELECT week_date                AS summary_date,
+             COALESCE(revenue,       0) AS revenue,
+             0                         AS spend,
+             0                         AS orders
+      FROM ${dbName}.RETAIL.WALMART_WEEKLY_SUMMARY
+      WHERE week_date BETWEEN '${start}' AND '${end}'`);
+  }
+  if (all || storeIds.includes("amazon")) {
+    branches.push(`
+      SELECT summary_date,
+             COALESCE(ordered_product_sales, 0) AS revenue,
+             0                                  AS spend,
+             COALESCE(units_ordered,         0) AS orders
+      FROM ${dbName}.RETAIL.AMAZON_DAILY_SUMMARY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'`);
   }
 
-  res.json({
-    projectedRevenue: 182400,
-    projectedSpend: 46200,
-    projectedROAS: 3.95,
-    confidence: 87,
-    forecastTimeSeries,
-    scenarioComparison: [
-      { scenario: "Conservative", revenue: 162000, spend: 42000, roas: 3.86 },
-      { scenario: "Base Case", revenue: 182400, spend: 46200, roas: 3.95 },
-      { scenario: "Optimistic", revenue: 208000, spend: 50800, roas: 4.09 },
-    ],
-  });
+  if (!branches.length) return "";
+  return branches.join("\n      UNION ALL\n");
+}
+
+router.get("/overview", async (req, res) => {
+  const { start, end, storeIds } = parseParams(req.query as Record<string, string>);
+  const chFilter = channelFilter(storeIds);
+  const storeCte = buildStoreCte(DB_NAME, storeIds, start, end);
+
+  try {
+    const [summaryRows, revenueRows, adRows] = await Promise.all([
+      // Aggregate revenue + spend + orders across all selected stores
+      storeCte
+        ? querySnowflake(`
+            WITH store_data AS (${storeCte})
+            SELECT
+              COALESCE(SUM(revenue), 0) AS revenue,
+              COALESCE(SUM(spend),   0) AS spend,
+              COALESCE(SUM(orders),  0) AS orders
+            FROM store_data
+          `)
+        : Promise.resolve([]),
+
+      // Daily revenue time series — UNION across selected stores then group by date
+      storeCte
+        ? querySnowflake(`
+            WITH store_data AS (${storeCte})
+            SELECT summary_date, SUM(revenue) AS revenue
+            FROM store_data
+            GROUP BY summary_date
+            ORDER BY summary_date ASC
+          `)
+        : Promise.resolve([]),
+
+      // Channel ad spend (store-scoped)
+      chFilter
+        ? querySnowflake(`
+            SELECT channel,
+                   COALESCE(SUM(spend),            0) AS spend,
+                   COALESCE(SUM(conversion_value), 0) AS revenue
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${chFilter})
+            GROUP BY channel
+            ORDER BY spend DESC
+          `)
+        : Promise.resolve([]),
+    ]);
+
+    const agg     = summaryRows[0] ?? {};
+    const revenue = Number(agg["REVENUE"] ?? agg["revenue"] ?? 0);
+    const spend   = Number(agg["SPEND"]   ?? agg["spend"]   ?? 0);
+    const orders  = Number(agg["ORDERS"]  ?? agg["orders"]  ?? 0);
+    const roas    = spend  > 0 ? revenue / spend  : 0;
+    const aov     = orders > 0 ? revenue / orders : 0;
+
+    const revenueTimeSeries = (revenueRows as Record<string, unknown>[]).map(row => ({
+      date:  toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]),
+      value: Number(row["REVENUE"] ?? row["revenue"] ?? 0),
+    }));
+
+    const totalAdRevenue = (adRows as Record<string, unknown>[])
+      .reduce((s, r) => s + Number(r["REVENUE"] ?? r["revenue"] ?? 0), 0);
+
+    const topChannels = (adRows as Record<string, unknown>[])
+      .map(row => {
+        const ch  = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+        const rev = Number(row["REVENUE"] ?? row["revenue"] ?? 0);
+        return {
+          channel: CHANNEL_LABELS[ch] ?? ch,
+          revenue: Math.round(rev * 100) / 100,
+          share:   totalAdRevenue > 0 ? Math.round(rev / totalAdRevenue * 1000) / 10 : 0,
+        };
+      })
+      .filter(c => c.revenue > 0);
+
+    res.json({
+      metrics: [
+        { label: "Total Revenue",    value: fmt$(revenue),          change: 0, changeLabel: "selected period", trend: "up"      },
+        { label: "Total Ad Spend",   value: fmt$(spend),            change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Blended ROAS",     value: `${roas.toFixed(2)}x`, change: 0, changeLabel: "selected period", trend: "up"      },
+        { label: "Total Orders",     value: fmtNum(orders),         change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Avg. Order Value", value: fmt$(aov),              change: 0, changeLabel: "selected period", trend: "neutral" },
+      ],
+      revenueTimeSeries,
+      conversionTimeSeries: [],
+      topChannels,
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to query overview data", detail: safeError(e) });
+  }
+});
+
+// ─── GET /api/analytics/traffic ───────────────────────────────────────────────
+
+router.get("/traffic", async (req, res) => {
+  const { start, end, storeIds } = parseParams(req.query as Record<string, string>);
+  const isShopify = !storeIds.length || storeIds.includes("shopify");
+
+  try {
+    const [aggRows, dailyRows] = await Promise.all([
+      isShopify
+        ? querySnowflake(`
+            SELECT
+              COALESCE(SUM(sessions),  0) AS sessions,
+              COALESCE(SUM(pageviews), 0) AS pageviews
+            FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+          `)
+        : Promise.resolve([]),
+      isShopify
+        ? querySnowflake(`
+            SELECT summary_date,
+                   COALESCE(sessions,  0) AS sessions,
+                   COALESCE(pageviews, 0) AS pageviews
+            FROM ${DB_NAME}.COMMERCE.GA4_DAILY_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+            ORDER BY summary_date ASC
+          `)
+        : Promise.resolve([]),
+    ]);
+
+    const agg       = (aggRows as Record<string, unknown>[])[0] ?? {};
+    const sessions  = Number(agg["SESSIONS"]  ?? agg["sessions"]  ?? 0);
+    const pageviews = Number(agg["PAGEVIEWS"] ?? agg["pageviews"] ?? 0);
+
+    const sessionTimeSeries = (dailyRows as Record<string, unknown>[]).map(r => ({
+      date:  toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+      value: Number(r["SESSIONS"]  ?? r["sessions"]  ?? 0),
+    }));
+    const pageviewTimeSeries = (dailyRows as Record<string, unknown>[]).map(r => ({
+      date:  toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+      value: Number(r["PAGEVIEWS"] ?? r["pageviews"] ?? 0),
+    }));
+
+    res.json({
+      metrics: [
+        { label: "Total Sessions",  value: fmtNum(sessions),  change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Total Pageviews", value: fmtNum(pageviews), change: 0, changeLabel: "selected period", trend: "neutral" },
+      ],
+      sessionTimeSeries,
+      pageviewTimeSeries,
+      sourceBreakdown: [],
+      topPages: [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to query traffic data", detail: safeError(e) });
+  }
+});
+
+// ─── GET /api/analytics/spend ─────────────────────────────────────────────────
+
+router.get("/spend", async (req, res) => {
+  const { start, end, storeIds } = parseParams(req.query as Record<string, string>);
+  const chFilter = channelFilter(storeIds);
+
+  try {
+    const [aggRows, dailyRows] = await Promise.all([
+      chFilter
+        ? querySnowflake(`
+            SELECT channel,
+                   COALESCE(SUM(spend),            0) AS spend,
+                   COALESCE(SUM(conversion_value), 0) AS revenue,
+                   COALESCE(SUM(conversions),      0) AS conversions
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${chFilter})
+            GROUP BY channel
+            ORDER BY spend DESC
+          `)
+        : Promise.resolve([]),
+      chFilter
+        ? querySnowflake(`
+            SELECT summary_date, COALESCE(SUM(spend), 0) AS spend
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${chFilter})
+            GROUP BY summary_date
+            ORDER BY summary_date ASC
+          `)
+        : Promise.resolve([]),
+    ]);
+
+    const totalSpend   = (aggRows as Record<string, unknown>[]).reduce((s, r) => s + Number(r["SPEND"]   ?? r["spend"]   ?? 0), 0);
+    const totalRevenue = (aggRows as Record<string, unknown>[]).reduce((s, r) => s + Number(r["REVENUE"] ?? r["revenue"] ?? 0), 0);
+    const overallRoas  = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+
+    const spendByChannel = (aggRows as Record<string, unknown>[])
+      .map(row => {
+        const ch          = String(row["CHANNEL"]  ?? row["channel"]  ?? "").toLowerCase();
+        const spend       = Number(row["SPEND"]    ?? row["spend"]    ?? 0);
+        const revenue     = Number(row["REVENUE"]  ?? row["revenue"]  ?? 0);
+        const conversions = Number(row["CONVERSIONS"] ?? row["conversions"] ?? 0);
+        const roas = spend > 0 ? revenue / spend    : 0;
+        const cpa  = conversions > 0 ? spend / conversions : 0;
+        return {
+          channel:     CHANNEL_LABELS[ch] ?? ch,
+          spend:       Math.round(spend * 100) / 100,
+          roas:        Math.round(roas  * 100) / 100,
+          cpa:         Math.round(cpa   * 100) / 100,
+          recommended: Math.round(spend * 100) / 100,
+        };
+      })
+      .filter(c => c.spend > 0);
+
+    const spendTimeSeries = (dailyRows as Record<string, unknown>[]).map(r => ({
+      date:  toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+      value: Math.round(Number(r["SPEND"] ?? r["spend"] ?? 0) * 100) / 100,
+    }));
+
+    res.json({
+      metrics: [
+        { label: "Total Spend",    value: fmt$(totalSpend),              change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Overall ROAS",   value: `${overallRoas.toFixed(2)}x`, change: 0, changeLabel: "selected period", trend: "up"      },
+        { label: "Total Revenue",  value: fmt$(totalRevenue),            change: 0, changeLabel: "selected period", trend: "up"      },
+      ],
+      spendByChannel,
+      spendTimeSeries,
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to query spend data", detail: safeError(e) });
+  }
+});
+
+// ─── GET /api/analytics/attribution ──────────────────────────────────────────
+
+router.get("/attribution", async (req, res) => {
+  const { start, end, storeIds } = parseParams(req.query as Record<string, string>);
+  const chFilter = channelFilter(storeIds);
+
+  try {
+    const rows = chFilter
+      ? await querySnowflake(`
+          SELECT channel,
+                 COALESCE(SUM(conversions),      0) AS conversions,
+                 COALESCE(SUM(conversion_value), 0) AS revenue
+          FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+            AND channel IN (${chFilter})
+          GROUP BY channel
+          ORDER BY revenue DESC
+        `)
+      : [];
+
+    const totalConversions = rows.reduce((s, r) => s + Number(r["CONVERSIONS"] ?? r["conversions"] ?? 0), 0);
+    const totalRevenue     = rows.reduce((s, r) => s + Number(r["REVENUE"]     ?? r["revenue"]     ?? 0), 0);
+
+    const touchpointBreakdown = rows
+      .map(row => {
+        const ch          = String(row["CHANNEL"]  ?? row["channel"]  ?? "").toLowerCase();
+        const conversions = Number(row["CONVERSIONS"] ?? row["conversions"] ?? 0);
+        const revenue     = Number(row["REVENUE"]     ?? row["revenue"]     ?? 0);
+        return {
+          touchpoint:  CHANNEL_LABELS[ch] ?? ch,
+          conversions: Math.round(conversions),
+          revenue:     Math.round(revenue * 100) / 100,
+          model:       "Last Click",
+        };
+      })
+      .filter(t => t.conversions > 0);
+
+    res.json({
+      metrics: [
+        { label: "Total Conversions",  value: fmtNum(totalConversions), change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Attributed Revenue", value: fmt$(totalRevenue),        change: 0, changeLabel: "selected period", trend: "up"      },
+      ],
+      touchpointBreakdown,
+      conversionPaths: [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to query attribution data", detail: safeError(e) });
+  }
+});
+
+// ─── GET /api/analytics/performance ──────────────────────────────────────────
+
+router.get("/performance", async (req, res) => {
+  const { start, end, storeIds } = parseParams(req.query as Record<string, string>);
+  const chFilter = channelFilter(storeIds);
+
+  try {
+    const [aggRows, dailyRows] = await Promise.all([
+      chFilter
+        ? querySnowflake(`
+            SELECT channel,
+                   COALESCE(SUM(impressions), 0) AS impressions,
+                   COALESCE(SUM(clicks),      0) AS clicks,
+                   COALESCE(SUM(conversions), 0) AS conversions,
+                   COALESCE(SUM(spend),       0) AS spend
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${chFilter})
+            GROUP BY channel
+            ORDER BY impressions DESC
+          `)
+        : Promise.resolve([]),
+      chFilter
+        ? querySnowflake(`
+            SELECT summary_date,
+                   COALESCE(SUM(clicks),      0) AS clicks,
+                   COALESCE(SUM(impressions), 0) AS impressions
+            FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+              AND channel IN (${chFilter})
+            GROUP BY summary_date
+            ORDER BY summary_date ASC
+          `)
+        : Promise.resolve([]),
+    ]);
+
+    const totalImpressions = (aggRows as Record<string, unknown>[]).reduce((s, r) => s + Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0), 0);
+    const totalClicks      = (aggRows as Record<string, unknown>[]).reduce((s, r) => s + Number(r["CLICKS"]      ?? r["clicks"]      ?? 0), 0);
+    const totalConversions = (aggRows as Record<string, unknown>[]).reduce((s, r) => s + Number(r["CONVERSIONS"] ?? r["conversions"] ?? 0), 0);
+    const totalSpend       = (aggRows as Record<string, unknown>[]).reduce((s, r) => s + Number(r["SPEND"]       ?? r["spend"]       ?? 0), 0);
+    const avgCtr           = totalImpressions > 0 ? totalClicks / totalImpressions * 100 : 0;
+    const avgCpc           = totalClicks      > 0 ? totalSpend  / totalClicks             : 0;
+
+    const channelPerformance = (aggRows as Record<string, unknown>[])
+      .map(row => {
+        const ch   = String(row["CHANNEL"]     ?? row["channel"]     ?? "").toLowerCase();
+        const imp  = Number(row["IMPRESSIONS"] ?? row["impressions"] ?? 0);
+        const clk  = Number(row["CLICKS"]      ?? row["clicks"]      ?? 0);
+        const conv = Number(row["CONVERSIONS"] ?? row["conversions"] ?? 0);
+        const spd  = Number(row["SPEND"]       ?? row["spend"]       ?? 0);
+        return {
+          channel:     CHANNEL_LABELS[ch] ?? ch,
+          impressions: Math.round(imp),
+          clicks:      Math.round(clk),
+          ctr:         imp > 0 ? Math.round(clk / imp * 10000) / 100 : 0,
+          conversions: Math.round(conv),
+          cpc:         clk > 0 ? Math.round(spd / clk * 100)   / 100 : 0,
+        };
+      })
+      .filter(c => c.impressions > 0);
+
+    const kpiTimeSeries = (dailyRows as Record<string, unknown>[]).map(r => {
+      const imp = Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0);
+      const clk = Number(r["CLICKS"]     ?? r["clicks"]      ?? 0);
+      return {
+        date:  toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+        value: imp > 0 ? Math.round(clk / imp * 10000) / 100 : 0,
+      };
+    });
+
+    res.json({
+      metrics: [
+        { label: "Total Impressions", value: fmtNum(totalImpressions), change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Total Clicks",      value: fmtNum(totalClicks),       change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Avg. CTR",          value: `${avgCtr.toFixed(2)}%`,   change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Avg. CPC",          value: fmt$(avgCpc),              change: 0, changeLabel: "selected period", trend: "neutral" },
+        { label: "Total Conversions", value: fmtNum(totalConversions),  change: 0, changeLabel: "selected period", trend: "neutral" },
+      ],
+      kpiTimeSeries,
+      channelPerformance,
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to query performance data", detail: safeError(e) });
+  }
+});
+
+// ─── GET /api/analytics/forecast ─────────────────────────────────────────────
+
+router.get("/forecast", async (req, res) => {
+  const today = new Date();
+  const year  = today.getFullYear();
+  const { storeIds } = parseParams(req.query as Record<string, string>);
+  const isShopify  = !storeIds.length || storeIds.includes("shopify");
+  const isTarget   = !storeIds.length || storeIds.includes("target");
+  const isWalmart  = !storeIds.length || storeIds.includes("walmart");
+
+  try {
+    const [historicalRows, spendRows] = await Promise.all([
+      // Revenue time series: sum across selected stores
+      querySnowflake(`
+        WITH daily AS (
+          ${isShopify ? `
+          SELECT summary_date, COALESCE(total_revenue, 0) AS revenue
+          FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+          WHERE YEAR(summary_date) = ${year}` : "SELECT NULL AS summary_date, 0 AS revenue WHERE 1=0"}
+          ${isTarget ? `
+          UNION ALL
+          SELECT summary_date, COALESCE(sale_amount, 0)
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+          WHERE YEAR(summary_date) = ${year}` : ""}
+          ${isWalmart ? `
+          UNION ALL
+          SELECT week_date, COALESCE(revenue, 0)
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE YEAR(week_date) = ${year}` : ""}
+        )
+        SELECT summary_date, SUM(revenue) AS revenue
+        FROM daily
+        GROUP BY summary_date
+        ORDER BY summary_date ASC
+      `),
+      querySnowflake(`
+        SELECT COALESCE(SUM(ad_spend), 0) AS ytd_spend
+        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
+        WHERE YEAR(summary_date) = ${year}
+      `),
+    ]);
+
+    const ytdRevenue = (historicalRows as Record<string, unknown>[])
+      .reduce((s, r) => s + Number(r["REVENUE"] ?? r["revenue"] ?? 0), 0);
+    const ytdSpend = Number(
+      ((spendRows as Record<string, unknown>[])[0] ?? {})["YTD_SPEND"] ??
+      ((spendRows as Record<string, unknown>[])[0] ?? {})["ytd_spend"] ?? 0,
+    );
+
+    const dayOfYear  = Math.ceil((today.getTime() - new Date(year, 0, 1).getTime()) / 86_400_000);
+    const daysInYear = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
+    const dailyAvg   = dayOfYear > 0 ? ytdRevenue / dayOfYear : 0;
+
+    const projectedRevenue = Math.round(dailyAvg * daysInYear);
+    const projectedSpend   = dayOfYear > 0 ? Math.round((ytdSpend / dayOfYear) * daysInYear) : 0;
+    const projectedRoas    = projectedSpend > 0 ? Math.round(projectedRevenue / projectedSpend * 100) / 100 : 0;
+
+    const forecastTimeSeries: Array<{ date: string; projected: number; lower: number; upper: number; actual?: number }> = [];
+
+    for (const row of historicalRows as Record<string, unknown>[]) {
+      const date    = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+      const revenue = Number(row["REVENUE"] ?? row["revenue"] ?? 0);
+      if (!date) continue;
+      forecastTimeSeries.push({
+        date,
+        projected: Math.round(dailyAvg),
+        lower:     Math.round(dailyAvg * 0.80),
+        upper:     Math.round(dailyAvg * 1.20),
+        actual:    Math.round(revenue),
+      });
+    }
+
+    for (let i = 1; i <= 30; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      forecastTimeSeries.push({
+        date:      d.toISOString().slice(0, 10),
+        projected: Math.round(dailyAvg),
+        lower:     Math.round(dailyAvg * 0.80),
+        upper:     Math.round(dailyAvg * 1.20),
+      });
+    }
+
+    res.json({
+      projectedRevenue,
+      projectedSpend,
+      projectedROAS:  projectedRoas,
+      confidence:     dayOfYear > 30 ? 85 : 70,
+      forecastTimeSeries,
+      scenarioComparison: [
+        { scenario: "Conservative", revenue: Math.round(dailyAvg * daysInYear * 0.90), spend: Math.round(projectedSpend * 0.90), roas: projectedRoas },
+        { scenario: "Base Case",    revenue: projectedRevenue,                          spend: projectedSpend,                   roas: projectedRoas },
+        { scenario: "Optimistic",   revenue: Math.round(dailyAvg * daysInYear * 1.10), spend: Math.round(projectedSpend * 1.05), roas: Math.round(projectedRoas * 1.05 * 100) / 100 },
+      ],
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to query forecast data", detail: safeError(e) });
+  }
 });
 
 export default router;
