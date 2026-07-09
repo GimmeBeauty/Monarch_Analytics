@@ -20,6 +20,7 @@ import ErrorState from "@/components/ErrorState";
 
 interface SpendApiResponse {
   channels: Array<{ channelId: string; totalSpend: number; totalConversionValue: number; dailySpend: Array<{ date: string; spend: number }> }>;
+  organicRevenue: number;
   isEmpty: boolean;
 }
 
@@ -73,10 +74,11 @@ export default function Spend() {
         pricingMode,
         realSpendByChannel,
         conversionValueByChannel,
+        organicRevenue: spendApiData?.organicRevenue ?? 0,
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dateRange.startDate, dateRange.endDate, selectedIds.join(","), pricingMode, realSpendByChannel]
+    [dateRange.startDate, dateRange.endDate, selectedIds.join(","), pricingMode, realSpendByChannel, spendApiData?.organicRevenue]
   );
 
   const channelCounts = useMemo((): Record<ChannelFamily, number> => {

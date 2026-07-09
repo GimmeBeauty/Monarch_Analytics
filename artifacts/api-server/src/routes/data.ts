@@ -1255,12 +1255,27 @@ router.get("/spend", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   try {
-    const rows = await querySnowflake(`
-      SELECT summary_date, channel, spend, conversion_value
-      FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
-      WHERE summary_date BETWEEN '${start}' AND '${end}'
-      ORDER BY summary_date ASC
-    `);
+    const [rows, organicRows] = await Promise.all([
+      querySnowflake(`
+        SELECT summary_date, channel, spend, conversion_value
+        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+        WHERE summary_date BETWEEN '${start}' AND '${end}'
+        ORDER BY summary_date ASC
+      `),
+      // Organic/direct revenue: Shopify orders with no UTM-tagged landing page,
+      // i.e. not attributable to any paid ad channel. Replaces the old fixed
+      // 35%-of-attributed-revenue assumption with a real, queried baseline.
+      querySnowflake(`
+        SELECT SUM(TRY_CAST(raw_data:total_price::STRING AS FLOAT)) AS organic_revenue
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+        WHERE TRY_CAST(LEFT(raw_data:created_at::STRING, 10) AS DATE) BETWEEN '${start}' AND '${end}'
+          AND raw_data:financial_status::STRING NOT IN ('voided', 'refunded')
+          AND (
+            raw_data:landing_site::STRING IS NULL
+            OR raw_data:landing_site::STRING NOT LIKE '%utm_source%'
+          )
+      `),
+    ]);
 
     // Group rows by channelId (mapped from DB channel name)
     const channelMap: Record<string, { totalSpend: number; totalConversionValue: number; dailySpend: Array<{ date: string; spend: number }> }> = {};
@@ -1286,7 +1301,9 @@ router.get("/spend", authenticate, async (req, res) => {
     }));
     req.log.debug({ conversionValueByChannel: channels.map(c => `${c.channelId}=${c.totalConversionValue}`).join(", ") }, "[data/spend] conversionValue by channel");
 
-    res.json({ channels, isEmpty: channels.length === 0 });
+    const organicRevenue = Math.round(Number(organicRows[0]?.["ORGANIC_REVENUE"] ?? organicRows[0]?.["organic_revenue"] ?? 0) * 100) / 100;
+
+    res.json({ channels, organicRevenue, isEmpty: channels.length === 0 });
   } catch (e) {
     req.log.error({ err: e }, "[data/spend] Error:");
     res.status(500).json({ error: "Failed to query spend data" });

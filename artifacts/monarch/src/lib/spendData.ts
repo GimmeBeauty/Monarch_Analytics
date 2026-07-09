@@ -162,6 +162,8 @@ export interface SpendParams {
   realSpendByChannel?: Record<string, number>;
   /** If provided, use real conversion value per channel instead of spend × baseRoas */
   conversionValueByChannel?: Record<string, number>;
+  /** Real organic/direct revenue not attributable to any ad channel (from Snowflake). */
+  organicRevenue?: number;
 }
 
 // ─── Per-channel MMM Configuration ───────────────────────────────────────────
@@ -593,7 +595,7 @@ function buildSimulator(
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
 export function generateSpendData(params: SpendParams): SpendData {
-  const { startDate, endDate, selectedStoreIds, pricingMode = "msrp", realSpendByChannel, conversionValueByChannel } = params;
+  const { startDate, endDate, selectedStoreIds, pricingMode = "msrp", realSpendByChannel, conversionValueByChannel, organicRevenue } = params;
   const dayCount = getDayCount(startDate, endDate);
   const trend = periodTrendFactor(startDate);
   const channels = getChannelsForStores(selectedStoreIds);
@@ -645,9 +647,9 @@ export function generateSpendData(params: SpendParams): SpendData {
   // Total incremental revenue (for contribution %)
   const totalIncremental = firstPass.reduce((s, x) => s + x.attributedRevenue * x.cfg.incrementalityFactor, 0);
 
-  // Organic floor independent of all channels
-  const ORGANIC_REVENUE_FACTOR = 0.35;
-  const totalBaseRevenue = totalAttributedRevenue * ORGANIC_REVENUE_FACTOR;
+  // Organic floor independent of all channels — sourced from real Snowflake data
+  // (Shopify orders with no UTM-tagged landing page), not a fixed assumption.
+  const totalBaseRevenue = organicRevenue ?? 0;
   const currentTotalRevenue = totalAttributedRevenue + totalBaseRevenue;
   const currentMer = totalChannelSpend > 0 ? currentTotalRevenue / totalChannelSpend : 0;
 
@@ -852,6 +854,8 @@ export interface RealSpendParams {
   pricingMode?: PricingMode;
   realSpendByChannel: Record<string, number>; // required — not optional
   conversionValueByChannel?: Record<string, number>;
+  /** Real organic/direct revenue not attributable to any ad channel (from Snowflake). */
+  organicRevenue: number;
 }
 
 /**

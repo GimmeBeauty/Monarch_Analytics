@@ -78,7 +78,7 @@ export default function SpendSummaryBar({ summary }: SpendSummaryBarProps) {
       <Metric icon={BarChart2} label="Overall MER"
         value={`${summary.overallMer.toFixed(2)}x`}
         sub="Revenue ÷ Ad Spend"
-        tooltip="Marketing Efficiency Ratio — total revenue (attributed + estimated organic baseline) divided by total ad spend. Spend and attributed revenue are real; the 35% organic baseline is a model assumption pending a direct organic revenue feed." />
+        tooltip="Marketing Efficiency Ratio — total revenue (attributed + organic) divided by total ad spend. Spend, attributed revenue, and the organic baseline are all real Snowflake data — organic is Shopify revenue from orders with no UTM-tagged landing page, i.e. not attributable to any ad channel." />
 
       <Metric icon={Award} label="Realloc. Upside (Est.)"
         value={fmtCurrency(summary.reallocationUpside)}
