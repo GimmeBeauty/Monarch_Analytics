@@ -1361,11 +1361,56 @@ router.get("/spend", authenticate, async (req, res) => {
       wholesaleOrganicRows[0]?.["WHOLESALE_ORGANIC_REVENUE"] ??
       wholesaleOrganicRows[0]?.["wholesale_organic_revenue"] ?? 0,
     );
-    const organicRevenue = Math.round((shopifyOrganic + wholesaleOrganic) * 100) / 100;
+
+    // Some wholesale ad channels report conversion_value that is derived from the same
+    // NetSuite sell-through data we already include in wholesaleOrganic. To avoid
+    // counting that revenue twice in MER's denominator (once as organic baseline and
+    // again as attributed channel revenue), we subtract the relevant channel CVs from
+    // wholesaleOrganic before returning organicRevenue.
+    //
+    // Eligibility rules (both must hold):
+    //   1. The channel must be on the audited overlap whitelist — only channels that are
+    //      confirmed to source conversion_value from NetSuite sell-through are included.
+    //      Multi-store blended channels (e.g. agility-ads covering both target and amazon)
+    //      are excluded because their CV cannot be safely scoped to a single store's
+    //      NetSuite figure without upstream data splitting.
+    //   2. The channel's store must be in wholesaleStoreIds (the set of wholesale stores
+    //      whose NetSuite revenue was actually queried for this request). If the user
+    //      filtered to only "target", we must not subtract amazon-ads CV.
+    //
+    // Audited overlap: channelId → the single wholesale storeId it covers.
+    // Update this map when new retail media network channels are confirmed to use NetSuite
+    // conversion values (e.g. if walmart_connect data flows through NetSuite).
+    const NETSUITE_OVERLAP_CHANNELS: Record<string, string> = {
+      "amazon-ads":     "amazon",
+      "roundel-target": "target",
+      "criteo-ads":     "ulta",
+    };
+
+    const wholesaleStoreIdsSet = new Set(wholesaleStoreIds);
+    const wholesaleAttributedCv = channels
+      .filter(c => {
+        const storeId = NETSUITE_OVERLAP_CHANNELS[c.channelId];
+        return storeId !== undefined && wholesaleStoreIdsSet.has(storeId);
+      })
+      .reduce((sum, c) => sum + c.totalConversionValue, 0);
+
+    // Cap at zero — guard against data pipeline inconsistencies where attributed CV
+    // could exceed gross NetSuite revenue for a given period.
+    const deduplicatedWholesaleOrganic = Math.max(0, wholesaleOrganic - wholesaleAttributedCv);
+
+    const organicRevenue = Math.round((shopifyOrganic + deduplicatedWholesaleOrganic) * 100) / 100;
 
     req.log.debug(
-      { shopifyOrganic, wholesaleOrganic, organicRevenue, wholesaleStoreIds },
-      "[data/spend] organic revenue breakdown",
+      {
+        shopifyOrganic,
+        wholesaleOrganic,
+        wholesaleAttributedCv,
+        deduplicatedWholesaleOrganic,
+        organicRevenue,
+        wholesaleStoreIds,
+      },
+      "[data/spend] organic revenue breakdown (wholesale dedup applied)",
     );
 
     res.json({ channels, organicRevenue, isEmpty: channels.length === 0 });
