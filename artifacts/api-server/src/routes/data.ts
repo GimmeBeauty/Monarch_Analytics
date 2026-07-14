@@ -94,6 +94,24 @@ function filterCommerceSources(storeIds: string[]): CommerceSourceConfig[] {
   return COMMERCE_SOURCES.filter(src => storeIds.includes(src.storeId.toLowerCase()));
 }
 
+/**
+ * Maps wholesale store IDs to their NetSuite STORE_NAME values.
+ * Used in GET /api/data/spend to include wholesale sell-through as organic
+ * revenue: since wholesale orders have no per-order UTM attribution, all
+ * NetSuite revenue for these retailers counts as non-attributed (organic).
+ */
+const WHOLESALE_NS_STORE_NAMES: Record<string, string> = {
+  target:    "Target",
+  walmart:   "Walmart",
+  ulta:      "Ulta Beauty",
+  cvs:       "CVS",
+  walgreens: "Walgreens",
+  publix:    "Publix",
+  kroger:    "Kroger",
+  amazon:    "Amazon (Pattern)",
+  meijer:    "Meijer",
+};
+
 const AD_SOURCES: AdSourceConfig[] = [
   { table: `${DB_NAME}.ADS.META_ADS_RAW`,         channelId: "meta-ads",        channelLabel: "Meta Ads",         color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
   { table: `${DB_NAME}.ADS.GOOGLE_ADS_RAW`,       channelId: "google-ads",      channelLabel: "Google Ads",       color: "#34A853", channelFamily: "core", storeIds: ["shopify"] },
@@ -1254,27 +1272,59 @@ router.get("/spend", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
+  const requestedStoreIds = parseStoreIds(req.query.storeIds);
+  const allStores = requestedStoreIds.length === 0;
+
+  // Shopify DTC is in scope when no filter is applied, or when "shopify" is explicitly included.
+  const shopifyInScope = allStores || requestedStoreIds.includes("shopify");
+
+  // Wholesale stores in scope: any requested storeId that has a NetSuite STORE_NAME mapping.
+  // When no filter is applied, all wholesale stores are included.
+  const wholesaleStoreIds = allStores
+    ? Object.keys(WHOLESALE_NS_STORE_NAMES)
+    : requestedStoreIds.filter(id => id in WHOLESALE_NS_STORE_NAMES);
+  const wholesaleStoreNames = wholesaleStoreIds.map(id => WHOLESALE_NS_STORE_NAMES[id]!);
+
   try {
-    const [rows, organicRows] = await Promise.all([
-      querySnowflake(`
-        SELECT summary_date, channel, spend, conversion_value
-        FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
-        WHERE summary_date BETWEEN '${start}' AND '${end}'
-        ORDER BY summary_date ASC
-      `),
-      // Organic/direct revenue: Shopify orders with no UTM-tagged landing page,
-      // i.e. not attributable to any paid ad channel. Replaces the old fixed
-      // 35%-of-attributed-revenue assumption with a real, queried baseline.
-      querySnowflake(`
-        SELECT SUM(TRY_CAST(raw_data:total_price::STRING AS FLOAT)) AS organic_revenue
-        FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
-        WHERE TRY_CAST(LEFT(raw_data:created_at::STRING, 10) AS DATE) BETWEEN '${start}' AND '${end}'
-          AND raw_data:financial_status::STRING NOT IN ('voided', 'refunded')
-          AND (
-            raw_data:landing_site::STRING IS NULL
-            OR raw_data:landing_site::STRING NOT LIKE '%utm_source%'
-          )
-      `),
+    const adQuery = querySnowflake(`
+      SELECT summary_date, channel, spend, conversion_value
+      FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+      WHERE summary_date BETWEEN '${start}' AND '${end}'
+      ORDER BY summary_date ASC
+    `);
+
+    // Shopify organic: DTC orders with no UTM-tagged landing page, i.e. not
+    // attributable to any paid ad channel. Only queried when Shopify is in scope.
+    const shopifyOrganicQuery = shopifyInScope
+      ? querySnowflake(`
+          SELECT SUM(TRY_CAST(raw_data:total_price::STRING AS FLOAT)) AS shopify_organic_revenue
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+          WHERE TRY_CAST(LEFT(raw_data:created_at::STRING, 10) AS DATE) BETWEEN '${start}' AND '${end}'
+            AND raw_data:financial_status::STRING NOT IN ('voided', 'refunded')
+            AND (
+              raw_data:landing_site::STRING IS NULL
+              OR raw_data:landing_site::STRING NOT LIKE '%utm_source%'
+            )
+        `)
+      : Promise.resolve([{ shopify_organic_revenue: 0 }] as Record<string, unknown>[]);
+
+    // Wholesale organic: NetSuite sell-through for selected wholesale retailers.
+    // Wholesale orders have no per-order UTM attribution, so all NetSuite revenue
+    // for these retailers counts as non-attributed (organic) baseline revenue.
+    // Only queried when at least one wholesale store is in scope.
+    const wholesaleOrganicQuery = wholesaleStoreNames.length > 0
+      ? querySnowflake(`
+          SELECT SUM(REVENUE) AS wholesale_organic_revenue
+          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+            AND STORE_NAME IN (${wholesaleStoreNames.map(n => `'${n.replace(/'/g, "''")}'`).join(", ")})
+        `)
+      : Promise.resolve([{ wholesale_organic_revenue: 0 }] as Record<string, unknown>[]);
+
+    const [rows, shopifyOrganicRows, wholesaleOrganicRows] = await Promise.all([
+      adQuery,
+      shopifyOrganicQuery,
+      wholesaleOrganicQuery,
     ]);
 
     // Group rows by channelId (mapped from DB channel name)
@@ -1283,6 +1333,8 @@ router.get("/spend", authenticate, async (req, res) => {
       const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
       const meta = CHANNEL_META[ch];
       if (!meta) continue;
+      // When storeIds are specified, skip channels that don't serve any of those stores.
+      if (!allStores && !meta.storeIds.some(sid => requestedStoreIds.includes(sid))) continue;
       const cid   = meta.channelId;
       const date  = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
       const spend = Number(row["SPEND"] ?? row["spend"] ?? 0);
@@ -1301,7 +1353,20 @@ router.get("/spend", authenticate, async (req, res) => {
     }));
     req.log.debug({ conversionValueByChannel: channels.map(c => `${c.channelId}=${c.totalConversionValue}`).join(", ") }, "[data/spend] conversionValue by channel");
 
-    const organicRevenue = Math.round(Number(organicRows[0]?.["ORGANIC_REVENUE"] ?? organicRows[0]?.["organic_revenue"] ?? 0) * 100) / 100;
+    const shopifyOrganic = Number(
+      shopifyOrganicRows[0]?.["SHOPIFY_ORGANIC_REVENUE"] ??
+      shopifyOrganicRows[0]?.["shopify_organic_revenue"] ?? 0,
+    );
+    const wholesaleOrganic = Number(
+      wholesaleOrganicRows[0]?.["WHOLESALE_ORGANIC_REVENUE"] ??
+      wholesaleOrganicRows[0]?.["wholesale_organic_revenue"] ?? 0,
+    );
+    const organicRevenue = Math.round((shopifyOrganic + wholesaleOrganic) * 100) / 100;
+
+    req.log.debug(
+      { shopifyOrganic, wholesaleOrganic, organicRevenue, wholesaleStoreIds },
+      "[data/spend] organic revenue breakdown",
+    );
 
     res.json({ channels, organicRevenue, isEmpty: channels.length === 0 });
   } catch (e) {

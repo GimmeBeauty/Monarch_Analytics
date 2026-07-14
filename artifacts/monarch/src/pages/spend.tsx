@@ -32,10 +32,11 @@ export default function Spend() {
   const [filterState, setFilterState] = useState<FamilyFilterState>(defaultFilterState);
 
   const { data: spendApiData, isLoading, error, refetch, isRefetching } = useQuery<SpendApiResponse>({
-    queryKey: ["spend-data", dateRange.startDate, dateRange.endDate],
+    queryKey: ["spend-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
+      const storeParam = selectedIds.length > 0 ? `&storeIds=${selectedIds.join(",")}` : "";
       const res = await fetch(
-        `${API_BASE}/api/data/spend?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        `${API_BASE}/api/data/spend?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
       );
       if (!res.ok) {
