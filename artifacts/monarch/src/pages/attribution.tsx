@@ -279,16 +279,26 @@ interface RoundelDetailData {
   isEmpty: boolean;
 }
 
-interface AgilityRow {
-  campaign: string; channel: string;
-  spend: number; impressions: number; clicks: number;
-  trafficConversions: number; highIntentTraffic: number;
-  realizedSales: number; realizedRevenue: number;
+interface BlendedSourceRow {
+  source: string;
+  spend: number; impressions: number; revenue: number; roas: number;
 }
-interface AgilityDetailData {
-  channel: "agility";
-  kpis: { impressions: number; spend: number; realizedRevenue: number; roas: number; highIntentTraffic: number; trafficConversions: number };
-  rows: AgilityRow[];
+interface BlendedCampaignRow {
+  source: string; campaign: string;
+  spend: number; impressions: number; clicks: number; revenue: number; roas: number;
+}
+interface CtvProgrammaticDetailData {
+  channel: "ctv_programmatic";
+  kpis: { spend: number; impressions: number; revenue: number; roas: number };
+  bySource: BlendedSourceRow[];
+  byCampaign: BlendedCampaignRow[];
+  isEmpty: boolean;
+}
+interface DisplayDetailData {
+  channel: "display_ads";
+  kpis: { spend: number; impressions: number; revenue: number; roas: number };
+  bySource: BlendedSourceRow[];
+  byCampaign: BlendedCampaignRow[];
   isEmpty: boolean;
 }
 
@@ -298,15 +308,17 @@ type ChannelDetailData =
   | PinterestDetailData
   | CriteoDetailData
   | RoundelDetailData
-  | AgilityDetailData;
+  | CtvProgrammaticDetailData
+  | DisplayDetailData;
 
 const CHANNEL_ID_TO_PARAM: Record<string, string> = {
-  "meta-ads":       "meta",
-  "google-ads":     "google",
-  "pinterest-ads":  "pinterest",
-  "criteo-ads":     "criteo",
-  "roundel-target": "roundel",
-  "agility-ads":    "agility",
+  "meta-ads":         "meta",
+  "google-ads":       "google",
+  "pinterest-ads":    "pinterest",
+  "criteo-ads":       "criteo",
+  "roundel-target":   "roundel",
+  "ctv-programmatic": "ctv_programmatic",
+  "display-ads":      "display_ads",
 };
 
 // ─── Channel Detail Hook ──────────────────────────────────────────────────────
@@ -597,61 +609,84 @@ function RoundelDetailPanel({ data }: { data: RoundelDetailData }) {
   );
 }
 
-// ─── Agility Detail Panel ─────────────────────────────────────────────────────
+// ─── Blended Source/Campaign Table (shared by CTV/Programmatic + Display) ────
 
-function AgilityDetailPanel({ data }: { data: AgilityDetailData }) {
+function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend: number; impressions: number; revenue: number; roas: number }; bySource: BlendedSourceRow[]; byCampaign: BlendedCampaignRow[] }; accentColor: string; note: string }) {
   const k = data.kpis;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        <SmallKpiCard label="Impressions"       value={fmtNumber(k.impressions)} />
-        <SmallKpiCard label="Spend"             value={fmtCurrency(k.spend)} />
-        <SmallKpiCard label="Realized Revenue"  value={fmtCurrency(k.realizedRevenue)} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <SmallKpiCard label="Spend"       value={fmtCurrency(k.spend)} />
+        <SmallKpiCard label="Impressions" value={fmtNumber(k.impressions)} />
+        <SmallKpiCard label="Revenue"     value={fmtCurrency(k.revenue)} />
         <SmallKpiCard
           label="ROAS"
           value={`${k.roas.toFixed(2)}x`}
-          sub="Upper-funnel — see note"
+          sub={k.roas >= 3 ? "Strong" : k.roas >= 1.5 ? "Moderate" : "Below target"}
         />
-        <SmallKpiCard label="High-Intent Traffic"   value={fmtNumber(k.highIntentTraffic)} />
-        <SmallKpiCard label="Traffic Conversions"   value={fmtNumber(k.trafficConversions)} />
       </div>
-      <div className="flex items-start gap-1.5 px-1 py-2 rounded-lg bg-[#6B46C1]/8 border border-[#6B46C1]/20">
-        <Info size={12} className="text-[#6B46C1] flex-shrink-0 mt-0.5" />
-        <p className="text-[10px] text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 leading-relaxed">
-          Agility drives upper-funnel awareness and in-store lift that is not fully captured in last-touch attribution.
-          ROAS reflects only directly attributed realized revenue and will appear low relative to direct-response channels.
-        </p>
+      <div className="flex items-start gap-1.5 px-1 py-2 rounded-lg" style={{ background: `${accentColor}14`, border: `1px solid ${accentColor}33` }}>
+        <Info size={12} className="flex-shrink-0 mt-0.5" style={{ color: accentColor }} />
+        <p className="text-[10px] text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 leading-relaxed">{note}</p>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+        <table className="w-full text-xs min-w-[500px]">
+          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+            <tr>
+              <th className={`${TH} min-w-[140px]`}>Source</th>
+              <th className={THR}>Spend</th>
+              <th className={THR}>Impr.</th>
+              <th className={THR}>Revenue</th>
+              <th className={THR}>ROAS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.bySource.map((s, i) => (
+              <tr key={i} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+                <td className={TDL}>{s.source}</td>
+                <td className={TD}>{fmtCurrency(s.spend)}</td>
+                <td className={TD}>{fmtNumber(s.impressions)}</td>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                  {fmtCurrency(s.revenue)}
+                </td>
+                <td className={`${TD} font-semibold ${roasTextColor(s.roas)}`}>
+                  {s.roas.toFixed(2)}x
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
         <table className="w-full text-xs min-w-[740px]">
           <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
             <tr>
               <th className={`${TH} min-w-[200px]`}>Campaign</th>
-              <th className={TH}>Channel</th>
+              <th className={TH}>Source</th>
               <th className={THR}>Spend</th>
               <th className={THR}>Impr.</th>
               <th className={THR}>Clicks</th>
-              <th className={THR}>Traffic Conv.</th>
-              <th className={THR}>Realized Sales</th>
-              <th className={THR}>Realized Revenue</th>
+              <th className={THR}>Revenue</th>
+              <th className={THR}>ROAS</th>
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((r, i) => (
+            {data.byCampaign.map((r, i) => (
               <tr key={i} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
                 <td className={TDL}>
                   <span className="line-clamp-1 max-w-[240px] block">{r.campaign}</span>
                 </td>
                 <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 whitespace-nowrap">
-                  {r.channel}
+                  {r.source}
                 </td>
                 <td className={TD}>{fmtCurrency(r.spend)}</td>
                 <td className={TD}>{fmtNumber(r.impressions)}</td>
                 <td className={TD}>{fmtNumber(r.clicks)}</td>
-                <td className={TD}>{fmtNumber(r.trafficConversions)}</td>
-                <td className={TD}>{r.realizedSales.toFixed(1)}</td>
                 <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
-                  {fmtCurrency(r.realizedRevenue)}
+                  {fmtCurrency(r.revenue)}
+                </td>
+                <td className={`${TD} font-semibold ${roasTextColor(r.roas)}`}>
+                  {r.roas.toFixed(2)}x
                 </td>
               </tr>
             ))}
@@ -659,6 +694,30 @@ function AgilityDetailPanel({ data }: { data: AgilityDetailData }) {
         </table>
       </div>
     </div>
+  );
+}
+
+// ─── CTV / Programmatic Detail Panel ──────────────────────────────────────────
+
+function CtvProgrammaticDetailPanel({ data }: { data: CtvProgrammaticDetailData }) {
+  return (
+    <BlendedDetailBody
+      data={data}
+      accentColor="#6B46C1"
+      note="CTV / Programmatic blends Agility and Amazon DSP video inventory. It drives upper-funnel awareness and in-store lift that is not fully captured in last-touch attribution — ROAS will appear low relative to direct-response channels."
+    />
+  );
+}
+
+// ─── Display Detail Panel ─────────────────────────────────────────────────────
+
+function DisplayDetailPanel({ data }: { data: DisplayDetailData }) {
+  return (
+    <BlendedDetailBody
+      data={data}
+      accentColor="#F97316"
+      note="Display blends Agility and Amazon DSP display inventory across both platforms."
+    />
   );
 }
 
@@ -678,7 +737,8 @@ function ChannelDetailPanel({ channelId, start, end }: { channelId: string; star
   if (data.channel === "pinterest") return <PinterestDetailPanel data={data} />;
   if (data.channel === "criteo")    return <CriteoDetailPanel    data={data} />;
   if (data.channel === "roundel")   return <RoundelDetailPanel   data={data} />;
-  if (data.channel === "agility")   return <AgilityDetailPanel   data={data} />;
+  if (data.channel === "ctv_programmatic") return <CtvProgrammaticDetailPanel data={data} />;
+  if (data.channel === "display_ads")      return <DisplayDetailPanel         data={data} />;
 
   return <DetailEmpty />;
 }

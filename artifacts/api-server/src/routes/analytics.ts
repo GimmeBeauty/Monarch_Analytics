@@ -19,7 +19,8 @@ const CHANNEL_STORE_MAP: Record<string, string[]> = {
   criteo_ads:     ["ulta"],
   roundel_target: ["target"],
   amazon_ads:     ["amazon"],
-  agility_ads:    ["target", "amazon"],
+  ctv_programmatic: ["target", "amazon"],
+  display_ads:      ["target", "amazon"],
 };
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -29,7 +30,8 @@ const CHANNEL_LABELS: Record<string, string> = {
   criteo_ads:     "Criteo (Ulta)",
   roundel_target: "Roundel (Target)",
   amazon_ads:     "Amazon Ads",
-  agility_ads:    "Agility (CTV/Programmatic)",
+  ctv_programmatic: "CTV / Programmatic",
+  display_ads:      "Display",
 };
 
 function activeChannels(storeIds: string[]): string[] {

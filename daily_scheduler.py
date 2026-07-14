@@ -172,7 +172,7 @@ def rebuild_ad_summaries():
     from snowflake_connect import get_connection
     conn = get_connection(schema="ADS")
     cur = conn.cursor()
-    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE()) AND channel IN ('meta_ads','google_ads','pinterest_ads','criteo_ads','amazon_ads','agility_ads')")
+    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE()) AND channel IN ('meta_ads','google_ads','pinterest_ads','criteo_ads','amazon_ads','ctv_programmatic','display_ads')")
     cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) WITH base AS (SELECT ingestion_date,SUM(raw_data:spend::FLOAT) AS spend,SUM(raw_data:impressions::INTEGER) AS impressions,SUM(raw_data:clicks::INTEGER) AS clicks FROM MONARCH_RAW.ADS.META_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date),cv AS (SELECT m.ingestion_date,SUM(av.value:value::FLOAT) AS cv FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:action_values,OUTER=>TRUE) av WHERE av.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY m.ingestion_date),cc AS (SELECT m.ingestion_date,SUM(a.value:value::FLOAT) AS cc FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:actions,OUTER=>TRUE) a WHERE a.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY m.ingestion_date) SELECT b.ingestion_date,'meta_ads',b.spend,b.impressions,b.clicks,COALESCE(c.cc,0),COALESCE(v.cv,0),CASE WHEN b.impressions>0 THEN b.clicks/b.impressions ELSE 0 END,CASE WHEN b.clicks>0 THEN b.spend/b.clicks ELSE 0 END,CASE WHEN b.impressions>0 THEN b.spend/b.impressions*1000 ELSE 0 END,CASE WHEN b.spend>0 THEN COALESCE(v.cv,0)/b.spend ELSE 0 END FROM base b LEFT JOIN cc c ON b.ingestion_date=c.ingestion_date LEFT JOIN cv v ON b.ingestion_date=v.ingestion_date""")
     cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) SELECT ingestion_date,'google_ads',SUM(raw_data:spend::FLOAT),SUM(raw_data:impressions::INTEGER),SUM(raw_data:clicks::INTEGER),SUM(raw_data:conversions::FLOAT),SUM(raw_data:conversions_value::FLOAT),AVG(raw_data:ctr::FLOAT),AVG(raw_data:average_cpc::FLOAT),AVG(raw_data:average_cpm::FLOAT),CASE WHEN SUM(raw_data:spend::FLOAT)>0 THEN SUM(raw_data:conversions_value::FLOAT)/SUM(raw_data:spend::FLOAT) ELSE 0 END FROM MONARCH_RAW.ADS.GOOGLE_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) AND raw_data:spend::FLOAT IS NOT NULL GROUP BY ingestion_date""")
     cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
@@ -201,13 +201,20 @@ CASE WHEN SUM(spend)>0 THEN SUM(ad_revenue)/SUM(spend) ELSE 0 END
 FROM MONARCH_RAW.ADS.AMAZON_ADS_RAW
 WHERE ad_date>=DATEADD(day,-14,CURRENT_DATE())
 GROUP BY ad_date""")
-    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
-SELECT ad_date,'agility_ads',SUM(spend),SUM(impressions),SUM(clicks),SUM(traffic_conversions),SUM(realized_revenue),
+    for db_channel, source_channel in [("ctv_programmatic", "Video"), ("display_ads", "Display")]:
+        cur.execute(f"""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
+SELECT ad_date,'{db_channel}',SUM(spend),SUM(impressions),SUM(clicks),SUM(conversions),SUM(revenue),
 CASE WHEN SUM(impressions)>0 THEN SUM(clicks)/SUM(impressions) ELSE 0 END,
 CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END,
 CASE WHEN SUM(impressions)>0 THEN SUM(spend)/SUM(impressions)*1000 ELSE 0 END,
-CASE WHEN SUM(spend)>0 THEN SUM(realized_revenue)/SUM(spend) ELSE 0 END
-FROM MONARCH_RAW.ADS.AGILITY_ADS_RAW
+CASE WHEN SUM(spend)>0 THEN SUM(revenue)/SUM(spend) ELSE 0 END
+FROM (
+    SELECT ad_date, spend, impressions, clicks, traffic_conversions AS conversions, realized_revenue AS revenue
+    FROM MONARCH_RAW.ADS.AGILITY_ADS_RAW WHERE channel = '{source_channel}'
+    UNION ALL
+    SELECT ad_date, total_cost AS spend, impressions, clicks, purchases AS conversions, sales AS revenue
+    FROM MONARCH_RAW.ADS.AMAZON_DSP_RAW WHERE channel = '{source_channel}'
+) combined
 GROUP BY ad_date""")
     cur.close()
     conn.close()

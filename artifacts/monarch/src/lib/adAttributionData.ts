@@ -109,6 +109,7 @@ const SIGNAL_BIASES: Record<string, SignalBias> = {
   "tiktok-ads":       { ctrFactor: 0.76, freqFactor: 1.18 },       // declining CTR + fatigue
   "applovin-axon":    { roasFactor: 0.68, freqFactor: 1.32, ctrFactor: 0.88 }, // critical signals
   "ctv-programmatic": { cpaMod: 1.30 },                             // rising CPA
+  "display-ads":      { cpaMod: 1.15 },                             // rising CPA
 };
 
 const CHANNEL_AD_CONFIG: Record<string, ChannelAdConfig> = {
@@ -118,6 +119,7 @@ const CHANNEL_AD_CONFIG: Record<string, ChannelAdConfig> = {
   "pinterest-ads":    { cpmBaseline: 10, ctrBaseline: 1.9, cvrBaseline: 2.5, frequencyBaseline: 2.8, elasticity: 0.51, incrementalLift: 0.58, decayRate: 0.15 },
   "applovin-axon":    { cpmBaseline:  5, ctrBaseline: 3.8, cvrBaseline: 2.1, frequencyBaseline: 5.1, elasticity: 0.44, incrementalLift: 0.48, decayRate: 0.31 },
   "ctv-programmatic": { cpmBaseline: 22, ctrBaseline: 0.4, cvrBaseline: 1.8, frequencyBaseline: 2.3, elasticity: 0.38, incrementalLift: 0.41, decayRate: 0.09 },
+  "display-ads":      { cpmBaseline: 11, ctrBaseline: 0.9, cvrBaseline: 1.5, frequencyBaseline: 3.1, elasticity: 0.42, incrementalLift: 0.45, decayRate: 0.17 },
   "amazon-ads":       { cpmBaseline:  6, ctrBaseline: 6.8, cvrBaseline: 7.2, frequencyBaseline: 1.9, elasticity: 0.88, incrementalLift: 0.91, decayRate: 0.08 },
   "pattern-predict":  { cpmBaseline:  8, ctrBaseline: 5.5, cvrBaseline: 6.1, frequencyBaseline: 2.2, elasticity: 0.74, incrementalLift: 0.79, decayRate: 0.11 },
   "walmart-connect":  { cpmBaseline:  7, ctrBaseline: 4.9, cvrBaseline: 5.3, frequencyBaseline: 2.5, elasticity: 0.71, incrementalLift: 0.76, decayRate: 0.13 },

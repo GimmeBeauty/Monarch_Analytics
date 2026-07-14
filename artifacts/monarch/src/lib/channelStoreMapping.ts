@@ -90,10 +90,19 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
   {
     channelId: "ctv-programmatic",
     channelLabel: "CTV / Programmatic",
-    storeIds: ["shopify", "amazon", "walmart", "target"],
+    storeIds: ["target", "amazon"],
     dailySpendBaseline: 4500,
     baseRoas: 2.8,
-    color: "#0EA5E9",
+    color: "#6B46C1",
+    channelFamily: "core",
+  },
+  {
+    channelId: "display-ads",
+    channelLabel: "Display",
+    storeIds: ["target", "amazon"],
+    dailySpendBaseline: 3200,
+    baseRoas: 2.3,
+    color: "#F97316",
     channelFamily: "core",
   },
 
@@ -153,15 +162,6 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     baseRoas: 4.2,
     color: "#FF6900",
     channelFamily: "rmn",
-  },
-  {
-    channelId: "agility-ads",
-    channelLabel: "Agility (CTV/Programmatic)",
-    storeIds: ["target", "amazon"],
-    dailySpendBaseline: 4500,
-    baseRoas: 2.8,
-    color: "#6B46C1",
-    channelFamily: "core",
   },
 ];
 

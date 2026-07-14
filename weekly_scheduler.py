@@ -43,7 +43,7 @@ def run_walmart_s3():
         print(f"  ❌ Walmart S3 error: {e}")
 
 def run_agility():
-    print("\n[4/5] Agility (CTV/Programmatic/Display)...")
+    print("\n[4/6] Agility (CTV/Programmatic/Display)...")
     try:
         from ingestion.sources.agility_ads import run_agility_ingestion
         run_agility_ingestion()
@@ -51,31 +51,48 @@ def run_agility():
     except Exception as e:
         print(f"  ❌ Agility error: {e}")
 
-def rebuild_agility_summary():
-    print("\n[5/5] Rebuilding Agility ad summary...")
+def run_amazon_dsp():
+    print("\n[5/6] Amazon DSP (CTV/Programmatic/Display)...")
+    try:
+        from ingestion.sources.amazon_dsp import run_amazon_dsp_ingestion
+        run_amazon_dsp_ingestion()
+        print("  ✅ Amazon DSP done")
+    except Exception as e:
+        print(f"  ❌ Amazon DSP error: {e}")
+
+def rebuild_ctv_display_summary():
+    print("\n[6/6] Rebuilding CTV/Programmatic + Display ad summary...")
     try:
         from snowflake_connect import get_connection
         conn = get_connection(schema="ADS")
         cur = conn.cursor()
-        cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE channel = 'agility_ads'")
-        cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
-SELECT ad_date,'agility_ads',SUM(spend),SUM(impressions),SUM(clicks),SUM(traffic_conversions),SUM(realized_revenue),
+        cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE channel IN ('ctv_programmatic', 'display_ads')")
+        for db_channel, source_channel in [("ctv_programmatic", "Video"), ("display_ads", "Display")]:
+            cur.execute(f"""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
+SELECT ad_date,'{db_channel}',SUM(spend),SUM(impressions),SUM(clicks),SUM(conversions),SUM(revenue),
 CASE WHEN SUM(impressions)>0 THEN SUM(clicks)/SUM(impressions) ELSE 0 END,
 CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END,
 CASE WHEN SUM(impressions)>0 THEN SUM(spend)/SUM(impressions)*1000 ELSE 0 END,
-CASE WHEN SUM(spend)>0 THEN SUM(realized_revenue)/SUM(spend) ELSE 0 END
-FROM MONARCH_RAW.ADS.AGILITY_ADS_RAW
+CASE WHEN SUM(spend)>0 THEN SUM(revenue)/SUM(spend) ELSE 0 END
+FROM (
+    SELECT ad_date, spend, impressions, clicks, traffic_conversions AS conversions, realized_revenue AS revenue
+    FROM MONARCH_RAW.ADS.AGILITY_ADS_RAW WHERE channel = '{source_channel}'
+    UNION ALL
+    SELECT ad_date, total_cost AS spend, impressions, clicks, purchases AS conversions, sales AS revenue
+    FROM MONARCH_RAW.ADS.AMAZON_DSP_RAW WHERE channel = '{source_channel}'
+) combined
 GROUP BY ad_date""")
         cur.close()
         conn.close()
-        print("  ✅ Agility summary done")
+        print("  ✅ CTV/Display summary done")
     except Exception as e:
-        print(f"  ❌ Agility summary error: {e}")
+        print(f"  ❌ CTV/Display summary error: {e}")
 
 if __name__ == "__main__":
     run_netsuite()
     run_circana()
     run_walmart_s3()
     run_agility()
-    rebuild_agility_summary()
+    run_amazon_dsp()
+    rebuild_ctv_display_summary()
     print("\n✅ Weekly scheduler complete!")
