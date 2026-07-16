@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useStoreFilter } from "@/context/StoreFilterContext";
+import { usePricingMode } from "@/context/PricingModeContext";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -72,12 +73,15 @@ export default function Forecast() {
   const [granularity,  setGranularity]    = useState<"week" | "month">("month");
   const [showPriorYear, setShowPriorYear] = useState(false);
 
-  const { storeWeight: sw } = useStoreFilter();
+  const { isWholesale } = usePricingMode();
+  const { selectedIds, storeWeight: sw } = useStoreFilter();
+  const storeIdsParam = selectedIds.length > 0 ? selectedIds.join(",") : "";
 
   const { data: summary, isLoading: summaryLoading, isFetching: summaryFetching, error: summaryError, refetch: refetchSummary } = useQuery<ForecastSummary>({
-    queryKey: ["forecast-summary", selectedYear],
+    queryKey: ["forecast-summary", selectedYear, isWholesale, storeIdsParam],
     queryFn: async () => {
-      const p = new URLSearchParams({ year: String(selectedYear) });
+      const p = new URLSearchParams({ year: String(selectedYear), isWholesale: String(isWholesale) });
+      if (storeIdsParam) p.set("storeIds", storeIdsParam);
       const r = await fetch(`/api/data/forecast/summary?${p}`);
       if (!r.ok) {
         const body = await r.json().catch(() => ({})) as { error?: string };
@@ -88,13 +92,15 @@ export default function Forecast() {
   });
 
   const { data: chartResp, isLoading: chartLoading, isFetching: chartFetching, error: chartError, refetch: refetchChart } = useQuery<ForecastChartResp>({
-    queryKey: ["forecast-chart", selectedYear, granularity, showPriorYear],
+    queryKey: ["forecast-chart", selectedYear, granularity, showPriorYear, isWholesale, storeIdsParam],
     queryFn: async () => {
       const p = new URLSearchParams({
         year: String(selectedYear),
         granularity,
         priorYear: String(showPriorYear),
+        isWholesale: String(isWholesale),
       });
+      if (storeIdsParam) p.set("storeIds", storeIdsParam);
       const r = await fetch(`/api/data/forecast/chart?${p}`);
       if (!r.ok) {
         const body = await r.json().catch(() => ({})) as { error?: string };
@@ -109,34 +115,21 @@ export default function Forecast() {
   const isRefetching = summaryFetching || chartFetching;
   const refetchAll = () => { refetchSummary(); refetchChart(); };
 
-  // Scale summary metrics by store weight (goals stay unscaled)
+  // Revenue actuals are now server-scoped by store and pricing mode.
+  // Only projected spend still needs frontend scaling (spend data is company-wide).
   const s = useMemo((): ForecastSummary | null => {
     if (!summary) return null;
-    if (sw === 1)  return summary;
+    if (sw === 1) return summary;
     return {
       ...summary,
-      ytdRevenue:      Math.round(summary.ytdRevenue      * sw),
-      projectedRevenue: Math.round(summary.projectedRevenue * sw),
-      projectedSpend:   Math.round(summary.projectedSpend   * sw),
-      projectedUnits:   Math.round(summary.projectedUnits   * sw),
-      mtdRevenue:       Math.round(summary.mtdRevenue       * sw),
-      monthlyActuals:   summary.monthlyActuals.map(m => ({ ...m, revenue: Math.round(m.revenue * sw) })),
+      projectedSpend: Math.round(summary.projectedSpend * sw),
     };
   }, [summary, sw]);
 
-  // Scale chart series
+  // Chart actuals are server-scoped; no frontend scaling needed.
   const chartSeries = useMemo((): ChartPoint[] => {
-    if (!chartResp) return [];
-    if (sw === 1)   return chartResp.series;
-    return chartResp.series.map((p) => ({
-      ...p,
-      actual:    p.actual    != null ? Math.round(p.actual    * sw) : undefined,
-      projected: Math.round(p.projected * sw),
-      lower:     Math.round(p.lower     * sw),
-      upper:     Math.round(p.upper     * sw),
-      priorYear: p.priorYear != null ? Math.round(p.priorYear * sw) : undefined,
-    }));
-  }, [chartResp, sw]);
+    return chartResp?.series ?? [];
+  }, [chartResp]);
 
   // Derived KPI values
   const pctMonthly = s && s.currentMonthGoal > 0
@@ -250,6 +243,18 @@ export default function Forecast() {
         <div className="space-y-6">
 
           {/* ── 5 KPI Cards ── */}
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+              Key Metrics
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide ${
+              isWholesale
+                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                : "bg-[#FFBC80]/20 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50"
+            }`}>
+              {isWholesale ? "Wholesale" : "MSRP"}
+            </span>
+          </div>
           <div className="grid grid-cols-5 gap-4">
             {kpiCards.map((kpi) => (
               <div key={kpi.label} className="rounded-xl p-5 monarch-card-settings relative overflow-hidden">

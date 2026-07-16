@@ -2667,13 +2667,28 @@ router.post("/forecast/settings", authenticate, async (req, res) => {
 });
 
 // ─── GET /api/data/forecast/summary ──────────────────────────────────────────
+
+// Maps store filter IDs → FORECAST_SETTINGS store_id names (used for goal filtering)
+const STORE_ID_TO_GOAL_NAME: Record<string, string> = {
+  shopify:   "Shopify",
+  target:    "Target",
+  walmart:   "Walmart",
+  amazon:    "Amazon",
+  ulta:      "Ulta Beauty",
+  cvs:       "CVS",
+  walgreens: "Walgreens",
+  publix:    "Publix",
+  kroger:    "Kroger",
+  meijer:    "Meijer",
+};
+
 router.get("/forecast/summary", authenticate, async (req, res) => {
   try {
     const year        = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
     const isWholesale = req.query["isWholesale"] === "true";
-    const storeFilter = typeof req.query["store"] === "string" && req.query["store"].trim()
-      ? req.query["store"].trim()
-      : null;
+    const storeIdsRaw = typeof req.query["storeIds"] === "string" ? req.query["storeIds"].trim() : "";
+    const requestedStoreIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+    const isAllStores = requestedStoreIds.length === 0;
 
     if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
 
@@ -2683,11 +2698,35 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdStart = `${year}-01-01`;
     const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
 
-    // Wholesale mode: NetSuite only (optionally filtered by store).
-    // MSRP mode: Shopify + Target + Walmart only. Never include Circana.
-    const netsuiteStoreClause = isWholesale && storeFilter
-      ? `AND STORE_NAME = '${storeFilter.replace(/'/g, "''")}'`
-      : "";
+    // ── Wholesale store filter ──────────────────────────────────────────────
+    const wholesaleStoreIds = isAllStores
+      ? Object.keys(WHOLESALE_NS_STORE_NAMES)
+      : requestedStoreIds.filter(id => id in WHOLESALE_NS_STORE_NAMES);
+    const wholesaleStoreNames = wholesaleStoreIds.map(id => WHOLESALE_NS_STORE_NAMES[id]!);
+    const sq = (s: string) => `'${s.replace(/'/g, "''")}'`;
+    const netsuiteStoreClause = wholesaleStoreNames.length > 0
+      ? `AND STORE_NAME IN (${wholesaleStoreNames.map(sq).join(",")})`
+      : "AND 1=0"; // no matching stores → return no rows
+
+    // ── MSRP source inclusions (only retail platforms in scope) ─────────────
+    const includeShopify = isAllStores || requestedStoreIds.includes("shopify");
+    const includeTarget  = isAllStores || requestedStoreIds.includes("target");
+    const includeWalmart = isAllStores || requestedStoreIds.includes("walmart");
+
+    // Build MSRP monthly union — at least one SELECT must be present
+    const msrpParts: string[] = [];
+    if (includeShopify) msrpParts.push(`
+          SELECT DATE_TRUNC('month', summary_date) AS m, revenue AS rev, units_sold AS units
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}`);
+    if (includeTarget) msrpParts.push(`
+          SELECT DATE_TRUNC('month', summary_date), sale_amount, sale_quantity
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}`);
+    if (includeWalmart) msrpParts.push(`
+          SELECT DATE_TRUNC('month', week_date), revenue, units_sold
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${year}`);
+    const msrpUnion = msrpParts.length > 0
+      ? msrpParts.join(" UNION ALL ")
+      : `SELECT NULL AS m, 0 AS rev, 0 AS units WHERE 1=0`;
 
     const monthlyQuery = isWholesale
       ? `
@@ -2700,34 +2739,34 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         FROM src GROUP BY m ORDER BY m
       `
       : `
-        WITH src AS (
-          SELECT DATE_TRUNC('month', summary_date) AS m, revenue AS rev, units_sold AS units
-          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}
-          UNION ALL
-          SELECT DATE_TRUNC('month', summary_date), sale_amount, sale_quantity
-          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}
-          UNION ALL
-          SELECT DATE_TRUNC('month', week_date), revenue, units_sold
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${year}
-        )
+        WITH src AS (${msrpUnion})
         SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
         FROM src GROUP BY m ORDER BY m
       `;
 
+    // ── Goal column & store filter ──────────────────────────────────────────
+    const goalCol = isWholesale ? "wholesale_goal" : "retail_goal";
+    const goalStoreNames = isAllStores
+      ? null
+      : requestedStoreIds.map(id => STORE_ID_TO_GOAL_NAME[id]).filter((n): n is string => !!n);
+    const goalStoreClause = goalStoreNames && goalStoreNames.length > 0
+      ? `AND store_id IN (${goalStoreNames.map(sq).join(",")})`
+      : "";
+
     const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows, goalRows, annualRows] = await Promise.all([
-      isWholesale ? Promise.resolve([]) : querySnowflake(`
+      isWholesale || !includeShopify ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
                COALESCE(SUM(units_sold), 0) AS UNITS
         FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
         WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
-      isWholesale ? Promise.resolve([]) : querySnowflake(`
+      isWholesale || !includeTarget ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(sale_amount), 0) AS REVENUE,
                COALESCE(SUM(sale_quantity), 0) AS UNITS
         FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
         WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
-      isWholesale ? Promise.resolve([]) : querySnowflake(`
+      isWholesale || !includeWalmart ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
                COALESCE(SUM(units_sold), 0) AS UNITS
         FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
@@ -2747,15 +2786,17 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
       querySnowflake(`
-        SELECT month, COALESCE(SUM(retail_goal), 0) AS total_goal
+        SELECT month, COALESCE(SUM(${goalCol}), 0) AS total_goal
         FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
         WHERE year = ${year} AND month BETWEEN 1 AND 12
+          ${goalStoreClause}
         GROUP BY month ORDER BY month
       `).catch(() => []),
       querySnowflake(`
         SELECT COALESCE(SUM(annual_goal), 0) AS total_annual
         FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
         WHERE year = ${year} AND month = 0
+          ${goalStoreClause}
       `).catch(() => []),
     ]);
 
@@ -2849,6 +2890,10 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
     const year = parseInt(String(req.query["year"] ?? new Date().getFullYear()), 10);
     const granularity = String(req.query["granularity"] ?? "month") === "week" ? "week" : "month";
     const withPriorYear = req.query["priorYear"] === "true";
+    const isWholesale   = req.query["isWholesale"] === "true";
+    const storeIdsRaw   = typeof req.query["storeIds"] === "string" ? req.query["storeIds"].trim() : "";
+    const requestedStoreIds = storeIdsRaw ? storeIdsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+    const isAllStores = requestedStoreIds.length === 0;
 
     if (year < 2020 || year > 2100) return res.status(400).json({ error: "Invalid year" });
 
@@ -2856,22 +2901,51 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
     const priorYear = year - 1;
     const trunc = granularity === "week" ? "week" : "month";
 
-    const buildQuery = (y: number) => `
-      WITH src AS (
-        SELECT DATE_TRUNC('${trunc}', summary_date) AS p, revenue AS rev
-        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}
-        UNION ALL
-        SELECT DATE_TRUNC('${trunc}', summary_date), sale_amount
-        FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}
-        UNION ALL
-        SELECT DATE_TRUNC('${trunc}', week_date), revenue
-        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${y}
-        UNION ALL
-        SELECT DATE_TRUNC('${trunc}', TRANDATE), REVENUE
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT WHERE YEAR(TRANDATE) = ${y}
-      )
-      SELECT p AS PERIOD_START, SUM(rev) AS REVENUE FROM src GROUP BY p ORDER BY p
-    `;
+    const sqChart = (s: string) => `'${s.replace(/'/g, "''")}'`;
+
+    // Wholesale store filter for NetSuite
+    const wsIds = isAllStores
+      ? Object.keys(WHOLESALE_NS_STORE_NAMES)
+      : requestedStoreIds.filter(id => id in WHOLESALE_NS_STORE_NAMES);
+    const wsNames = wsIds.map(id => WHOLESALE_NS_STORE_NAMES[id]!);
+    const chartNsClause = wsNames.length > 0
+      ? `AND STORE_NAME IN (${wsNames.map(sqChart).join(",")})`
+      : "AND 1=0";
+
+    // MSRP source inclusions
+    const incShopify = isAllStores || requestedStoreIds.includes("shopify");
+    const incTarget  = isAllStores || requestedStoreIds.includes("target");
+    const incWalmart = isAllStores || requestedStoreIds.includes("walmart");
+
+    const buildQuery = (y: number): string => {
+      if (isWholesale) {
+        return `
+          WITH src AS (
+            SELECT DATE_TRUNC('${trunc}', TRANDATE) AS p, REVENUE AS rev
+            FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+            WHERE YEAR(TRANDATE) = ${y} ${chartNsClause}
+          )
+          SELECT p AS PERIOD_START, SUM(rev) AS REVENUE FROM src GROUP BY p ORDER BY p
+        `;
+      }
+      const parts: string[] = [];
+      if (incShopify) parts.push(`
+            SELECT DATE_TRUNC('${trunc}', summary_date) AS p, revenue AS rev
+            FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
+      if (incTarget) parts.push(`
+            SELECT DATE_TRUNC('${trunc}', summary_date), sale_amount
+            FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
+      if (incWalmart) parts.push(`
+            SELECT DATE_TRUNC('${trunc}', week_date), revenue
+            FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${y}`);
+      const union = parts.length > 0
+        ? parts.join(" UNION ALL ")
+        : `SELECT NULL AS p, 0 AS rev WHERE 1=0`;
+      return `
+        WITH src AS (${union})
+        SELECT p AS PERIOD_START, SUM(rev) AS REVENUE FROM src GROUP BY p ORDER BY p
+      `;
+    };
 
     const [actualsRaw, priorRaw] = await Promise.all([
       querySnowflake(buildQuery(year)),
