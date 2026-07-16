@@ -74,7 +74,7 @@ export default function Forecast() {
   const [showPriorYear, setShowPriorYear] = useState(false);
 
   const { isWholesale } = usePricingMode();
-  const { selectedIds, storeWeight: sw } = useStoreFilter();
+  const { selectedIds } = useStoreFilter();
   const storeIdsParam = selectedIds.length > 0 ? selectedIds.join(",") : "";
 
   const { data: summary, isLoading: summaryLoading, isFetching: summaryFetching, error: summaryError, refetch: refetchSummary } = useQuery<ForecastSummary>({
@@ -115,16 +115,8 @@ export default function Forecast() {
   const isRefetching = summaryFetching || chartFetching;
   const refetchAll = () => { refetchSummary(); refetchChart(); };
 
-  // Revenue actuals are now server-scoped by store and pricing mode.
-  // Only projected spend still needs frontend scaling (spend data is company-wide).
-  const s = useMemo((): ForecastSummary | null => {
-    if (!summary) return null;
-    if (sw === 1) return summary;
-    return {
-      ...summary,
-      projectedSpend: Math.round(summary.projectedSpend * sw),
-    };
-  }, [summary, sw]);
+  // All KPIs are now server-scoped by store — no frontend scaling needed.
+  const s = summary ?? null;
 
   // Chart actuals are server-scoped; no frontend scaling needed.
   const chartSeries = useMemo((): ChartPoint[] => {

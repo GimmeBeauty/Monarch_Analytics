@@ -2753,7 +2753,13 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       ? `AND store_id IN (${goalStoreNames.map(sq).join(",")})`
       : "";
 
-    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, spendRows, goalRows, annualRows] = await Promise.all([
+    // ── Ad spend: query only sources for selected stores ────────────────────
+    const adSpendSources = filterAdSources(requestedStoreIds);
+    const ytdAdSpendPromise = Promise.all(
+      adSpendSources.map(src => queryAdSource(src, ytdStart, ytdEnd))
+    ).then(perSource => perSource.flat().reduce((sum, row) => sum + row.spend, 0));
+
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, ytdAdSpend, goalRows, annualRows] = await Promise.all([
       isWholesale || !includeShopify ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
                COALESCE(SUM(units_sold), 0) AS UNITS
@@ -2780,11 +2786,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
           ${netsuiteStoreClause}
       `) : Promise.resolve([]),
       querySnowflake(monthlyQuery),
-      querySnowflake(`
-        SELECT COALESCE(SUM(ad_spend), 0) AS SPEND
-        FROM ${DB_NAME}.COMMERCE.MONARCH_DAILY_SUMMARY
-        WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
-      `),
+      ytdAdSpendPromise,
       querySnowflake(`
         SELECT month, COALESCE(SUM(${goalCol}), 0) AS total_goal
         FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
@@ -2821,7 +2823,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdUnits = isWholesale
       ? pick(r0(netsuiteRows), "UNITS")
       : pick(r0(shopifyRows), "UNITS") + pick(r0(targetRows), "UNITS") + pick(r0(walmartRows), "UNITS");
-    const ytdSpend = pick(r0(spendRows), "SPEND");
+    const ytdSpend = ytdAdSpend;
 
     const dayOfYear = isCurrentYear
       ? Math.floor((today.getTime() - new Date(`${year}-01-01`).getTime()) / 86_400_000) + 1
