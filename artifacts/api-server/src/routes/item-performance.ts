@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
+import { buildRetailerVelocity } from "../lib/retailer-velocity.js";
 
 const router = Router();
 router.use(authenticate);
@@ -483,32 +484,8 @@ router.get("/", async (req, res) => {
       }
     }
 
-    // ── Compute per-retailer aggregate totals ─────────────────────────────────
-    interface RetailerAgg {
-      entityId: number;
-      name: string;
-      totalRevenue: number;
-      totalUnits: number;
-      skuSet: Set<string>;
-    }
-
-    const retailerMap = new Map<number, RetailerAgg>();
-
-    for (const e of entries) {
-      if (!retailerMap.has(e.entityId)) {
-        retailerMap.set(e.entityId, {
-          entityId: e.entityId,
-          name: ENTITY_MAP[e.entityId] ?? e.retailer,
-          totalRevenue: 0,
-          totalUnits: 0,
-          skuSet: new Set(),
-        });
-      }
-      const ragg = retailerMap.get(e.entityId)!;
-      ragg.totalRevenue += e.revenue;
-      ragg.totalUnits   += e.units;
-      ragg.skuSet.add(e.sku);
-    }
+    // retailerMap is used only for the final retailers response array;
+    // built via buildRetailerVelocity below.
 
     // ── Compute DPSW values ───────────────────────────────────────────────────
 
@@ -706,68 +683,14 @@ router.get("/", async (req, res) => {
     };
 
     // ── Retailer response rows ────────────────────────────────────────────────
-    // When in sell-through mode, also seed retailerMap with Circana-only retailers
-    if (dataSource !== "sellin") {
-      for (const entityMap of circanaByUpc.values()) {
-        for (const [entityId] of entityMap.entries()) {
-          if (!retailerMap.has(entityId)) {
-            const name = Object.entries(CIRCANA_ENTITY_IDS).find(([, id]) => id === entityId)?.[0] ?? String(entityId);
-            retailerMap.set(entityId, { entityId, name, totalRevenue: 0, totalUnits: 0, skuSet: new Set() });
-          }
-        }
-      }
-    }
-
-    const retailers = Array.from(retailerMap.values()).map(r => {
-      const stores = STORE_COUNTS_BY_ENTITY[r.entityId];
-      let revenue = r.totalRevenue;
-      let units   = r.totalUnits;
-      let src     = "sellin";
-
-      if (dataSource !== "sellin") {
-        let posRevenue = 0;
-        let posUnits   = 0;
-
-        if (r.entityId === 229) {
-          // Target POS: sum all UPCs
-          for (const v of targetPosByUpc.values()) {
-            posRevenue += v.revenue;
-            posUnits   += v.units;
-          }
-        } else if (r.entityId === 231) {
-          // Walmart POS: sum all UPCs
-          for (const v of walmartPosByUpc.values()) {
-            posRevenue += v.revenue;
-            posUnits   += v.units;
-          }
-        } else {
-          // Circana retailer — entityId is the Circana entity ID used as the inner map key
-          for (const entityMap of circanaByUpc.values()) {
-            const entry = entityMap.get(r.entityId);
-            if (entry) {
-              posRevenue += entry.revenue;
-              posUnits   += entry.units;
-            }
-          }
-        }
-
-        if (posRevenue > 0 || dataSource === "pos") {
-          revenue = posRevenue;
-          units   = posUnits;
-          src     = "pos";
-        }
-      }
-
-      return {
-        entityId:     r.entityId,
-        name:         r.name,
-        totalRevenue: revenue,
-        totalUnits:   units,
-        skuCount:     r.skuSet.size,
-        avgDpsw:      stores ? revenue / stores / numWeeks : null,
-        dataSource:   src,
-      };
-    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+    const retailers = buildRetailerVelocity({
+      entries,
+      targetPosByUpc,
+      walmartPosByUpc,
+      circanaByUpc,
+      dataSource,
+      numWeeks,
+    });
 
     return res.json({
       summary,
