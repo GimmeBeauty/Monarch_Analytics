@@ -2868,6 +2868,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       year,
       ytdRevenue,
       projectedRevenue,
+      adSpendAvailable: adSpendSources.length > 0,
       projectedSpend,
       projectedUnits,
       asp: Math.round(asp * 100) / 100,

@@ -38,6 +38,7 @@ interface ForecastSummary {
   year: number;
   ytdRevenue: number;
   projectedRevenue: number;
+  adSpendAvailable: boolean;
   projectedSpend: number;
   projectedUnits: number;
   asp: number;
@@ -166,8 +167,8 @@ export default function Forecast() {
     },
     {
       label: "Projected Spend",
-      value: fmt$(s.projectedSpend),
-      sub:   "Ad spend forecast",
+      value: s.adSpendAvailable ? fmt$(s.projectedSpend) : "—",
+      sub:   s.adSpendAvailable ? "Ad spend forecast" : "No ad channels for this store",
       color: "",
     },
     {
