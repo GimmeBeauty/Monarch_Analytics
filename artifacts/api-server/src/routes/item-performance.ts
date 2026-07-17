@@ -65,8 +65,20 @@ const CIRCANA_ENTITY_IDS: Record<string, number> = {
   "Walgreens Corp-RMA - Drug": 1068,
 };
 
-// Circana time period strings by period key
-const CIRCANA_TIME_PERIODS: Record<string, string> = {
+// ── Dynamic Circana time-period cache ──────────────────────────────────────
+// Circana POS data is stored with fixed time_period label strings (e.g.
+// "Latest 4 Week Pd Ending 04-19-26"). We discover the latest available
+// labels at runtime rather than hardcoding them. Cache refreshes every hour.
+
+interface CircanaPeriodCache {
+  refreshedAt: number;
+  periods: Record<string, string>;
+}
+
+let _circanaCache: CircanaPeriodCache | null = null;
+const CIRCANA_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+const CIRCANA_FALLBACK: Record<string, string> = {
   "4w":   "Latest 4 Week Pd Ending 04-19-26",
   "13w":  "Latest 13 Week Pd Ending 04-19-26",
   "26w":  "Latest 26 Week Pd Ending 04-19-26",
@@ -75,6 +87,38 @@ const CIRCANA_TIME_PERIODS: Record<string, string> = {
   "2026": "Building Calendar Year 2026 Ending 05-10-26",
   "2025": "Latest 52 Week Pd Ending 04-19-26",
 };
+
+async function getCircanaTimePeriods(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (_circanaCache && now - _circanaCache.refreshedAt < CIRCANA_CACHE_TTL_MS) {
+    return _circanaCache.periods;
+  }
+  try {
+    const rows = await querySnowflake(`
+      SELECT DISTINCT time_period
+      FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
+      ORDER BY time_period DESC
+      FETCH FIRST 50 ROWS ONLY
+    `) as Record<string, unknown>[];
+    const labels = rows
+      .map(r => String(r["TIME_PERIOD"] ?? r["time_period"] ?? ""))
+      .filter(Boolean);
+    const find = (re: RegExp) => labels.find(l => re.test(l)) ?? "";
+    const periods: Record<string, string> = {
+      "4w":   find(/Latest 4 Week/i)  || CIRCANA_FALLBACK["4w"]!,
+      "13w":  find(/Latest 13 Week/i) || CIRCANA_FALLBACK["13w"]!,
+      "26w":  find(/Latest 26 Week/i) || CIRCANA_FALLBACK["26w"]!,
+      "52w":  find(/Latest 52 Week/i) || CIRCANA_FALLBACK["52w"]!,
+      "ytd":  find(/Building Calendar Year/i) || CIRCANA_FALLBACK["ytd"]!,
+      "2026": find(/Building Calendar Year/i) || CIRCANA_FALLBACK["2026"]!,
+      "2025": find(/Latest 52 Week/i) || CIRCANA_FALLBACK["2025"]!,
+    };
+    _circanaCache = { refreshedAt: now, periods };
+    return periods;
+  } catch {
+    return CIRCANA_FALLBACK;
+  }
+}
 
 // Retailers to exclude from DPSW (DTC channels)
 const DTC_ENTITY_IDS = [850, 49270]; // Shopify, Amazon Pattern
@@ -151,7 +195,8 @@ router.get("/", async (req, res) => {
     let dateFilter        = periodToDateFilter(period);
     let targetDateFilter  = periodToTargetDateFilter(period);
     let walmartDateFilter = periodToWalmartDateFilter(period);
-    let circanaTimePeriod = CIRCANA_TIME_PERIODS[period] ?? CIRCANA_TIME_PERIODS["4w"];
+    const circanaTimePeriods = await getCircanaTimePeriods();
+    let circanaTimePeriod = circanaTimePeriods[period] ?? circanaTimePeriods["4w"]!;
 
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     if (startParam && endParam && dateRe.test(startParam) && dateRe.test(endParam)) {
@@ -161,10 +206,10 @@ router.get("/", async (req, res) => {
       dateFilter        = `TRANDATE BETWEEN '${startParam}' AND '${endParam}'`;
       targetDateFilter  = `summary_date BETWEEN '${startParam}' AND '${endParam}'`;
       walmartDateFilter = `week_date BETWEEN '${startParam}' AND '${endParam}'`;
-      if (days <= 35)       circanaTimePeriod = CIRCANA_TIME_PERIODS["4w"];
-      else if (days <= 100) circanaTimePeriod = CIRCANA_TIME_PERIODS["13w"];
-      else if (days <= 190) circanaTimePeriod = CIRCANA_TIME_PERIODS["26w"];
-      else                  circanaTimePeriod = CIRCANA_TIME_PERIODS["52w"];
+      if (days <= 35)       circanaTimePeriod = circanaTimePeriods["4w"]!;
+      else if (days <= 100) circanaTimePeriod = circanaTimePeriods["13w"]!
+      else if (days <= 190) circanaTimePeriod = circanaTimePeriods["26w"]!;
+      else                  circanaTimePeriod = circanaTimePeriods["52w"]!;
     } else if (period === "ytd") {
       const now = new Date();
       const startOfYear = new Date(now.getFullYear(), 0, 1);
@@ -661,16 +706,66 @@ router.get("/", async (req, res) => {
     };
 
     // ── Retailer response rows ────────────────────────────────────────────────
+    // When in sell-through mode, also seed retailerMap with Circana-only retailers
+    if (dataSource !== "sellin") {
+      for (const entityMap of circanaByUpc.values()) {
+        for (const [entityId] of entityMap.entries()) {
+          if (!retailerMap.has(entityId)) {
+            const name = Object.entries(CIRCANA_ENTITY_IDS).find(([, id]) => id === entityId)?.[0] ?? String(entityId);
+            retailerMap.set(entityId, { entityId, name, totalRevenue: 0, totalUnits: 0, skuSet: new Set() });
+          }
+        }
+      }
+    }
+
     const retailers = Array.from(retailerMap.values()).map(r => {
       const stores = STORE_COUNTS_BY_ENTITY[r.entityId];
+      let revenue = r.totalRevenue;
+      let units   = r.totalUnits;
+      let src     = "sellin";
+
+      if (dataSource !== "sellin") {
+        let posRevenue = 0;
+        let posUnits   = 0;
+
+        if (r.entityId === 229) {
+          // Target POS: sum all UPCs
+          for (const v of targetPosByUpc.values()) {
+            posRevenue += v.revenue;
+            posUnits   += v.units;
+          }
+        } else if (r.entityId === 231) {
+          // Walmart POS: sum all UPCs
+          for (const v of walmartPosByUpc.values()) {
+            posRevenue += v.revenue;
+            posUnits   += v.units;
+          }
+        } else {
+          // Circana retailer — entityId is the Circana entity ID used as the inner map key
+          for (const entityMap of circanaByUpc.values()) {
+            const entry = entityMap.get(r.entityId);
+            if (entry) {
+              posRevenue += entry.revenue;
+              posUnits   += entry.units;
+            }
+          }
+        }
+
+        if (posRevenue > 0 || dataSource === "pos") {
+          revenue = posRevenue;
+          units   = posUnits;
+          src     = "pos";
+        }
+      }
+
       return {
         entityId:     r.entityId,
         name:         r.name,
-        totalRevenue: r.totalRevenue,
-        totalUnits:   r.totalUnits,
+        totalRevenue: revenue,
+        totalUnits:   units,
         skuCount:     r.skuSet.size,
-        avgDpsw:      stores ? r.totalRevenue / stores / numWeeks : null,
-        dataSource:   "sellin",
+        avgDpsw:      stores ? revenue / stores / numWeeks : null,
+        dataSource:   src,
       };
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
 

@@ -8,9 +8,10 @@ interface TopBarProps {
   title: string;
   description: string;
   hideDatePicker?: boolean;
+  hideStoreFilter?: boolean;
 }
 
-export default function TopBar({ title, description, hideDatePicker }: TopBarProps) {
+export default function TopBar({ title, description, hideDatePicker, hideStoreFilter }: TopBarProps) {
   const { dateRange } = useDateRange();
   const { isWholesale } = usePricingMode();
 
@@ -56,7 +57,7 @@ export default function TopBar({ title, description, hideDatePicker }: TopBarPro
         )}
 
         {/* Store filter */}
-        <StoreFilter />
+        {!hideStoreFilter && <StoreFilter />}
 
         {/* Date range selector */}
         {!hideDatePicker && <DateRangeButton />}

@@ -103,13 +103,13 @@ function fmtUnits(v: number): string {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PERIOD_OPTIONS = [
+  { value: "lw",   label: "Last Week",      group: "rolling" },
   { value: "4w",   label: "Last 4 Weeks",   group: "rolling" },
   { value: "13w",  label: "Last 13 Weeks",  group: "rolling" },
   { value: "26w",  label: "Last 26 Weeks",  group: "rolling" },
   { value: "52w",  label: "Last 52 Weeks",  group: "rolling" },
   { value: "2025", label: "Calendar 2025",  group: "annual"  },
   { value: "2026", label: "Building 2026",  group: "annual"  },
-  { value: "lw",   label: "Last Week",      group: "specific"},
 ];
 
 const RETAILER_OPTIONS = [
@@ -706,6 +706,7 @@ export default function ItemPerformance() {
       title="Item Performance"
       description="SKU-level sales velocity across all retail channels"
       hideDatePicker
+      hideStoreFilter
     >
       {/* ── Filters Bar ─────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -740,13 +741,6 @@ export default function ItemPerformance() {
                   {opt.label}
                 </button>
               ))}
-              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Specific</div>
-              <button
-                onClick={() => { setPeriod("lw"); setDateMode("period"); setPeriodOpen(false); }}
-                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "period" && period === "lw" ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
-              >
-                Last Week
-              </button>
               <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Custom Range</div>
               <div className="px-3 pb-3 flex flex-col gap-1.5">
                 <input
@@ -818,7 +812,7 @@ export default function ItemPerformance() {
         {/* Data Source toggle */}
         <div className="flex rounded-lg border border-[#FFBC80]/30 overflow-hidden bg-white dark:bg-[#1a1208]">
           {[
-            { value: "all",    label: "All" },
+            { value: "all",    label: "Best Available" },
             { value: "sellin", label: "Sell-In" },
             { value: "pos",    label: "Sell-Through" },
           ].map(opt => (
@@ -912,7 +906,7 @@ export default function ItemPerformance() {
               title="Biggest Opportunity"
               value={data.summary.biggestOpportunity ? `${fmtDpsw(data.summary.biggestOpportunity.gap)} gap` : "—"}
               sub={data.summary.biggestOpportunity?.productName}
-              note="Target DPSW vs. retail avg"
+              note="Biggest DPSW gap vs. retailer velocity benchmark"
               onClick={() => setModalType("opportunity")}
             />
           </>
@@ -1009,16 +1003,54 @@ export default function ItemPerformance() {
                   className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("targetDpsw")}
                 >
-                  <span className="inline-flex items-center gap-1 justify-end">Target DPSW <SortIcon col="targetDpsw" /></span>
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Target DPSW
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                      </TooltipTrigger>
+                      <TooltipContent>Target store DPSW based on Target POS data only</TooltipContent>
+                    </UITooltip>
+                    <SortIcon col="targetDpsw" />
+                  </span>
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">vs Benchmark</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    vs Benchmark
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                      </TooltipTrigger>
+                      <TooltipContent>DPSW vs the velocity benchmark for this retailer mix (revenue-weighted)</TooltipContent>
+                    </UITooltip>
+                  </span>
+                </th>
                 <th
                   className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("retailers")}
                 >
-                  <span className="inline-flex items-center gap-1"># Retailers <SortIcon col="retailers" /></span>
+                  <span className="inline-flex items-center gap-1">
+                    # Retailers
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                      </TooltipTrigger>
+                      <TooltipContent>Number of retail chains carrying this SKU (with known store counts)</TooltipContent>
+                    </UITooltip>
+                    <SortIcon col="retailers" />
+                  </span>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Data</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+                  <span className="inline-flex items-center gap-1 justify-center">
+                    Data
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                      </TooltipTrigger>
+                      <TooltipContent>Data sources available for this SKU: sell-in (NetSuite shipments) and/or sell-through (POS)</TooltipContent>
+                    </UITooltip>
+                  </span>
+                </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Trend</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Retailer Item #</th>
               </tr>
