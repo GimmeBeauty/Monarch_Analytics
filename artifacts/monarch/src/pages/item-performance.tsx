@@ -103,11 +103,11 @@ function fmtUnits(v: number): string {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PERIOD_OPTIONS = [
-  { value: "lw",   label: "Last Week",      group: "rolling" },
   { value: "4w",   label: "Last 4 Weeks",   group: "rolling" },
   { value: "13w",  label: "Last 13 Weeks",  group: "rolling" },
   { value: "26w",  label: "Last 26 Weeks",  group: "rolling" },
   { value: "52w",  label: "Last 52 Weeks",  group: "rolling" },
+  { value: "lw",   label: "Last Week",      group: "rolling" },
   { value: "2025", label: "Calendar 2025",  group: "annual"  },
   { value: "2026", label: "Building 2026",  group: "annual"  },
 ];
@@ -906,7 +906,7 @@ export default function ItemPerformance() {
               title="Biggest Opportunity"
               value={data.summary.biggestOpportunity ? `${fmtDpsw(data.summary.biggestOpportunity.gap)} gap` : "—"}
               sub={data.summary.biggestOpportunity?.productName}
-              note="Biggest DPSW gap vs. retailer velocity benchmark"
+              note="SKUs with the widest gap between cross-retailer avg DPSW and Target DPSW."
               onClick={() => setModalType("opportunity")}
             />
           </>
@@ -1009,7 +1009,7 @@ export default function ItemPerformance() {
                       <TooltipTrigger asChild>
                         <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
                       </TooltipTrigger>
-                      <TooltipContent>Target store DPSW based on Target POS data only</TooltipContent>
+                      <TooltipContent>Dollars per store per week at Target specifically (entity 229). Uses Target store count and sell-in units to retailer.</TooltipContent>
                     </UITooltip>
                     <SortIcon col="targetDpsw" />
                   </span>
@@ -1021,7 +1021,7 @@ export default function ItemPerformance() {
                       <TooltipTrigger asChild>
                         <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
                       </TooltipTrigger>
-                      <TooltipContent>DPSW vs the velocity benchmark for this retailer mix (revenue-weighted)</TooltipContent>
+                      <TooltipContent>Revenue-weighted velocity benchmark adjusted for retailer format (drug/grocery/mass). Positive = above expected pace.</TooltipContent>
                     </UITooltip>
                   </span>
                 </th>
@@ -1035,7 +1035,7 @@ export default function ItemPerformance() {
                       <TooltipTrigger asChild>
                         <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
                       </TooltipTrigger>
-                      <TooltipContent>Number of retail chains carrying this SKU (with known store counts)</TooltipContent>
+                      <TooltipContent>Number of retail chains carrying this SKU in the selected period.</TooltipContent>
                     </UITooltip>
                     <SortIcon col="retailers" />
                   </span>
@@ -1047,7 +1047,7 @@ export default function ItemPerformance() {
                       <TooltipTrigger asChild>
                         <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
                       </TooltipTrigger>
-                      <TooltipContent>Data sources available for this SKU: sell-in (NetSuite shipments) and/or sell-through (POS)</TooltipContent>
+                      <TooltipContent>S = Sell-In (NetSuite shipments to retailer). P = Sell-Through (consumer POS scans from Target, Walmart, Circana).</TooltipContent>
                     </UITooltip>
                   </span>
                 </th>
