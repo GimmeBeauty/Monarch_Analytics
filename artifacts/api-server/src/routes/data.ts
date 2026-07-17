@@ -3000,16 +3000,28 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
         });
       }
     } else {
-      const start = new Date(year, 0, 1);
+      // Snowflake DATE_TRUNC('week') defaults to Monday-start (ISO).
+      // Align period keys by starting from the Monday on or before Jan 1.
+      const jan1Ms  = Date.UTC(year, 0, 1);
+      const jan1Dow = new Date(jan1Ms).getUTCDay(); // 0=Sun,1=Mon…6=Sat
+      const daysBack = jan1Dow === 0 ? 6 : jan1Dow - 1;
+      const firstWeekStart = jan1Ms - daysBack * 86_400_000;
+
       for (let w = 0; w < 54; w++) {
-        const d = new Date(start.getTime() + w * 7 * 86_400_000);
-        if (d.getFullYear() > year) break;
-        const pd = new Date(d); pd.setFullYear(priorYear);
+        const wStartMs = firstWeekStart + w * 7 * 86_400_000;
+        const d   = new Date(wStartMs);
+        const end = new Date(wStartMs + 6 * 86_400_000);
+        // Stop once the week-start is in next year
+        if (d.getUTCFullYear() > year) break;
+        // Skip weeks entirely in the prior year (e.g. if firstWeekStart lands in Dec of priorYear
+        // and the week doesn't overlap this year at all — shouldn't happen but be safe)
+        if (end.getUTCFullYear() < year) continue;
+        const pd = new Date(d); pd.setUTCFullYear(priorYear);
         periods.push({
           label:     `W${w + 1}`,
           periodKey: d.toISOString().slice(0, 10),
           priorKey:  pd.toISOString().slice(0, 10),
-          monthIdx:  d.getMonth(),
+          monthIdx:  d.getUTCMonth(),
         });
       }
     }
