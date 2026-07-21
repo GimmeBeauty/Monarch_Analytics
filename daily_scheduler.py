@@ -109,6 +109,15 @@ def run_roundel():
     except Exception as e:
         print(f"  ❌ Roundel error: {e}")
 
+def run_amazon():
+    print("\n[5e/6] Amazon Pattern Sales...")
+    try:
+        from ingestion.sources.amazon_pattern import run_amazon_ingestion
+        run_amazon_ingestion()
+        print("  ✅ Amazon done")
+    except Exception as e:
+        print(f"  ❌ Amazon error: {e}")
+
 def run_pinterest():
     print("\n[5b/6] Pinterest Ads...")
     try:
@@ -278,6 +287,7 @@ if __name__ == "__main__":
     run_criteo()
     run_roundel()
     run_pinterest()
+    run_amazon()
     rebuild_summaries()
     rebuild_ad_summaries()
     rebuild_shopify_products()
