@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useDateRange } from "@/context/DateRangeContext";
@@ -38,6 +38,7 @@ interface TrafficApiResponse {
   cvr: number;
   revenueChange: number;
   ordersChange: number;
+  unitsChange: number;
   aspChange: number;
   sessionsChange: number;
   cvrChange: number;
@@ -83,6 +84,12 @@ interface CircanaSummaryItem {
   units: number;
   avgPrice: number;
   storeCount: number;
+}
+
+interface CircanaSummaryResponse {
+  items: CircanaSummaryItem[];
+  circanaDataAsOf: string | null;
+  isStale: boolean;
 }
 
 interface CircanaProductsApiResponse {
@@ -145,9 +152,11 @@ export default function Traffic() {
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
   const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
   const isWalmartSelected = selectedIds.length === 0 || selectedIds.includes("walmart");
+  const hasShopify = selectedIds.length === 0 || selectedIds.includes("shopify");
   const CIRCANA_STORE_IDS = ["meijer", "cvs", "walgreens", "publix"];
   const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
-  console.log("[Traffic] selectedIds:", JSON.stringify(selectedIds), "| isTargetOnly:", isTargetOnly, "| isWalmartSelected:", isWalmartSelected);
+  const [circanaBannerDismissed, setCircanaBannerDismissed] = useState(false);
+  const dismissCircanaBanner = useCallback(() => setCircanaBannerDismissed(true), []);
 
   const { data: apiData, isLoading, error, refetch, isRefetching } = useQuery<TrafficApiResponse>({
     queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
@@ -170,7 +179,6 @@ export default function Traffic() {
   const { data: targetProductData, isLoading: isTargetLoading } = useQuery<TargetProductsApiResponse>({
     queryKey: ["target-products", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
-      console.log("[Traffic] target/products queryFn fired");
       const res = await fetch(
         `${API_BASE}/api/data/target/products?start=${dateRange.startDate}&end=${dateRange.endDate}`,
         { credentials: "include" },
@@ -278,7 +286,7 @@ export default function Traffic() {
     enabled: isWalmartSelected,
   });
 
-  const { data: circanaSummaryData, isLoading: isCircanaSummaryLoading } = useQuery<CircanaSummaryItem[]>({
+  const { data: circanaSummaryData, isLoading: isCircanaSummaryLoading } = useQuery<CircanaSummaryResponse>({
     queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
@@ -290,7 +298,7 @@ export default function Traffic() {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
-      return res.json() as Promise<CircanaSummaryItem[]>;
+      return res.json() as Promise<CircanaSummaryResponse>;
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -338,10 +346,8 @@ export default function Traffic() {
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
-    console.log("[Traffic memo] isTargetOnly:", isTargetOnly, "| targetProductData:", targetProductData ? `${targetProductData.products.length} products` : "undefined");
 
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
-    console.log("[Traffic ws] isWholesale:", isWholesale, "| wholesaleData:", wholesaleData ? `isEmpty=${wholesaleData.isEmpty} byStore=${wholesaleData.byStore.length}` : "undefined");
     const wsStores = wsActive
       ? (selectedIds.length > 0
           ? wholesaleData!.byStore.filter(s => {
@@ -352,11 +358,12 @@ export default function Traffic() {
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
-    console.log("[Traffic ws] wsActive:", wsActive, "| wsStores:", wsStores.length, "| wsRevenue:", wsRevenue, "| wsUnits:", wsUnits);
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
-    const circanaRevenue = !wsActive ? (circanaSummaryData ?? []).reduce((sum, s) => sum + s.revenue, 0) : 0;
-    const circanaUnits   = !wsActive ? (circanaSummaryData ?? []).reduce((sum, s) => sum + s.units,   0) : 0;
+    const circanaIsStale = circanaSummaryData?.isStale ?? false;
+    const circanaItems   = circanaSummaryData?.items ?? [];
+    const circanaRevenue = (!wsActive && !circanaIsStale) ? circanaItems.reduce((sum, s) => sum + s.revenue, 0) : 0;
+    const circanaUnits   = (!wsActive && !circanaIsStale) ? circanaItems.reduce((sum, s) => sum + s.units,   0) : 0;
     const displayRevenue = (wsRevenue ?? apiData.revenue ?? 0) + circanaRevenue;
     const displayUnits   = (wsUnits   ?? apiData.units   ?? 0) + circanaUnits;
 
@@ -366,10 +373,10 @@ export default function Traffic() {
 
     const kpis: TrafficKPI[] = [
       { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
-      { id: "units",    label: "Units",    value: displayUnits, formatted: Math.round(displayUnits).toLocaleString(), change: 0, positive: true, description: "Total units sold across all selected stores" },
+      { id: "units",    label: "Units",    value: displayUnits, formatted: Math.round(displayUnits).toLocaleString(), change: wsRevenue != null ? 0 : (apiData.unitsChange ?? 0), positive: true, description: "Total units sold across all selected stores" },
       { id: "asp",      label: "ASP",      value: wsAsp,        formatted: fmtCurrencyFull(wsAsp),       change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
       { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: apiData.sessionsChange ?? 0, positive: true, description: "Total GA4 sessions in period" },
-      { id: "cvr",      label: "CVR",      value: apiData.cvr      ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange     ?? 0, positive: true, description: "Orders ÷ Sessions" },
+      ...( hasShopify ? [{ id: "cvr", label: "CVR (DTC)", value: apiData.cvr ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange ?? 0, positive: true, description: "Shopify orders ÷ GA4 sessions (DTC channel only)" } as TrafficKPI] : []),
     ];
 
     // ── Products ──────────────────────────────────────────────────────────────
@@ -509,7 +516,6 @@ export default function Traffic() {
         .sort((a, b) => b.sales - a.sales)
         .map((p, i) => ({ ...p, isTop10: i < 10 }));
     }
-    console.log("[Traffic memo] products resolved:", products.length, "rows | first storeId:", products[0]?.storeId ?? "empty");
 
     // ── State Revenue ─────────────────────────────────────────────────────────
     const geoMap: Record<string, { revenue: number; orders: number; storeCount: number }> = {};
@@ -578,7 +584,6 @@ export default function Traffic() {
           }))
       : [];
 
-    console.log("[Traffic] walmartLocs debug | isWalmartSelected:", isWalmartSelected, "| selectedMapState:", selectedMapState, "| walmartStoresData stores:", walmartStoresData?.stores?.length ?? "undefined (query not resolved)");
     const walmartLocs: StoreLocation[] = (isWalmartSelected && !!selectedMapState)
       ? (walmartStoresData?.stores ?? [])
           .map(s => ({
@@ -599,10 +604,9 @@ export default function Traffic() {
       : [];
 
     const storeLocations: StoreLocation[] = [...targetLocs, ...walmartLocs];
-    console.log("[Traffic] storeLocations assembled:", storeLocations.length, "total |", targetLocs.length, "Target |", walmartLocs.length, "Walmart");
 
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana, hasShopify]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 
@@ -636,6 +640,27 @@ export default function Traffic() {
               ))}
             </div>
             <div className="h-64 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+          </div>
+        )}
+
+        {data && includesCircana && circanaSummaryData?.isStale && !circanaBannerDismissed && (
+          <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-xl border border-amber-400/40 bg-amber-50/60 dark:bg-amber-900/20 dark:border-amber-500/30 text-sm">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+              <span className="text-base">⚠</span>
+              <span>
+                <span className="font-semibold">Circana data not available for this date range.</span>
+                {circanaSummaryData.circanaDataAsOf
+                  ? ` Circana figures are excluded from totals — latest data is through ${new Date(circanaSummaryData.circanaDataAsOf + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`
+                  : " Circana figures are excluded from totals."}
+              </span>
+            </div>
+            <button
+              onClick={dismissCircanaBanner}
+              className="shrink-0 text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 font-medium leading-none"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
           </div>
         )}
 

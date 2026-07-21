@@ -39,6 +39,12 @@ interface CircanaSummaryItem {
   storeCount: number;
 }
 
+interface CircanaSummaryResponse {
+  items: CircanaSummaryItem[];
+  circanaDataAsOf: string | null;
+  isStale: boolean;
+}
+
 interface OverviewApiResponse {
   revenue: number;
   orders: number;
@@ -132,7 +138,7 @@ export default function Overview() {
     enabled: isWholesale,
   });
 
-  const { data: circanaData } = useQuery<CircanaSummaryItem[]>({
+  const { data: circanaData } = useQuery<CircanaSummaryResponse>({
     queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
       const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
@@ -144,7 +150,7 @@ export default function Overview() {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
-      return res.json() as Promise<CircanaSummaryItem[]>;
+      return res.json() as Promise<CircanaSummaryResponse>;
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -156,7 +162,6 @@ export default function Overview() {
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
-    console.log("[Overview ws] isWholesale:", isWholesale, "| wholesaleData:", wholesaleData ? `isEmpty=${wholesaleData.isEmpty} byStore=${wholesaleData.byStore.length}` : "undefined");
     const wsStores = wsActive
       ? (selectedIds.length > 0
           ? wholesaleData!.byStore.filter(s => {
@@ -167,9 +172,9 @@ export default function Overview() {
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
-    console.log("[Overview ws] wsActive:", wsActive, "| wsStores:", wsStores.length, "| wsRevenue:", wsRevenue, "| wsUnits:", wsUnits);
-    const circanaRevenue = !wsActive ? (circanaData ?? []).reduce((sum, s) => sum + s.revenue, 0) : 0;
-    const circanaUnits   = !wsActive ? (circanaData ?? []).reduce((sum, s) => sum + s.units,   0) : 0;
+    const circanaItems   = circanaData?.items ?? [];
+    const circanaRevenue = !wsActive ? circanaItems.reduce((sum, s) => sum + s.revenue, 0) : 0;
+    const circanaUnits   = !wsActive ? circanaItems.reduce((sum, s) => sum + s.units,   0) : 0;
     const displayRevenue = (wsRevenue  ?? apiData.revenue) + circanaRevenue;
     const displayUnits   = (wsUnits    ?? apiData.units ?? 0) + circanaUnits;
     const revenueLabel   = isWholesale ? "Wholesale Revenue" : "Total Revenue";
@@ -218,7 +223,7 @@ export default function Overview() {
 
     // ── Store Breakdown ───────────────────────────────────────────────────────
     const circanaStoreEntries = !wsActive
-      ? (circanaData ?? []).map(s => ({ storeId: s.storeId, revenue: s.revenue }))
+      ? circanaItems.map(s => ({ storeId: s.storeId, revenue: s.revenue }))
       : [];
     const wsStoreIds = new Set(wsStores.map(s => NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-")));
     const rawStoreBreakdown = wsActive

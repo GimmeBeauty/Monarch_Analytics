@@ -1251,6 +1251,7 @@ router.get("/traffic", authenticate, async (req, res) => {
       cvr:         Math.round(cvr * 10000) / 10000,
       revenueChange: hasPrior ? pct(effectiveRevenue, priorEffectiveRevenue) : 0,
       ordersChange:  hasPrior ? pct(effectiveOrders, priorEffectiveOrders) : 0,
+      unitsChange:   hasPrior ? pct(effectiveUnits, priorEffectiveUnits) : 0,
       aspChange:     hasPrior ? pct(asp, priorAsp) : 0,
       sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
       cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
@@ -2041,15 +2042,78 @@ const CIRCANA_RETAILER_TO_STORE: Record<string, string> = {
   "Walgreens Corp-RMA - Drug": "walgreens",
 };
 
-function circanaTimePeriod(start: string, end: string): string {
+// ── Dynamic Circana time-period cache ──────────────────────────────────────
+// Circana POS data is stored with fixed time_period label strings.
+// We discover the latest available labels at runtime rather than hardcoding.
+// Cache refreshes every hour.
+
+interface TrafficCircanaPeriodCache {
+  refreshedAt: number;
+  periods: Record<string, string>;
+}
+let _trafficCircanaCache: TrafficCircanaPeriodCache | null = null;
+const TRAFFIC_CIRCANA_CACHE_TTL_MS = 60 * 60 * 1000;
+
+const TRAFFIC_CIRCANA_FALLBACK: Record<string, string> = {
+  "4w":  "Latest 4 Week Pd Ending 04-19-26",
+  "13w": "Latest 13 Week Pd Ending 04-19-26",
+  "26w": "Latest 26 Week Pd Ending 04-19-26",
+  "52w": "Latest 52 Week Pd Ending 04-19-26",
+  "ytd": "Building Calendar Year 2026 Ending 05-10-26",
+};
+
+async function getTrafficCircanaPeriods(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (_trafficCircanaCache && now - _trafficCircanaCache.refreshedAt < TRAFFIC_CIRCANA_CACHE_TTL_MS) {
+    return _trafficCircanaCache.periods;
+  }
+  try {
+    const rows = await querySnowflake(`
+      SELECT DISTINCT time_period
+      FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
+      ORDER BY time_period DESC
+      FETCH FIRST 50 ROWS ONLY
+    `) as Record<string, unknown>[];
+    const labels = rows.map(r => String(r["TIME_PERIOD"] ?? r["time_period"] ?? "")).filter(Boolean);
+    const find = (re: RegExp) => labels.find(l => re.test(l)) ?? "";
+    const periods: Record<string, string> = {
+      "4w":  find(/Latest 4 Week/i)          || TRAFFIC_CIRCANA_FALLBACK["4w"]!,
+      "13w": find(/Latest 13 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["13w"]!,
+      "26w": find(/Latest 26 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["26w"]!,
+      "52w": find(/Latest 52 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["52w"]!,
+      "ytd": find(/Building Calendar Year/i) || TRAFFIC_CIRCANA_FALLBACK["ytd"]!,
+    };
+    _trafficCircanaCache = { refreshedAt: now, periods };
+    return periods;
+  } catch {
+    return TRAFFIC_CIRCANA_FALLBACK;
+  }
+}
+
+function parseCircanaEndDate(period: string): string | null {
+  const m = period.match(/Ending (\d{2})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return `20${m[3]}-${m[1]}-${m[2]}`;
+}
+
+async function resolveCircanaPeriod(start: string, end: string): Promise<{ timePeriod: string; dataAsOf: string | null; isStale: boolean }> {
   const s = new Date(start), e = new Date(end);
   const days = Math.round((e.getTime() - s.getTime()) / 86_400_000);
-  if (days <= 35)  return "Latest 4 Week Pd Ending 04-19-26";
-  if (days <= 100) return "Latest 13 Week Pd Ending 04-19-26";
-  if (days <= 190) return "Latest 26 Week Pd Ending 04-19-26";
-  if (s.getFullYear() <= 2025) return "Calendar Year 2025 Ending 12-28-25";
-  if (s.getFullYear() === 2026) return "Building Calendar Year 2026 Ending 05-10-26";
-  return "Latest 52 Week Pd Ending 04-19-26";
+  const periods = await getTrafficCircanaPeriods();
+
+  let bucket: string;
+  if (days <= 35)             bucket = "4w";
+  else if (days <= 100)       bucket = "13w";
+  else if (days <= 190)       bucket = "26w";
+  else if (s.getFullYear() <= 2025) bucket = "52w";
+  else                        bucket = "ytd";
+
+  const timePeriod = periods[bucket] ?? TRAFFIC_CIRCANA_FALLBACK[bucket]!;
+  const dataAsOf = parseCircanaEndDate(timePeriod);
+  const isStale = dataAsOf != null
+    ? Math.round((e.getTime() - new Date(dataAsOf).getTime()) / 86_400_000) > 2
+    : true;
+  return { timePeriod, dataAsOf, isStale };
 }
 
 // ─── GET /api/data/circana/summary ────────────────────────────────────────────
@@ -2061,7 +2125,7 @@ router.get("/circana/summary", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   const storeIds = parseStoreIds(storeIdsRaw);
-  const timePeriod = circanaTimePeriod(start, end);
+  const { timePeriod, dataAsOf, isStale } = await resolveCircanaPeriod(start, end);
 
   // Determine which retailers to include based on storeIds filter
   const circanaStoreIds = new Set(["meijer", "publix", "cvs", "walgreens"]);
@@ -2070,7 +2134,7 @@ router.get("/circana/summary", authenticate, async (req, res) => {
     : [...circanaStoreIds];
 
   if (activeStoreIds.length === 0) {
-    res.json([]);
+    res.json({ items: [], circanaDataAsOf: null, isStale: false });
     return;
   }
 
@@ -2094,7 +2158,7 @@ router.get("/circana/summary", authenticate, async (req, res) => {
       ORDER BY revenue DESC
     `);
 
-    const result = rows.map(row => {
+    const items = rows.map(row => {
       const retailer   = String(row["RETAILER"]    ?? row["retailer"]    ?? "");
       const revenue    = Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100;
       const units      = Number(row["UNITS"]      ?? row["units"]      ?? 0);
@@ -2104,7 +2168,7 @@ router.get("/circana/summary", authenticate, async (req, res) => {
       return { retailer, storeId, revenue, units, avgPrice, storeCount };
     });
 
-    res.json(result);
+    res.json({ items, circanaDataAsOf: dataAsOf, isStale });
   } catch (e) {
     req.log.error({ err: e }, "[data/circana/summary] Error:");
     res.status(500).json({ error: "Failed to query Circana summary data" });
@@ -2120,7 +2184,7 @@ router.get("/circana/products", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   const storeIds = parseStoreIds(storeIdsRaw);
-  const timePeriod = circanaTimePeriod(start, end);
+  const { timePeriod, dataAsOf, isStale } = await resolveCircanaPeriod(start, end);
 
   const circanaStoreIds = new Set(["meijer", "publix", "cvs", "walgreens"]);
   const activeStoreIds = storeIds.length > 0
@@ -2128,7 +2192,7 @@ router.get("/circana/products", authenticate, async (req, res) => {
     : [...circanaStoreIds];
 
   if (activeStoreIds.length === 0) {
-    res.json({ products: [], isEmpty: true });
+    res.json({ products: [], isEmpty: true, circanaDataAsOf: null, isStale: false });
     return;
   }
 
@@ -2179,7 +2243,7 @@ router.get("/circana/products", authenticate, async (req, res) => {
       };
     });
 
-    res.json({ products, isEmpty: products.length === 0 });
+    res.json({ products, isEmpty: products.length === 0, circanaDataAsOf: dataAsOf, isStale });
   } catch (e) {
     req.log.error({ err: e }, "[data/circana/products] Error:");
     res.status(500).json({ error: "Failed to query Circana products data" });
@@ -2432,11 +2496,13 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
             });
           }
           for (const sid of activeCircana) {
+            const allPoints = (byStore[sid] ?? []).sort((a, b) => a.date.localeCompare(b.date));
+            const filtered = allPoints.filter(p => p.date >= start && p.date <= end);
             results.push({
               storeId:   sid,
               storeName: TREND_STORE_LABELS[sid] ?? sid,
               color:     TREND_STORE_COLORS[sid] ?? "#888888",
-              data:      (byStore[sid] ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+              data:      filtered,
             });
           }
         }),
