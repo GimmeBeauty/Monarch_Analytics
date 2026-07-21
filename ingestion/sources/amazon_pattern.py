@@ -16,12 +16,17 @@ def run_amazon_ingestion(full_refresh=False):
     if full_refresh:
         start_date = "2025-01-01"
     else:
-        start_date = (date.today() - timedelta(days=3)).isoformat()
+        # 14-day rolling window (not 3) because Pattern's share view confirms orders
+        # with up to ~7 days of lag — a 3-day window misses late-confirming orders
+        # and causes daily revenue to appear ~50% lower than actual consumer POS revenue.
+        start_date = (date.today() - timedelta(days=14)).isoformat()
 
     end_date = date.today().isoformat()
     print(f"  Date range: {start_date} to {end_date}")
 
     # Sync sales
+    # REVENUE_TOTAL_USD is the consumer-facing POS price (what Amazon customers paid),
+    # NOT Pattern's remittance to Durham. This is the correct column for MSRP revenue.
     cur.execute(f"DELETE FROM MONARCH_RAW.COMMERCE.AMAZON_SALES_DAILY WHERE sale_date BETWEEN '{start_date}' AND '{end_date}'")
     cur.execute(f"""
 INSERT INTO MONARCH_RAW.COMMERCE.AMAZON_SALES_DAILY
