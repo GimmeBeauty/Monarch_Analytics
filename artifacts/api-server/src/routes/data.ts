@@ -2055,11 +2055,12 @@ let _trafficCircanaCache: TrafficCircanaPeriodCache | null = null;
 const TRAFFIC_CIRCANA_CACHE_TTL_MS = 60 * 60 * 1000;
 
 const TRAFFIC_CIRCANA_FALLBACK: Record<string, string> = {
-  "4w":  "Latest 4 Week Pd Ending 04-19-26",
-  "13w": "Latest 13 Week Pd Ending 04-19-26",
-  "26w": "Latest 26 Week Pd Ending 04-19-26",
-  "52w": "Latest 52 Week Pd Ending 04-19-26",
-  "ytd": "Building Calendar Year 2026 Ending 05-10-26",
+  "4w":   "Latest 4 Week Pd Ending 04-19-26",
+  "13w":  "Latest 13 Week Pd Ending 04-19-26",
+  "26w":  "Latest 26 Week Pd Ending 04-19-26",
+  "52w":  "Latest 52 Week Pd Ending 04-19-26",
+  "ytd":  "Building Calendar Year 2026 Ending 05-10-26",
+  "2025": "Calendar Year 2025 Ending 12-28-25",
 };
 
 async function getTrafficCircanaPeriods(): Promise<Record<string, string>> {
@@ -2077,11 +2078,12 @@ async function getTrafficCircanaPeriods(): Promise<Record<string, string>> {
     const labels = rows.map(r => String(r["TIME_PERIOD"] ?? r["time_period"] ?? "")).filter(Boolean);
     const find = (re: RegExp) => labels.find(l => re.test(l)) ?? "";
     const periods: Record<string, string> = {
-      "4w":  find(/Latest 4 Week/i)          || TRAFFIC_CIRCANA_FALLBACK["4w"]!,
-      "13w": find(/Latest 13 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["13w"]!,
-      "26w": find(/Latest 26 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["26w"]!,
-      "52w": find(/Latest 52 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["52w"]!,
-      "ytd": find(/Building Calendar Year/i) || TRAFFIC_CIRCANA_FALLBACK["ytd"]!,
+      "4w":   find(/Latest 4 Week/i)          || TRAFFIC_CIRCANA_FALLBACK["4w"]!,
+      "13w":  find(/Latest 13 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["13w"]!,
+      "26w":  find(/Latest 26 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["26w"]!,
+      "52w":  find(/Latest 52 Week/i)         || TRAFFIC_CIRCANA_FALLBACK["52w"]!,
+      "ytd":  find(/Building Calendar Year/i) || TRAFFIC_CIRCANA_FALLBACK["ytd"]!,
+      "2025": find(/Calendar Year 2025/i)     || TRAFFIC_CIRCANA_FALLBACK["2025"]!,
     };
     _trafficCircanaCache = { refreshedAt: now, periods };
     return periods;
@@ -2096,24 +2098,31 @@ function parseCircanaEndDate(period: string): string | null {
   return `20${m[3]}-${m[1]}-${m[2]}`;
 }
 
+/** Returns true when the Circana period end date is more than 2 days outside
+ *  the requested [start, end] range in either direction. */
+function isCircanaStale(dataAsOf: string, start: string, end: string): boolean {
+  const d = new Date(dataAsOf).getTime();
+  const s = new Date(start).getTime() - 2 * 86_400_000;
+  const e = new Date(end).getTime()   + 2 * 86_400_000;
+  return d < s || d > e;
+}
+
 async function resolveCircanaPeriod(start: string, end: string): Promise<{ timePeriod: string; dataAsOf: string | null; isStale: boolean }> {
-  const s = new Date(start), e = new Date(end);
-  const days = Math.round((e.getTime() - s.getTime()) / 86_400_000);
+  const sDate = new Date(start), eDate = new Date(end);
+  const days = Math.round((eDate.getTime() - sDate.getTime()) / 86_400_000);
   const periods = await getTrafficCircanaPeriods();
 
   let bucket: string;
-  if (days <= 35)             bucket = "4w";
-  else if (days <= 100)       bucket = "13w";
-  else if (days <= 190)       bucket = "26w";
-  else if (s.getFullYear() <= 2025) bucket = "52w";
-  else                        bucket = "ytd";
+  if (days <= 35)                      bucket = "4w";
+  else if (days <= 100)                bucket = "13w";
+  else if (days <= 190)                bucket = "26w";
+  else if (sDate.getFullYear() <= 2025) bucket = "2025";
+  else                                 bucket = "ytd";
 
   const timePeriod = periods[bucket] ?? TRAFFIC_CIRCANA_FALLBACK[bucket]!;
   const dataAsOf = parseCircanaEndDate(timePeriod);
-  const isStale = dataAsOf != null
-    ? Math.round((e.getTime() - new Date(dataAsOf).getTime()) / 86_400_000) > 2
-    : true;
-  return { timePeriod, dataAsOf, isStale };
+  const stale = dataAsOf != null ? isCircanaStale(dataAsOf, start, end) : true;
+  return { timePeriod, dataAsOf, isStale: stale };
 }
 
 // ─── GET /api/data/circana/summary ────────────────────────────────────────────
@@ -2168,7 +2177,9 @@ router.get("/circana/summary", authenticate, async (req, res) => {
       return { retailer, storeId, revenue, units, avgPrice, storeCount };
     });
 
-    res.json({ items, circanaDataAsOf: dataAsOf, isStale });
+    // No rows means the period label doesn't match any data — treat as no data available
+    const effectiveDataAsOf = items.length > 0 ? dataAsOf : null;
+    res.json({ items, circanaDataAsOf: effectiveDataAsOf, isStale: effectiveDataAsOf === null || isStale });
   } catch (e) {
     req.log.error({ err: e }, "[data/circana/summary] Error:");
     res.status(500).json({ error: "Failed to query Circana summary data" });
@@ -2243,7 +2254,8 @@ router.get("/circana/products", authenticate, async (req, res) => {
       };
     });
 
-    res.json({ products, isEmpty: products.length === 0, circanaDataAsOf: dataAsOf, isStale });
+    const effectiveDataAsOf = products.length > 0 ? dataAsOf : null;
+    res.json({ products, isEmpty: products.length === 0, circanaDataAsOf: effectiveDataAsOf, isStale: effectiveDataAsOf === null || isStale });
   } catch (e) {
     req.log.error({ err: e }, "[data/circana/products] Error:");
     res.status(500).json({ error: "Failed to query Circana products data" });
