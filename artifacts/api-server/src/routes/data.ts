@@ -670,6 +670,26 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    const amazonDailyQuery = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT sale_date AS summary_date, SUM(revenue) AS total_revenue
+          FROM ${DB_NAME}.COMMERCE.AMAZON_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+          GROUP BY sale_date
+          ORDER BY sale_date ASC
+        `)
+      : Promise.resolve([]);
+
+    const walmartDailyQuery = (isWalmartSelected && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT week_date AS summary_date, SUM(revenue) AS total_revenue
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE week_date BETWEEN '${start}' AND '${end}'
+          GROUP BY week_date
+          ORDER BY week_date ASC
+        `)
+      : Promise.resolve([]);
+
     const shopifySummaryQuery = (isShopifySelected && !isTargetOnly)
       ? querySnowflake(`
           SELECT SUM(revenue) AS shopify_revenue, SUM(order_count) AS shopify_orders, SUM(units_sold) AS shopify_units
@@ -702,6 +722,22 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    const priorAmazonQuery = (hasPrior && isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS amazon_revenue
+          FROM ${DB_NAME}.COMMERCE.AMAZON_SALES_DAILY
+          WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorWalmartQuery = (hasPrior && isWalmartSelected && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(revenue) AS walmart_revenue
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE week_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
     // Sessions from GA4_DAILY_SUMMARY — GA4 only tracks the Shopify website, so
     // this is skipped entirely (and reported as 0) when Shopify isn't selected.
     const ga4Query = isShopifySelected
@@ -722,7 +758,7 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, priorAmazonRows, priorWalmartRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value and spend from DAILY_AD_SUMMARY (filtered to active channels)
@@ -765,6 +801,10 @@ router.get("/overview", authenticate, async (req, res) => {
       priorTargetQuery,
       priorGa4Query,
       priorWebOrdersQuery,
+      amazonDailyQuery,
+      walmartDailyQuery,
+      priorAmazonQuery,
+      priorWalmartQuery,
     ]);
 
     const agg          = summaryRows[0] ?? {};
@@ -806,6 +846,26 @@ router.get("/overview", authenticate, async (req, res) => {
         if (date) { targetDailyMap[date] = rev; totalTargetRevForMer += rev; }
       }
       dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (targetDailyMap[d.date] ?? 0) }));
+    }
+
+    if (isAmazonSelected && !isWholesaleMode && !isTargetOnly) {
+      const amazonDailyMap: Record<string, number> = {};
+      for (const row of amazonDailyRows) {
+        const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+        const rev  = Number(row["TOTAL_REVENUE"]  ?? row["total_revenue"]  ?? 0);
+        if (date) { amazonDailyMap[date] = rev; }
+      }
+      dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (amazonDailyMap[d.date] ?? 0) }));
+    }
+
+    if (isWalmartSelected && !isTargetOnly) {
+      const walmartDailyMap: Record<string, number> = {};
+      for (const row of walmartDailyRows) {
+        const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+        const rev  = Number(row["TOTAL_REVENUE"]  ?? row["total_revenue"]  ?? 0);
+        if (date) { walmartDailyMap[date] = rev; }
+      }
+      dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (walmartDailyMap[d.date] ?? 0) }));
     }
 
     // Channel breakdown with metadata mapping
@@ -876,7 +936,15 @@ router.get("/overview", authenticate, async (req, res) => {
     const priorTargetRev = (hasPrior && includesTarget)
       ? Math.round(Number(priorTargetAgg["TARGET_REVENUE"] ?? priorTargetAgg["target_revenue"] ?? 0) * 100) / 100
       : 0;
-    const priorRevenue = isTargetOnly ? priorTargetRev : priorShopifyRev + priorTargetRev;
+    const priorAmazonAgg = (priorAmazonRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorAmazonRev = (hasPrior && isAmazonSelected && !isWholesaleMode && !isTargetOnly)
+      ? Math.round(Number(priorAmazonAgg["AMAZON_REVENUE"] ?? priorAmazonAgg["amazon_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const priorWalmartAgg = (priorWalmartRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorWalmartRev = (hasPrior && isWalmartSelected && !isTargetOnly)
+      ? Math.round(Number(priorWalmartAgg["WALMART_REVENUE"] ?? priorWalmartAgg["walmart_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const priorRevenue = isTargetOnly ? priorTargetRev : priorShopifyRev + priorTargetRev + priorAmazonRev + priorWalmartRev;
     const priorOrders  = isShopifySelected ? priorShopifyOrders : 0;
     const priorShopifyUnits = (hasPrior && isShopifySelected && !isTargetOnly)
       ? Number(priorShopifyAgg["SHOPIFY_UNITS"] ?? priorShopifyAgg["shopify_units"] ?? 0)
