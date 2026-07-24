@@ -201,6 +201,10 @@ GROUP BY ingestion_date""")
     cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
 SELECT ingestion_date,'criteo_ads',SUM(raw_data:spend::FLOAT),SUM(raw_data:impressions::INTEGER),SUM(raw_data:clicks::INTEGER),SUM(raw_data:attributedOrders::FLOAT),SUM(raw_data:attributedSales::FLOAT),AVG(raw_data:ctr::FLOAT),AVG(raw_data:cpc::FLOAT),CASE WHEN SUM(raw_data:impressions::INTEGER)>0 THEN SUM(raw_data:spend::FLOAT)/SUM(raw_data:impressions::INTEGER)*1000 ELSE 0 END,AVG(raw_data:roas::FLOAT)
 FROM MONARCH_RAW.ADS.CRITEO_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date""")
+    # amazon_ads uses a 14-day INSERT window (to catch late-arriving Amazon data), so it needs
+    # its own dedicated DELETE covering the same 14-day window before re-inserting.
+    # The shared 3-day DELETE above is not enough and caused duplicate rows to accumulate.
+    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-14,CURRENT_DATE()) AND channel = 'amazon_ads'")
     cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
 SELECT ad_date,'amazon_ads',SUM(spend),SUM(impressions),SUM(clicks),SUM(conversions),SUM(ad_revenue),
 CASE WHEN SUM(impressions)>0 THEN SUM(clicks)/SUM(impressions) ELSE 0 END,
