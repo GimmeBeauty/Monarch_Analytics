@@ -172,9 +172,10 @@ export default function Overview() {
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
-    const circanaItems   = circanaData?.items ?? [];
-    const circanaRevenue = !wsActive ? circanaItems.reduce((sum, s) => sum + s.revenue, 0) : 0;
-    const circanaUnits   = !wsActive ? circanaItems.reduce((sum, s) => sum + s.units,   0) : 0;
+    const circanaStale   = circanaData?.isStale ?? true;
+    const circanaItems   = (!wsActive && !circanaStale) ? (circanaData?.items ?? []) : [];
+    const circanaRevenue = circanaItems.reduce((sum, s) => sum + s.revenue, 0);
+    const circanaUnits   = circanaItems.reduce((sum, s) => sum + s.units,   0);
     const displayRevenue = (wsRevenue  ?? apiData.revenue) + circanaRevenue;
     const displayUnits   = (wsUnits    ?? apiData.units ?? 0) + circanaUnits;
     const revenueLabel   = isWholesale ? "Wholesale Revenue" : "Total Revenue";
