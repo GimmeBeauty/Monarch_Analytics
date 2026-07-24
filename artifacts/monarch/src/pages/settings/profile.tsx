@@ -42,6 +42,12 @@ export default function ProfileSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 500 * 1024) {
+      setSaveError("Image must be 500KB or smaller. Please resize the photo and try again.");
+      e.target.value = "";
+      return;
+    }
+
     setUploading(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -114,7 +120,7 @@ export default function ProfileSettings() {
                 </button>
               )}
               <p className="mt-2 text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
-                JPG, PNG or GIF. Max 5MB.
+                JPG, PNG or GIF. Max 500KB.
               </p>
               <input
                 ref={fileRef}

@@ -285,6 +285,13 @@ const MMM_CONFIGS: Record<string, MMMConfig> = {
     haloFactor: 0.12, haloChannels: ["google-ads", "amazon-ads"],
     rSquared: 0.65, mape: 0.182, pValue: 0.12,
   },
+  "display-ads": {
+    gamma: 1.4, saturationRatio: 0.32,
+    incrementalityFactor: 0.58,
+    adstockDecay: 0.38, peakLagDays: 4,
+    haloFactor: 0.09, haloChannels: ["google-ads", "amazon-ads"],
+    rSquared: 0.63, mape: 0.195, pValue: 0.14,
+  },
 };
 
 const DEFAULT_MMM_CONFIG: MMMConfig = {
