@@ -6,6 +6,7 @@ const KPI_ICONS: Record<string, React.FC<{ className?: string }>> = {
   revenue:   DollarSign,
   units:     Package,
   pspw:      Store,
+  dpsw:      Store,
   adSales:   Megaphone,
   adRevenue: AdRev,
   mer:       BarChart2,

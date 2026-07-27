@@ -1239,6 +1239,8 @@ router.get("/traffic", authenticate, async (req, res) => {
     const walmartTrafficRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartTrafficAgg["WALMART_REVENUE"] ?? walmartTrafficAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
     const walmartTrafficUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartTrafficAgg["WALMART_UNITS"] ?? walmartTrafficAgg["walmart_units"] ?? 0) : 0;
     const shopifyTrafficRev = isShopifySelected && !isTargetOnly ? totalRevenue : 0;
+    const targetRevenueForDpsw  = isTargetOnly ? totalRevenue : (includesTarget ? targetTrafficRev : 0);
+    const walmartRevenueForDpsw = walmartTrafficRev;
 
     const amazonTrafficRev   = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
       ? Math.round((amazonProductRows as Array<Record<string, unknown>>).reduce((s, r) => s + Number(r["REVENUE"] ?? r["revenue"] ?? 0), 0) * 100) / 100
@@ -1323,6 +1325,8 @@ router.get("/traffic", authenticate, async (req, res) => {
       aspChange:     hasPrior ? pct(asp, priorAsp) : 0,
       sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
       cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
+      targetRevenue:  Math.round(targetRevenueForDpsw * 100) / 100,
+      walmartRevenue: Math.round(walmartRevenueForDpsw * 100) / 100,
       products,
       stateRevenue,
       isEmpty,

@@ -42,6 +42,8 @@ interface TrafficApiResponse {
   aspChange: number;
   sessionsChange: number;
   cvrChange: number;
+  targetRevenue: number;
+  walmartRevenue: number;
   products: Array<{ id: string; productName: string; sku?: string; revenue: number; orders: number; units: number }>;
   stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
   isEmpty: boolean;
@@ -371,10 +373,39 @@ export default function Traffic() {
       ? wsRevenue / displayUnits
       : displayUnits > 0 ? displayRevenue / displayUnits : (apiData.asp ?? 0);
 
+    // ── $ Per Store Per Week (DPSW) ──────────────────────────────────────────
+    // Only Target and Walmart have verified store counts today.
+    const targetRevenue  = wsActive ? (wholesaleData!.byStore.find(s => s.storeName === "Target")?.revenue ?? 0)  : (apiData.targetRevenue  ?? 0);
+    const walmartRevenue = wsActive ? (wholesaleData!.byStore.find(s => s.storeName === "Walmart")?.revenue ?? 0) : (apiData.walmartRevenue ?? 0);
+    const [dpswStartY, dpswStartM, dpswStartD] = dateRange.startDate.split("-").map(Number);
+    const [dpswEndY, dpswEndM, dpswEndD] = dateRange.endDate.split("-").map(Number);
+    const numWeeks = (Math.round(
+      (new Date(dpswEndY, dpswEndM - 1, dpswEndD).getTime() - new Date(dpswStartY, dpswStartM - 1, dpswStartD).getTime()) / 86_400_000
+    ) + 1) / 7;
+    const selectedSet        = new Set(selectedIds);
+    const isAllStores        = selectedIds.length === 0;
+    const isTargetOnlySel    = selectedIds.length === 1 && selectedSet.has("target");
+    const isWalmartOnlySel   = selectedIds.length === 1 && selectedSet.has("walmart");
+    const isTargetWalmartSel = selectedIds.length === 2 && selectedSet.has("target") && selectedSet.has("walmart");
+
+    let dpswValue: number | null = null;
+    let dpswDescription = "Revenue ÷ verified store count ÷ weeks in period. Currently available for Target and Walmart only.";
+    if (isTargetOnlySel) {
+      dpswValue = targetRevenue / 2202 / numWeeks;
+    } else if (isWalmartOnlySel) {
+      dpswValue = walmartRevenue / 4604 / numWeeks;
+    } else if (isTargetWalmartSel) {
+      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
+    } else if (isAllStores) {
+      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
+      dpswDescription = "Based on Target & Walmart store counts only";
+    }
+
     const kpis: TrafficKPI[] = [
       { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
       { id: "units",    label: "Units",    value: displayUnits, formatted: Math.round(displayUnits).toLocaleString(), change: wsRevenue != null ? 0 : (apiData.unitsChange ?? 0), positive: true, description: "Total units sold across all selected stores" },
       { id: "asp",      label: "ASP",      value: wsAsp,        formatted: fmtCurrencyFull(wsAsp),       change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
+      { id: "dpsw",     label: "$ Per Store Per Week", value: dpswValue ?? 0, formatted: dpswValue != null ? `$${dpswValue.toFixed(2)}` : "—", change: 0, positive: true, description: dpswDescription },
       { id: "sessions", label: "Sessions", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(), change: apiData.sessionsChange ?? 0, positive: true, description: "Total GA4 sessions in period" },
       ...( hasShopify ? [{ id: "cvr", label: "CVR (DTC)", value: apiData.cvr ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`, change: apiData.cvrChange ?? 0, positive: true, description: "Shopify orders ÷ GA4 sessions (DTC channel only)" } as TrafficKPI] : []),
     ];
@@ -606,7 +637,7 @@ export default function Traffic() {
     const storeLocations: StoreLocation[] = [...targetLocs, ...walmartLocs];
 
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana, hasShopify]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana, hasShopify, dateRange]);
 
   const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
 

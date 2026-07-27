@@ -187,41 +187,6 @@ export default function Overview() {
       ? wsRevenue / displayUnits
       : displayUnits > 0 ? displayRevenue / displayUnits : (apiData.asp ?? 0);
 
-    const kpis: KPIMetric[] = [
-      { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrencyWhole(displayRevenue),   change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
-      { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrencyWhole(apiData.spend),    change: 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
-      { id: "mer",     label: "MER",               value: wsMer,            formatted: fmtRatio(wsMer),               change: 0, positive: true,  format: "ratio",    description: isWholesale ? "Wholesale Revenue ÷ Ad Spend" : "Marketing Efficiency Ratio — Total Revenue ÷ Total Ad Spend" },
-      { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
-      { id: "units",   label: "Units",              value: displayUnits,     formatted: Math.round(displayUnits).toLocaleString(), change: 0, positive: true,  format: "number",   description: "Total units sold across all selected stores" },
-      { id: "asp",     label: "ASP",                value: wsAsp,            formatted: fmtCurrencyFull(wsAsp),        change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, format: "currency", description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
-      { id: "sessions", label: "Sessions / Views", value: apiData.sessions ?? 0, formatted: (apiData.sessions ?? 0).toLocaleString(),         change: apiData.sessionsChange ?? 0, positive: true, format: "number",  description: "Total GA4 sessions in period" },
-      { id: "cvr",      label: "Conversion Rate",  value: apiData.cvr     ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`,        change: apiData.cvrChange     ?? 0, positive: true, format: "percent", description: "Web orders ÷ GA4 sessions" },
-    ];
-
-    // ── Trend Series ─────────────────────────────────────────────────────────
-    // In wholesale mode, map wholesale revenue onto the full date range from apiData
-    // so the chart always has a point for every day (days with no NetSuite transactions = 0).
-    const trendSeries: TrendPoint[] = wsActive
-      ? (() => {
-          const wsRevByDate = new Map((wholesaleData!.dailySeries ?? []).map(d => [d.date, d.revenue]));
-          return apiData.dailySeries.map(d => ({
-            date:    d.date,
-            label:   fmtAxisDate(d.date),
-            revenue: wsRevByDate.get(d.date) ?? 0,
-            spend:   0,
-            mer:     0,
-            roas:    0,
-          }));
-        })()
-      : apiData.dailySeries.map(d => ({
-          date:    d.date,
-          label:   fmtAxisDate(d.date),
-          revenue: d.revenue,
-          spend:   d.spend,
-          mer:     d.adSpend > 0 ? d.revenue / d.adSpend : 0,
-          roas:    d.spend > 0 && d.adRevenue > 0 ? d.adRevenue / d.spend : 0,
-        }));
-
     // ── Store Breakdown ───────────────────────────────────────────────────────
     const circanaStoreEntries = !wsActive
       ? circanaItems.map(s => ({ storeId: s.storeId, revenue: s.revenue }))
@@ -253,6 +218,69 @@ export default function Overview() {
       })
       .sort((a, b) => b.revenue - a.revenue);
 
+    // ── $ Per Store Per Week (DPSW) ──────────────────────────────────────────
+    // Only Target and Walmart have verified store counts today.
+    const targetRevenue  = rawStoreBreakdown.filter(s => s.storeId === "target").reduce((s, x) => s + x.revenue, 0);
+    const walmartRevenue = rawStoreBreakdown.filter(s => s.storeId === "walmart").reduce((s, x) => s + x.revenue, 0);
+    const [dpswStartY, dpswStartM, dpswStartD] = dateRange.startDate.split("-").map(Number);
+    const [dpswEndY, dpswEndM, dpswEndD] = dateRange.endDate.split("-").map(Number);
+    const numWeeks = (Math.round(
+      (new Date(dpswEndY, dpswEndM - 1, dpswEndD).getTime() - new Date(dpswStartY, dpswStartM - 1, dpswStartD).getTime()) / 86_400_000
+    ) + 1) / 7;
+    const selectedSet        = new Set(selectedIds);
+    const isAllStores        = selectedIds.length === 0;
+    const isTargetOnlySel    = selectedIds.length === 1 && selectedSet.has("target");
+    const isWalmartOnlySel   = selectedIds.length === 1 && selectedSet.has("walmart");
+    const isTargetWalmartSel = selectedIds.length === 2 && selectedSet.has("target") && selectedSet.has("walmart");
+
+    let dpswValue: number | null = null;
+    let dpswDescription = "Revenue ÷ verified store count ÷ weeks in period. Currently available for Target and Walmart only.";
+    if (isTargetOnlySel) {
+      dpswValue = targetRevenue / 2202 / numWeeks;
+    } else if (isWalmartOnlySel) {
+      dpswValue = walmartRevenue / 4604 / numWeeks;
+    } else if (isTargetWalmartSel) {
+      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
+    } else if (isAllStores) {
+      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
+      dpswDescription = "Based on Target & Walmart store counts only";
+    }
+
+    const kpis: KPIMetric[] = [
+      { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrencyWhole(displayRevenue),   change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
+      { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrencyWhole(apiData.spend),    change: 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
+      { id: "mer",     label: "MER",               value: wsMer,            formatted: fmtRatio(wsMer),               change: 0, positive: true,  format: "ratio",    description: isWholesale ? "Wholesale Revenue ÷ Ad Spend" : "Marketing Efficiency Ratio — Total Revenue ÷ Total Ad Spend" },
+      { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
+      { id: "units",   label: "Units",              value: displayUnits,     formatted: Math.round(displayUnits).toLocaleString(), change: 0, positive: true,  format: "number",   description: "Total units sold across all selected stores" },
+      { id: "asp",     label: "ASP",                value: wsAsp,            formatted: fmtCurrencyFull(wsAsp),        change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, format: "currency", description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
+      { id: "dpsw",    label: "$ Per Store Per Week", value: dpswValue ?? 0, formatted: dpswValue != null ? `$${dpswValue.toFixed(2)}` : "—", change: 0, positive: true, format: "currency", description: dpswDescription },
+      { id: "cvr",      label: "Conversion Rate",  value: apiData.cvr     ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`,        change: apiData.cvrChange     ?? 0, positive: true, format: "percent", description: "Web orders ÷ GA4 sessions" },
+    ];
+
+    // ── Trend Series ─────────────────────────────────────────────────────────
+    // In wholesale mode, map wholesale revenue onto the full date range from apiData
+    // so the chart always has a point for every day (days with no NetSuite transactions = 0).
+    const trendSeries: TrendPoint[] = wsActive
+      ? (() => {
+          const wsRevByDate = new Map((wholesaleData!.dailySeries ?? []).map(d => [d.date, d.revenue]));
+          return apiData.dailySeries.map(d => ({
+            date:    d.date,
+            label:   fmtAxisDate(d.date),
+            revenue: wsRevByDate.get(d.date) ?? 0,
+            spend:   0,
+            mer:     0,
+            roas:    0,
+          }));
+        })()
+      : apiData.dailySeries.map(d => ({
+          date:    d.date,
+          label:   fmtAxisDate(d.date),
+          revenue: d.revenue,
+          spend:   d.spend,
+          mer:     d.adSpend > 0 ? d.revenue / d.adSpend : 0,
+          roas:    d.spend > 0 && d.adRevenue > 0 ? d.adRevenue / d.spend : 0,
+        }));
+
     // ── Channel Breakdown ─────────────────────────────────────────────────────
     const totalSpend = apiData.channelBreakdown.reduce((s, c) => s + c.spend, 0);
     const channelBreakdown: ChannelBreakdown[] = apiData.channelBreakdown
@@ -282,7 +310,7 @@ export default function Overview() {
     const activityFeed: ActivityEvent[] = [];
 
     return { kpis, trendSeries, storeBreakdown, channelBreakdown, contributionByStore, contributionByChannel, activityFeed };
-  }, [apiData, isWholesale, wholesaleData, selectedIds, circanaData]);
+  }, [apiData, isWholesale, wholesaleData, selectedIds, circanaData, dateRange]);
 
   const isEmpty = !isLoading && (!apiData || apiData.isEmpty || !data);
 
