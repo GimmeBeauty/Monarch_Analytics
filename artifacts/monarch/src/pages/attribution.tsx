@@ -209,11 +209,12 @@ function BlendedMetricCard({ m }: { m: BlendedMetric }) {
 
 // ─── Small KPI Card ───────────────────────────────────────────────────────────
 
-function SmallKpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function SmallKpiCard({ label, value, sub, tooltip }: { label: string; value: string; sub?: string; tooltip?: string }) {
   return (
     <div className="rounded-xl p-3.5 bg-[#FFBC80]/6 border border-[#FFBC80]/15">
-      <p className="text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
+      <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
         {label}
+        {tooltip && <MetricTooltip content={tooltip} />}
       </p>
       <p className="text-base font-black tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2] leading-none">
         {value}
@@ -279,6 +280,15 @@ interface RoundelDetailData {
   isEmpty: boolean;
 }
 
+interface WalmartConnectDetailData {
+  channel: "walmart_connect";
+  kpis: {
+    impressions: number; clicks: number; ctr: number; spend: number;
+    revenue14d: number; roas14d: number; unitsSold14d: number; instoreSales14d: number;
+  };
+  isEmpty: boolean;
+}
+
 interface BlendedSourceRow {
   source: string;
   spend: number; impressions: number; revenue: number; roas: number;
@@ -308,6 +318,7 @@ type ChannelDetailData =
   | PinterestDetailData
   | CriteoDetailData
   | RoundelDetailData
+  | WalmartConnectDetailData
   | CtvProgrammaticDetailData
   | DisplayDetailData;
 
@@ -317,6 +328,7 @@ const CHANNEL_ID_TO_PARAM: Record<string, string> = {
   "pinterest-ads":    "pinterest",
   "criteo-ads":       "criteo",
   "roundel-target":   "roundel",
+  "walmart-connect":  "walmart_connect",
   "ctv-programmatic": "ctv_programmatic",
   "display-ads":      "display_ads",
 };
@@ -609,6 +621,30 @@ function RoundelDetailPanel({ data }: { data: RoundelDetailData }) {
   );
 }
 
+// ─── Walmart Connect Detail Panel ─────────────────────────────────────────────
+
+function WalmartConnectDetailPanel({ data }: { data: WalmartConnectDetailData }) {
+  const k = data.kpis;
+  const attributionNote = "Walmart Connect uses a 14-day attribution window for sales and conversions.";
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <SmallKpiCard label="Impressions" value={fmtNumber(k.impressions)} />
+      <SmallKpiCard label="Clicks"      value={fmtNumber(k.clicks)} />
+      <SmallKpiCard label="CTR"         value={`${k.ctr.toFixed(2)}%`} />
+      <SmallKpiCard label="Spend"       value={fmtCurrency(k.spend)} />
+      <SmallKpiCard label="Revenue (14-Day)" value={fmtCurrency(k.revenue14d)} tooltip={attributionNote} />
+      <SmallKpiCard
+        label="ROAS (14-Day)"
+        value={`${k.roas14d.toFixed(2)}x`}
+        sub={k.roas14d >= 3 ? "Strong" : k.roas14d >= 1.5 ? "Moderate" : "Below target"}
+        tooltip={attributionNote}
+      />
+      <SmallKpiCard label="Units Sold (14-Day)"                value={fmtNumber(k.unitsSold14d)}      tooltip={attributionNote} />
+      <SmallKpiCard label="In-Store Advertised Sales (14-Day)" value={fmtCurrency(k.instoreSales14d)} tooltip={attributionNote} />
+    </div>
+  );
+}
+
 // ─── Blended Source/Campaign Table (shared by CTV/Programmatic + Display) ────
 
 function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend: number; impressions: number; revenue: number; roas: number }; bySource: BlendedSourceRow[]; byCampaign: BlendedCampaignRow[] }; accentColor: string; note: string }) {
@@ -737,6 +773,7 @@ function ChannelDetailPanel({ channelId, start, end }: { channelId: string; star
   if (data.channel === "pinterest") return <PinterestDetailPanel data={data} />;
   if (data.channel === "criteo")    return <CriteoDetailPanel    data={data} />;
   if (data.channel === "roundel")   return <RoundelDetailPanel   data={data} />;
+  if (data.channel === "walmart_connect") return <WalmartConnectDetailPanel data={data} />;
   if (data.channel === "ctv_programmatic") return <CtvProgrammaticDetailPanel data={data} />;
   if (data.channel === "display_ads")      return <DisplayDetailPanel         data={data} />;
 

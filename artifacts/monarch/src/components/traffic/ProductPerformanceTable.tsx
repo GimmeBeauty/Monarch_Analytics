@@ -6,7 +6,7 @@ import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortKey = "productName"|"storeName"|"sales"|"units"|"storeCount"|"avgSellPrice"|"pctSalesOnline";
+type SortKey = "productName"|"storeName"|"sales"|"units"|"storeCount"|"avgSellPrice";
 type SortDir = "asc"|"desc";
 
 interface Filters {
@@ -76,7 +76,9 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
   const [limit, setLimit]             = useState(PAGE_SIZE);
   const [visibleCols, setVisibleCols] = useState({
     avgSellPrice: true,
-    pctSalesOnline: false,
+    pctOnline: false,
+    onlineRevenue: false,
+    instoreRevenue: false,
   });
 
   const toggleSort = useCallback((key: SortKey) => {
@@ -187,7 +189,9 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
                 {(Object.keys(visibleCols) as (keyof typeof visibleCols)[]).map(key => {
                   const labels: Record<string,string> = {
                     avgSellPrice:"Avg Sell Price",
-                    pctSalesOnline:"% of Sales Online",
+                    pctOnline:"% Online",
+                    onlineRevenue:"Online $",
+                    instoreRevenue:"In-Store $",
                   };
                   return (
                     <label key={key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#FFBC80]/10 cursor-pointer">
@@ -286,7 +290,30 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
               <Th col="units"       label="Units"       tooltip="Number of units sold. Badge shows % change vs the prior period." />
               {hasStoreCount && !isWholesale && <Th col="storeCount" label="Store Count" tooltip="Number of store locations that carried this product during the period." />}
               {visibleCols.avgSellPrice  && <Th col="avgSellPrice"   label="Avg Price"    tooltip="Average selling price per unit (Revenue ÷ Units)." />}
-              {visibleCols.pctSalesOnline && <Th col="pctSalesOnline" label="Online %"    tooltip="Percentage of total sales generated through online / e-commerce channels." />}
+              {visibleCols.pctOnline && (
+                <th className="px-3 py-2.5 text-right">
+                  <span className="flex items-center justify-end gap-1 text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                    % Online
+                    <MetricTooltip content="(Drive Up + Shipt revenue) ÷ total revenue × 100. Target only — other retailers don't have this breakdown available yet." />
+                  </span>
+                </th>
+              )}
+              {visibleCols.onlineRevenue && (
+                <th className="px-3 py-2.5 text-right">
+                  <span className="flex items-center justify-end gap-1 text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                    Online $
+                    <MetricTooltip content="Drive Up + Shipt revenue. Target only — other retailers don't have this breakdown available yet." />
+                  </span>
+                </th>
+              )}
+              {visibleCols.instoreRevenue && (
+                <th className="px-3 py-2.5 text-right">
+                  <span className="flex items-center justify-end gap-1 text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                    In-Store $
+                    <MetricTooltip content="Revenue minus Drive Up and Shipt revenue. Target only — other retailers don't have this breakdown available yet." />
+                  </span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -366,14 +393,19 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
                       ${row.avgSellPrice.toFixed(2)}
                     </td>
                   )}
-                  {visibleCols.pctSalesOnline && (
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-12 h-1.5 rounded-full bg-[#FFBC80]/20 overflow-hidden">
-                          <div className="h-full rounded-full" style={{width:`${row.pctSalesOnline}%`,background:"linear-gradient(90deg,#FFBC80,#FFE29A)"}}/>
-                        </div>
-                        <span className="text-xs tabular-nums text-[#3A3A3A]/65 dark:text-[#FFF9F2]/50">{row.pctSalesOnline.toFixed(0)}%</span>
-                      </div>
+                  {visibleCols.pctOnline && (
+                    <td className="px-3 py-2.5 text-right text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                      {row.storeId === "target" && row.pctOnline != null ? `${row.pctOnline.toFixed(1)}%` : "—"}
+                    </td>
+                  )}
+                  {visibleCols.onlineRevenue && (
+                    <td className="px-3 py-2.5 text-right text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                      {row.storeId === "target" && row.onlineRevenue != null ? fmt(row.onlineRevenue) : "—"}
+                    </td>
+                  )}
+                  {visibleCols.instoreRevenue && (
+                    <td className="px-3 py-2.5 text-right text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                      {row.storeId === "target" && row.instoreRevenue != null ? fmt(row.instoreRevenue) : "—"}
                     </td>
                   )}
                 </tr>

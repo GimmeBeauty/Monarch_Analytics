@@ -90,10 +90,12 @@ export interface ProductRow {
   avgSellPrice: number;
   changeInSales: number;   // %
   conversionRate: number;  // %
-  pctSalesOnline: number;  // %
   pageViews: number;
   storeCount?: number;
   isTop10: boolean;
+  onlineRevenue?: number;
+  instoreRevenue?: number;
+  pctOnline?: number | null;
 }
 
 export interface StateRevenue {

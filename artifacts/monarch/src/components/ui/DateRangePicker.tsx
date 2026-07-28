@@ -246,6 +246,8 @@ export function DateRangePicker({ onClose }: Props) {
     { key: "last4w", label: "Last 4 Weeks" },
     { key: "last8w", label: "Last 8 Weeks" },
     { key: "last52w", label: "Last 52 Weeks" },
+    { key: "mtd", label: "Month to Date" },
+    { key: "ytd", label: "Year to Date" },
   ];
 
   const quarterItems = getQuarterPresets();

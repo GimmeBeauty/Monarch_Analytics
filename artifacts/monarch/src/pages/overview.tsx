@@ -12,6 +12,7 @@ import { useStoreFilter } from "@/context/StoreFilterContext";
 import { usePricingMode } from "@/context/PricingModeContext";
 import { API_BASE } from "@/lib/apiBase";
 import type { KPIMetric, TrendPoint, StoreBreakdown, ChannelBreakdown, ContributionSlice, ActivityEvent } from "@/lib/overviewData";
+import { buildActivityFeed } from "@/lib/overviewData";
 import { storeById } from "@/lib/storeData";
 import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
 
@@ -61,6 +62,8 @@ interface OverviewApiResponse {
   aspChange: number;
   sessionsChange: number;
   cvrChange: number;
+  targetInstoreRevenue: number;
+  targetDistributionPoints: number;
   storeBreakdown: Array<{ storeId: string; revenue: number }>;
   channelBreakdown: Array<{ channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[]; spend: number; revenue: number }>;
   dailySeries: Array<{ date: string; revenue: number; spend: number; adRevenue: number; adSpend: number }>;
@@ -218,33 +221,13 @@ export default function Overview() {
       })
       .sort((a, b) => b.revenue - a.revenue);
 
-    // ── $ Per Store Per Week (DPSW) ──────────────────────────────────────────
-    // Only Target and Walmart have verified store counts today.
-    const targetRevenue  = rawStoreBreakdown.filter(s => s.storeId === "target").reduce((s, x) => s + x.revenue, 0);
-    const walmartRevenue = rawStoreBreakdown.filter(s => s.storeId === "walmart").reduce((s, x) => s + x.revenue, 0);
-    const [dpswStartY, dpswStartM, dpswStartD] = dateRange.startDate.split("-").map(Number);
-    const [dpswEndY, dpswEndM, dpswEndD] = dateRange.endDate.split("-").map(Number);
-    const numWeeks = (Math.round(
-      (new Date(dpswEndY, dpswEndM - 1, dpswEndD).getTime() - new Date(dpswStartY, dpswStartM - 1, dpswStartD).getTime()) / 86_400_000
-    ) + 1) / 7;
-    const selectedSet        = new Set(selectedIds);
-    const isAllStores        = selectedIds.length === 0;
-    const isTargetOnlySel    = selectedIds.length === 1 && selectedSet.has("target");
-    const isWalmartOnlySel   = selectedIds.length === 1 && selectedSet.has("walmart");
-    const isTargetWalmartSel = selectedIds.length === 2 && selectedSet.has("target") && selectedSet.has("walmart");
-
-    let dpswValue: number | null = null;
-    let dpswDescription = "Revenue ÷ verified store count ÷ weeks in period. Currently available for Target and Walmart only.";
-    if (isTargetOnlySel) {
-      dpswValue = targetRevenue / 2202 / numWeeks;
-    } else if (isWalmartOnlySel) {
-      dpswValue = walmartRevenue / 4604 / numWeeks;
-    } else if (isTargetWalmartSel) {
-      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
-    } else if (isAllStores) {
-      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
-      dpswDescription = "Based on Target & Walmart store counts only";
-    }
+    // ── $ Per Store Per Week (DPSW) — Target only ─────────────────────────────
+    const dpswValue = (includesTarget && (apiData.targetDistributionPoints ?? 0) > 0)
+      ? (apiData.targetInstoreRevenue ?? 0) / apiData.targetDistributionPoints
+      : null;
+    const dpswDescription = includesTarget
+      ? "Target in-store sales per store per week, weighted by each SKU's store distribution. Approximately within 9% of Target's internal reporting."
+      : "Available for Target only";
 
     const kpis: KPIMetric[] = [
       { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrencyWhole(displayRevenue),   change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
@@ -307,7 +290,7 @@ export default function Overview() {
       name: c.label, value: c.contribution, color: c.color,
     }));
 
-    const activityFeed: ActivityEvent[] = [];
+    const activityFeed: ActivityEvent[] = buildActivityFeed(selectedIds, [], dateRange.endDate);
 
     return { kpis, trendSeries, storeBreakdown, channelBreakdown, contributionByStore, contributionByChannel, activityFeed };
   }, [apiData, isWholesale, wholesaleData, selectedIds, circanaData, dateRange]);

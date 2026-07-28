@@ -23,6 +23,7 @@ interface TrendPoint {
   date: string;
   revenue: number;
   units: number;
+  dpsw?: number;
 }
 
 interface StoreTrend {
@@ -61,7 +62,7 @@ function formatUnits(v: number) {
   return String(Math.round(v));
 }
 
-function formatASP(v: number) {
+function formatDPSW(v: number) {
   return `$${v.toFixed(2)}`;
 }
 
@@ -91,18 +92,18 @@ function CustomTooltip({
       <p className="text-xs text-muted-foreground mb-1.5">{formatDate(date)}</p>
       {dataLines.map((entry) => {
         const key = String(entry.dataKey ?? "");
-        const isRev = key.endsWith("_revenue") || key.endsWith("_asp");
-        const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_asp`);
+        const isRev = key.endsWith("_revenue") || key.endsWith("_dpsw");
+        const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_dpsw`);
         const suffix = metric === "volume"
           ? (key.endsWith("_revenue") ? " Rev" : " Units")
           : metric === "efficiency"
-            ? (key.endsWith("_revenue") ? " Rev" : " ASP")
+            ? (key.endsWith("_revenue") ? " Rev" : " DPSW")
             : "";
         const name = store ? store.storeName + suffix : key;
         const val = Number(entry.value ?? 0);
         return (
           <p key={key} className="text-sm font-semibold" style={{ color: entry.color }}>
-            {name}: {key.endsWith("_asp") ? formatASP(val) : key.endsWith("_revenue") ? formatCurrency(val) : formatUnits(val)}
+            {name}: {key.endsWith("_dpsw") ? formatDPSW(val) : key.endsWith("_revenue") ? formatCurrency(val) : formatUnits(val)}
           </p>
         );
       })}
@@ -408,7 +409,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
         const entry = dateMap.get(point.date)!;
         entry[`${store.storeId}_revenue`] = point.revenue;
         entry[`${store.storeId}_units`]   = point.units;
-        entry[`${store.storeId}_asp`]     = point.units > 0 ? point.revenue / point.units : undefined;
+        entry[`${store.storeId}_dpsw`]    = point.dpsw;
       }
     }
     return Array.from(dateMap.entries())
@@ -421,6 +422,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
   }, [trends, notesByDate]);
 
   const isSingleStore = (trends?.length ?? 0) === 1;
+  const isTargetOnlyChart = selectedStoreIds.length === 1 && selectedStoreIds[0] === "target";
   const hasData = chartData.length > 0;
 
   function invalidateNotes() {
@@ -477,7 +479,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               const tooltips: Record<Metric, string> = {
                 revenue:    "Total net revenue per day across selected stores.",
                 volume:     "Units sold per day alongside revenue — dual-axis view.",
-                efficiency: "Average Selling Price (Revenue ÷ Units) alongside revenue — highlights pricing trends.",
+                efficiency: "$ Per Store Per Week (Target only) alongside revenue — Target in-store sales per store per week, weighted by each SKU's store distribution. Approximately within 9% of Target's internal reporting.",
               };
               return (
                 <span key={m} className="flex items-center gap-0.5">
@@ -553,7 +555,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                 <YAxis
                   yAxisId="right"
                   orientation="right"
-                  tickFormatter={metric === "volume" ? formatUnits : formatASP}
+                  tickFormatter={metric === "volume" ? formatUnits : formatDPSW}
                   tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
                   axisLine={false}
                   tickLine={false}
@@ -569,11 +571,11 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                 formatter={(value) => {
                   const key = String(value);
                   if (key === "__note__") return null;
-                  const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_asp`);
+                  const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_dpsw`);
                   if (!store) return key;
                   if (metric === "revenue") return store.storeName;
                   if (metric === "volume") return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (Units)");
-                  return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (ASP)");
+                  return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (DPSW)");
                 }}
               />
 
@@ -590,12 +592,12 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
 
               {trends?.flatMap((store) => {
                 const els = [];
-                if (metric === "efficiency") {
+                if (metric === "efficiency" && store.storeId === "target" && isTargetOnlyChart) {
                   els.push(
                     <Bar
-                      key={`${store.storeId}_asp`}
+                      key={`${store.storeId}_dpsw`}
                       yAxisId="right"
-                      dataKey={`${store.storeId}_asp`}
+                      dataKey={`${store.storeId}_dpsw`}
                       fill={store.color}
                       opacity={0.25}
                       isAnimationActive={false}
@@ -647,9 +649,9 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
       )}
       {metric === "efficiency" && hasData && (
         <p className="mt-3 text-xs text-muted-foreground text-center">
-          {isSingleStore
-            ? "Solid line = Revenue (left axis) · Bars = ASP (right axis)"
-            : "Solid lines = Revenue (left axis) · Bars = ASP (right axis)"}
+          {isTargetOnlyChart
+            ? "Solid line = Revenue (left axis) · Bars = $ Per Store Per Week (right axis, Target only)"
+            : "$ Per Store Per Week is available for Target only — select Target alone to view DPSW bars."}
         </p>
       )}
 

@@ -130,6 +130,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
+  walmart_connect: { channelId: "walmart-connect", channelLabel: "Walmart Connect", color: "#0071CE", channelFamily: "rmn", storeIds: ["walmart"] },
   amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
   ctv_programmatic: { channelId: "ctv-programmatic", channelLabel: "CTV / Programmatic", color: "#6B46C1", channelFamily: "core", storeIds: ["target", "amazon"] },
   display_ads:      { channelId: "display-ads",      channelLabel: "Display",              color: "#F97316", channelFamily: "core", storeIds: ["target", "amazon"] },
@@ -593,6 +594,7 @@ router.get("/overview", authenticate, async (req, res) => {
   if (isShopifySelected)                 activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
   if (isUltaSelected)                    activeChannels.push("criteo_ads");
   if (includesTarget)                    activeChannels.push("roundel_target");
+  if (isWalmartSelected)                 activeChannels.push("walmart_connect");
   if (isAmazonSelected)                  activeChannels.push("amazon_ads");
   if (includesTarget || isAmazonSelected) activeChannels.push("ctv_programmatic", "display_ads");
   const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
@@ -738,6 +740,17 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    // $ Per Store Per Week (DPSW) — Target only, validated against Target's internal reporting.
+    const targetDpswQuery = includesTarget
+      ? querySnowflake(`
+          SELECT
+            SUM(revenue - COALESCE(drive_up_revenue,0) - COALESCE(shipt_revenue,0)) AS instore_revenue,
+            SUM(store_count) AS total_distribution_points
+          FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     // Sessions from GA4_DAILY_SUMMARY — GA4 only tracks the Shopify website, so
     // this is skipped entirely (and reported as 0) when Shopify isn't selected.
     const ga4Query = isShopifySelected
@@ -758,7 +771,7 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, priorAmazonRows, priorWalmartRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, priorAmazonRows, priorWalmartRows, targetDpswRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value and spend from DAILY_AD_SUMMARY (filtered to active channels)
@@ -805,6 +818,7 @@ router.get("/overview", authenticate, async (req, res) => {
       walmartDailyQuery,
       priorAmazonQuery,
       priorWalmartQuery,
+      targetDpswQuery,
     ]);
 
     const agg          = summaryRows[0] ?? {};
@@ -960,6 +974,10 @@ router.get("/overview", authenticate, async (req, res) => {
     const priorWebOrders = Number(priorWebOrdersAgg["WEB_ORDERS"] ?? priorWebOrdersAgg["web_orders"] ?? 0);
     const priorCvr = (isShopifySelected && priorSessions > 0) ? priorWebOrders / priorSessions : 0;
 
+    const targetDpswAgg = (targetDpswRows as Array<Record<string, unknown>>)[0] ?? {};
+    const targetInstoreRevenue     = Number(targetDpswAgg["INSTORE_REVENUE"] ?? targetDpswAgg["instore_revenue"] ?? 0);
+    const targetDistributionPoints = Number(targetDpswAgg["TOTAL_DISTRIBUTION_POINTS"] ?? targetDpswAgg["total_distribution_points"] ?? 0);
+
     const storeBreakdown: Array<{ storeId: string; revenue: number }> = isTargetOnly
       ? (totalRevenue > 0 ? [{ storeId: "target", revenue: Math.round(totalRevenue * 100) / 100 }] : [])
       : [
@@ -987,6 +1005,8 @@ router.get("/overview", authenticate, async (req, res) => {
       aspChange:     hasPrior ? pct(asp, priorAsp) : 0,
       sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
       cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
+      targetInstoreRevenue: Math.round(targetInstoreRevenue * 100) / 100,
+      targetDistributionPoints,
       storeBreakdown,
       channelBreakdown,
       dailySeries,
@@ -1106,6 +1126,17 @@ router.get("/traffic", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    // $ Per Store Per Week (DPSW) — Target only, validated against Target's internal reporting.
+    const targetDpswQuery = includesTarget
+      ? querySnowflake(`
+          SELECT
+            SUM(revenue - COALESCE(drive_up_revenue,0) - COALESCE(shipt_revenue,0)) AS instore_revenue,
+            SUM(store_count) AS total_distribution_points
+          FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     const walmartTrafficSummaryQuery = (isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
           SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
@@ -1166,7 +1197,7 @@ router.get("/traffic", authenticate, async (req, res) => {
           WHERE summary_date BETWEEN '${start}' AND '${end}'
         `);
 
-    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows] = await Promise.all([
+    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows, targetDpswRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
@@ -1225,6 +1256,7 @@ router.get("/traffic", authenticate, async (req, res) => {
       priorTrafficTargetQuery,
       priorTrafficGa4Query,
       priorTrafficWebOrdersQuery,
+      targetDpswQuery,
     ]);
 
     const summaryAgg   = summaryRows[0] ?? {};
@@ -1239,8 +1271,10 @@ router.get("/traffic", authenticate, async (req, res) => {
     const walmartTrafficRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartTrafficAgg["WALMART_REVENUE"] ?? walmartTrafficAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
     const walmartTrafficUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartTrafficAgg["WALMART_UNITS"] ?? walmartTrafficAgg["walmart_units"] ?? 0) : 0;
     const shopifyTrafficRev = isShopifySelected && !isTargetOnly ? totalRevenue : 0;
-    const targetRevenueForDpsw  = isTargetOnly ? totalRevenue : (includesTarget ? targetTrafficRev : 0);
-    const walmartRevenueForDpsw = walmartTrafficRev;
+
+    const targetDpswAgg = (targetDpswRows as Array<Record<string, unknown>>)[0] ?? {};
+    const targetInstoreRevenue     = Number(targetDpswAgg["INSTORE_REVENUE"] ?? targetDpswAgg["instore_revenue"] ?? 0);
+    const targetDistributionPoints = Number(targetDpswAgg["TOTAL_DISTRIBUTION_POINTS"] ?? targetDpswAgg["total_distribution_points"] ?? 0);
 
     const amazonTrafficRev   = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
       ? Math.round((amazonProductRows as Array<Record<string, unknown>>).reduce((s, r) => s + Number(r["REVENUE"] ?? r["revenue"] ?? 0), 0) * 100) / 100
@@ -1325,8 +1359,8 @@ router.get("/traffic", authenticate, async (req, res) => {
       aspChange:     hasPrior ? pct(asp, priorAsp) : 0,
       sessionsChange: hasPrior ? pct(totalSessions, priorSessions) : 0,
       cvrChange:     hasPrior ? pct(cvr, priorCvr) : 0,
-      targetRevenue:  Math.round(targetRevenueForDpsw * 100) / 100,
-      walmartRevenue: Math.round(walmartRevenueForDpsw * 100) / 100,
+      targetInstoreRevenue: Math.round(targetInstoreRevenue * 100) / 100,
+      targetDistributionPoints,
       products,
       stateRevenue,
       isEmpty,
@@ -1587,7 +1621,10 @@ router.get("/target/products", authenticate, async (req, res) => {
         tcin,
         SUM(revenue)     AS revenue,
         SUM(units_sold)  AS units_sold,
-        SUM(store_count) AS store_count
+        SUM(store_count) AS store_count,
+        SUM(COALESCE(drive_up_revenue,0) + COALESCE(shipt_revenue,0)) AS online_revenue,
+        SUM(revenue - COALESCE(drive_up_revenue,0) - COALESCE(shipt_revenue,0)) AS instore_revenue,
+        ROUND(SUM(COALESCE(drive_up_revenue,0) + COALESCE(shipt_revenue,0)) / NULLIF(SUM(revenue),0) * 100, 1) AS pct_online
       FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
       WHERE summary_date BETWEEN '${start}' AND '${end}'
       GROUP BY item_description, barcode, tcin
@@ -1595,13 +1632,19 @@ router.get("/target/products", authenticate, async (req, res) => {
       LIMIT 50
     `);
 
-    const products = rows.map(row => ({
-      itemDescription: String(row["ITEM_DESCRIPTION"] ?? row["item_description"] ?? ""),
-      sku:             String(row["BARCODE"] ?? row["barcode"] ?? row["TCIN"] ?? row["tcin"] ?? ""),
-      revenue:         Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
-      unitsSold:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
-      storeCount:      Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
-    }));
+    const products = rows.map(row => {
+      const pctOnlineRaw = row["PCT_ONLINE"] ?? row["pct_online"];
+      return {
+        itemDescription: String(row["ITEM_DESCRIPTION"] ?? row["item_description"] ?? ""),
+        sku:             String(row["BARCODE"] ?? row["barcode"] ?? row["TCIN"] ?? row["tcin"] ?? ""),
+        revenue:         Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+        unitsSold:       Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+        storeCount:      Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
+        onlineRevenue:   Math.round(Number(row["ONLINE_REVENUE"]  ?? row["online_revenue"]  ?? 0) * 100) / 100,
+        instoreRevenue:  Math.round(Number(row["INSTORE_REVENUE"] ?? row["instore_revenue"] ?? 0) * 100) / 100,
+        pctOnline:       pctOnlineRaw != null ? Number(pctOnlineRaw) : null,
+      };
+    });
 
     res.json({ products, isEmpty: products.length === 0 });
   } catch (e) {
@@ -2408,7 +2451,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
   const activeCircana = CIRCANA_IDS.filter(id => has(id));
   const activeNetsuite = NETSUITE_IDS.filter(id => has(id));
 
-  type TrendPoint = { date: string; revenue: number; units: number };
+  type TrendPoint = { date: string; revenue: number; units: number; dpsw?: number };
   type StoreTrend = { storeId: string; storeName: string; color: string; data: TrendPoint[] };
   const results: StoreTrend[] = [];
 
@@ -2487,22 +2530,47 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
 
     if (!isWholesale && has("target")) {
       queries.push(
-        querySnowflake(`
-          SELECT summary_date, SUM(sale_amount) AS revenue, SUM(sale_quantity) AS units
-          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
-          WHERE summary_date BETWEEN '${start}' AND '${end}'
-          GROUP BY summary_date
-          ORDER BY summary_date ASC
-        `).then(rows => {
+        Promise.all([
+          querySnowflake(`
+            SELECT summary_date, SUM(sale_amount) AS revenue, SUM(sale_quantity) AS units
+            FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+            GROUP BY summary_date
+            ORDER BY summary_date ASC
+          `),
+          // $ Per Store Per Week (DPSW) — Target only, validated against Target's internal reporting.
+          querySnowflake(`
+            SELECT
+              summary_date,
+              SUM(revenue - COALESCE(drive_up_revenue,0) - COALESCE(shipt_revenue,0)) AS instore_revenue,
+              SUM(store_count) AS store_count
+            FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
+            WHERE summary_date BETWEEN '${start}' AND '${end}'
+            GROUP BY summary_date
+            ORDER BY summary_date ASC
+          `),
+        ]).then(([revenueRows, dpswRows]) => {
+          const dpswByDate = new Map(dpswRows.map(r => [
+            toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+            {
+              instoreRevenue: Number(r["INSTORE_REVENUE"] ?? r["instore_revenue"] ?? 0),
+              storeCount:     Number(r["STORE_COUNT"]     ?? r["store_count"]     ?? 0),
+            },
+          ]));
           results.push({
             storeId: "target",
             storeName: "Target",
             color: TREND_STORE_COLORS["target"],
-            data: rows.map(r => ({
-              date:    toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
-              revenue: Math.round(Number(r["REVENUE"]  ?? r["revenue"]  ?? 0) * 100) / 100,
-              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
-            })),
+            data: revenueRows.map(r => {
+              const date = toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]);
+              const d = dpswByDate.get(date);
+              return {
+                date,
+                revenue: Math.round(Number(r["REVENUE"]  ?? r["revenue"]  ?? 0) * 100) / 100,
+                units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
+                dpsw:    (d && d.storeCount > 0) ? Math.round((d.instoreRevenue / d.storeCount) * 100) / 100 : undefined,
+              };
+            }),
           });
         }),
       );
@@ -3205,7 +3273,7 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
 
 // ─── GET /api/data/ads/channel-detail ────────────────────────────────────────
 
-const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "ctv_programmatic", "display_ads"]);
+const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "walmart_connect", "ctv_programmatic", "display_ads"]);
 
 router.get("/ads/channel-detail", authenticate, async (req, res) => {
   const { channel: channelRaw, start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
@@ -3215,7 +3283,7 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
 
   const channel = channelRaw?.toLowerCase().trim() ?? "";
   if (!VALID_DETAIL_CHANNELS.has(channel)) {
-    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, ctv_programmatic, display_ads" });
+    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, walmart_connect, ctv_programmatic, display_ads" });
     return;
   }
 
@@ -3491,6 +3559,40 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
         },
         weeks,
         isEmpty: weeks.length === 0,
+      });
+
+    } else if (channel === "walmart_connect") {
+      const rows = await querySnowflake(`
+        SELECT
+          SUM(impressions)                                          AS impressions,
+          SUM(clicks)                                                AS clicks,
+          SUM(clicks)::FLOAT / NULLIF(SUM(impressions), 0) * 100     AS ctr,
+          SUM(spend)                                                 AS spend,
+          SUM(sales_revenue_14d)                                     AS revenue_14d,
+          SUM(units_sold_14d)                                        AS units_sold_14d,
+          SUM(instore_sales_14d)                                     AS instore_sales_14d
+        FROM ${DB_NAME}.ADS.WALMART_CONNECT_RAW
+        WHERE ad_date BETWEEN '${start}' AND '${end}'
+      `);
+
+      const agg = rows[0] ?? {};
+      const spend      = Number(agg["SPEND"]       ?? agg["spend"]       ?? 0);
+      const revenue14d = Number(agg["REVENUE_14D"] ?? agg["revenue_14d"] ?? 0);
+      const roas14d    = spend > 0 ? revenue14d / spend : 0;
+
+      res.json({
+        channel: "walmart_connect",
+        kpis: {
+          impressions:     Math.round(Number(agg["IMPRESSIONS"] ?? agg["impressions"] ?? 0)),
+          clicks:          Math.round(Number(agg["CLICKS"]      ?? agg["clicks"]      ?? 0)),
+          ctr:             Math.round(Number(agg["CTR"]         ?? agg["ctr"]         ?? 0) * 100) / 100,
+          spend:           Math.round(spend * 100) / 100,
+          revenue14d:      Math.round(revenue14d * 100) / 100,
+          roas14d:         Math.round(roas14d * 100) / 100,
+          unitsSold14d:    Math.round(Number(agg["UNITS_SOLD_14D"]    ?? agg["units_sold_14d"]    ?? 0)),
+          instoreSales14d: Math.round(Number(agg["INSTORE_SALES_14D"] ?? agg["instore_sales_14d"] ?? 0) * 100) / 100,
+        },
+        isEmpty: Number(agg["IMPRESSIONS"] ?? agg["impressions"] ?? 0) === 0,
       });
 
     } else {

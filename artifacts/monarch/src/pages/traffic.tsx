@@ -42,15 +42,15 @@ interface TrafficApiResponse {
   aspChange: number;
   sessionsChange: number;
   cvrChange: number;
-  targetRevenue: number;
-  walmartRevenue: number;
+  targetInstoreRevenue: number;
+  targetDistributionPoints: number;
   products: Array<{ id: string; productName: string; sku?: string; revenue: number; orders: number; units: number }>;
   stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
   isEmpty: boolean;
 }
 
 interface TargetProductsApiResponse {
-  products: Array<{ itemDescription: string; sku?: string; revenue: number; unitsSold: number; storeCount: number }>;
+  products: Array<{ itemDescription: string; sku?: string; revenue: number; unitsSold: number; storeCount: number; onlineRevenue: number; instoreRevenue: number; pctOnline: number | null }>;
   isEmpty: boolean;
 }
 
@@ -373,33 +373,13 @@ export default function Traffic() {
       ? wsRevenue / displayUnits
       : displayUnits > 0 ? displayRevenue / displayUnits : (apiData.asp ?? 0);
 
-    // ── $ Per Store Per Week (DPSW) ──────────────────────────────────────────
-    // Only Target and Walmart have verified store counts today.
-    const targetRevenue  = wsActive ? (wholesaleData!.byStore.find(s => s.storeName === "Target")?.revenue ?? 0)  : (apiData.targetRevenue  ?? 0);
-    const walmartRevenue = wsActive ? (wholesaleData!.byStore.find(s => s.storeName === "Walmart")?.revenue ?? 0) : (apiData.walmartRevenue ?? 0);
-    const [dpswStartY, dpswStartM, dpswStartD] = dateRange.startDate.split("-").map(Number);
-    const [dpswEndY, dpswEndM, dpswEndD] = dateRange.endDate.split("-").map(Number);
-    const numWeeks = (Math.round(
-      (new Date(dpswEndY, dpswEndM - 1, dpswEndD).getTime() - new Date(dpswStartY, dpswStartM - 1, dpswStartD).getTime()) / 86_400_000
-    ) + 1) / 7;
-    const selectedSet        = new Set(selectedIds);
-    const isAllStores        = selectedIds.length === 0;
-    const isTargetOnlySel    = selectedIds.length === 1 && selectedSet.has("target");
-    const isWalmartOnlySel   = selectedIds.length === 1 && selectedSet.has("walmart");
-    const isTargetWalmartSel = selectedIds.length === 2 && selectedSet.has("target") && selectedSet.has("walmart");
-
-    let dpswValue: number | null = null;
-    let dpswDescription = "Revenue ÷ verified store count ÷ weeks in period. Currently available for Target and Walmart only.";
-    if (isTargetOnlySel) {
-      dpswValue = targetRevenue / 2202 / numWeeks;
-    } else if (isWalmartOnlySel) {
-      dpswValue = walmartRevenue / 4604 / numWeeks;
-    } else if (isTargetWalmartSel) {
-      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
-    } else if (isAllStores) {
-      dpswValue = (targetRevenue + walmartRevenue) / (2202 + 4604) / numWeeks;
-      dpswDescription = "Based on Target & Walmart store counts only";
-    }
+    // ── $ Per Store Per Week (DPSW) — Target only ─────────────────────────────
+    const dpswValue = (includesTarget && (apiData.targetDistributionPoints ?? 0) > 0)
+      ? (apiData.targetInstoreRevenue ?? 0) / apiData.targetDistributionPoints
+      : null;
+    const dpswDescription = includesTarget
+      ? "Target in-store sales per store per week, weighted by each SKU's store distribution. Approximately within 9% of Target's internal reporting."
+      : "Available for Target only";
 
     const kpis: TrafficKPI[] = [
       { id: "revenue",  label: isWholesale ? "Wholesale Revenue" : "Revenue",  value: displayRevenue, formatted: fmtCurrency(displayRevenue), change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true, description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Total revenue in period" },
@@ -441,7 +421,6 @@ export default function Traffic() {
           avgSellPrice:   p.units > 0 ? p.revenue / p.units : 0,
           changeInSales:  0,
           conversionRate: 0,
-          pctSalesOnline: 0,
           pageViews:      0,
           isTop10:        i < 10,
         };
@@ -463,7 +442,6 @@ export default function Traffic() {
             avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
             changeInSales:   0,
             conversionRate:  0,
-            pctSalesOnline:  100,
             pageViews:       0,
             isTop10:         false,
           }))
@@ -485,10 +463,12 @@ export default function Traffic() {
             avgSellPrice:   p.unitsSold > 0 ? p.revenue / p.unitsSold : 0,
             changeInSales:  0,
             conversionRate: 0,
-            pctSalesOnline: 0,
             pageViews:      0,
             storeCount:     p.storeCount,
             isTop10:        false,
+            onlineRevenue:  p.onlineRevenue,
+            instoreRevenue: p.instoreRevenue,
+            pctOnline:      p.pctOnline,
           }))
         : [];
 
@@ -508,7 +488,6 @@ export default function Traffic() {
             avgSellPrice:   p.unitsSold > 0 ? p.revenue / p.unitsSold : 0,
             changeInSales:  0,
             conversionRate: 0,
-            pctSalesOnline: 0,
             pageViews:      0,
             storeCount:     p.storeCount,
             isTop10:        false,
@@ -535,7 +514,6 @@ export default function Traffic() {
                 avgSellPrice:   p.units > 0 ? p.revenue / p.units : 0,
                 changeInSales:  0,
                 conversionRate: 0,
-                pctSalesOnline: 0,
                 pageViews:      0,
                 storeCount:     p.storeCount,
                 isTop10:        false,

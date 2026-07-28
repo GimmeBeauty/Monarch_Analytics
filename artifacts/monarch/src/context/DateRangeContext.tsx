@@ -93,6 +93,14 @@ export function buildPreset(preset: string): Omit<DateRange, "compareEnabled" | 
       return makeRange(subDays(t, 55), t, "Last 8 Weeks", preset);
     case "last52w":
       return makeRange(subDays(t, 363), t, "Last 52 Weeks", preset);
+    case "mtd": {
+      const start = new Date(t.getFullYear(), t.getMonth(), 1);
+      return makeRange(start, t, "Month to Date", preset);
+    }
+    case "ytd": {
+      const start = new Date(t.getFullYear(), 0, 1);
+      return makeRange(start, t, "Year to Date", preset);
+    }
     case "qtd": {
       const { q } = currentQuarter();
       const { start } = quarterDates(yr, q);
