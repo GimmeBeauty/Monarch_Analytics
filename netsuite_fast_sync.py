@@ -63,9 +63,15 @@ def sync_entity(entity_id,store_name,store_type,conn):
     conn.commit();cur.close();print(f"  ✅ {store_name}: {total} rows",flush=True);return total
 
 if __name__=="__main__":
-    print(f"NetSuite Fast Sync — {date.today()}",flush=True)
-    conn=get_sf()
-    cur=conn.cursor();cur.execute(f"USE SCHEMA MONARCH_RAW.FINANCE");cur.close()
-    stores=[("222","CVS","Retail"),("230","Ulta Beauty","Retail"),("1068","Walgreens","Retail"),("49270","Amazon (Pattern)","Marketplace"),("633","Publix","Retail"),("228","Kroger","Retail"),("229","Target","Retail"),("231","Walmart","Retail"),("227","Meijer","Retail")]
-    total=sum(sync_entity(eid,sn,st,conn) for eid,sn,st in stores)
-    conn.close();print(f"\n✅ Done! {total} total rows",flush=True)
+    from sync_lock import acquire_lock, release_lock
+    if not acquire_lock("netsuite_sync", max_age_hours=2):
+        raise SystemExit(0)
+    try:
+        print(f"NetSuite Fast Sync — {date.today()}",flush=True)
+        conn=get_sf()
+        cur=conn.cursor();cur.execute(f"USE SCHEMA MONARCH_RAW.FINANCE");cur.close()
+        stores=[("222","CVS","Retail"),("230","Ulta Beauty","Retail"),("1068","Walgreens","Retail"),("49270","Amazon (Pattern)","Marketplace"),("633","Publix","Retail"),("228","Kroger","Retail"),("229","Target","Retail"),("231","Walmart","Retail"),("227","Meijer","Retail")]
+        total=sum(sync_entity(eid,sn,st,conn) for eid,sn,st in stores)
+        conn.close();print(f"\n✅ Done! {total} total rows",flush=True)
+    finally:
+        release_lock("netsuite_sync")
