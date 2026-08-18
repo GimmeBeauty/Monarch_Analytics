@@ -3,6 +3,8 @@ import { SiGoogleads, SiMeta, SiTiktok, SiGoogleanalytics, SiShopify } from "rea
 import { CheckCircle, Circle, X, ExternalLink, Loader2, AlertCircle, Unplug } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { API_BASE } from "@/lib/apiBase";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +64,7 @@ const PROVIDERS = [
 // ─── Shopify Shop Modal ────────────────────────────────────────────────────────
 
 function ShopifyModal({ onClose }: { onClose: () => void }) {
+  const { theme } = useTheme();
   const [shop, setShop] = useState("");
   const [error, setError] = useState("");
 
@@ -83,22 +86,22 @@ function ShopifyModal({ onClose }: { onClose: () => void }) {
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#96BF48]/10">
               <SiShopify size={16} color="#96BF48" />
             </div>
-            <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Connect Shopify</h2>
+            <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Connect Shopify</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"
+            className="text-[#3A3A3A]/40 dark:text-[#003349]/30 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
           >
             <X size={16} />
           </button>
         </div>
 
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-4">
+        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-4">
           Enter your Shopify store domain to begin the authorization process. You'll be redirected to Shopify to approve access.
         </p>
 
         <div className="mb-1">
-          <label className="block text-xs font-semibold text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 mb-1.5 uppercase tracking-wider">
+          <label className="block text-xs font-semibold text-[#3A3A3A]/65 dark:text-[#003349]/55 mb-1.5 uppercase tracking-wider">
             Store URL
           </label>
           <input
@@ -108,7 +111,7 @@ function ShopifyModal({ onClose }: { onClose: () => void }) {
             onKeyDown={(e) => e.key === "Enter" && handleConnect()}
             placeholder="mystore.myshopify.com"
             autoFocus
-            className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/30 dark:placeholder-[#FFF9F2]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 focus:border-transparent transition-all"
+            className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] placeholder-[#3A3A3A]/30 dark:placeholder-[#003349]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 dark:focus:ring-[#9BDBF3]/60 focus:border-transparent transition-all"
           />
         </div>
         {error && (
@@ -120,14 +123,14 @@ function ShopifyModal({ onClose }: { onClose: () => void }) {
         <div className="flex gap-2 mt-5">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors"
+            className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#003349]/50 border border-[#3A3A3A]/10 dark:border-[#003349]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#003349]/5 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleConnect}
             className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] transition-opacity hover:opacity-85 flex items-center justify-center gap-1.5"
-            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+            style={{ background: brandGradient(theme) }}
           >
             Authorize with Shopify
             <ExternalLink size={12} />
@@ -154,14 +157,14 @@ function DisconnectModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-xs rounded-2xl p-6 monarch-card-settings">
-        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">Disconnect {name}?</h2>
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-5">
+        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349] mb-2">Disconnect {name}?</h2>
+        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-5">
           This will remove the stored access token. You can reconnect at any time.
         </p>
         <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors"
+            className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#003349]/50 border border-[#3A3A3A]/10 dark:border-[#003349]/10 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#003349]/5 transition-colors"
           >
             Cancel
           </button>
@@ -182,6 +185,7 @@ function DisconnectModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Integrations() {
+  const { theme } = useTheme();
   const [statuses, setStatuses]             = useState<IntegrationStatus[]>([]);
   const [loading, setLoading]               = useState(true);
   const [shopifyModal, setShopifyModal]     = useState(false);
@@ -282,8 +286,8 @@ export default function Integrations() {
         <div
           className={`mb-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${
             banner.type === "success"
-              ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40"
-              : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200/60 dark:border-red-800/40"
+              ? "bg-emerald-50 dark:bg-emerald-100 text-emerald-700 dark:text-emerald-700 border border-emerald-200/60 dark:border-emerald-300/40"
+              : "bg-red-50 dark:bg-red-100 text-red-700 dark:text-red-700 border border-red-200/60 dark:border-red-300/40"
           }`}
         >
           {banner.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
@@ -302,17 +306,17 @@ export default function Integrations() {
           return (
             <div key={id} className="flex items-center gap-4 p-5 rounded-xl monarch-card-settings">
               {/* Icon */}
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#2e2010]">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#FFFFFF]">
                 {loading
-                  ? <div className="w-5 h-5 rounded bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10 animate-pulse" />
+                  ? <div className="w-5 h-5 rounded bg-[#3A3A3A]/10 dark:bg-[#003349]/10 animate-pulse" />
                   : <Icon size={20} color={color} />
                 }
               </div>
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{name}</p>
-                <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+                <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">{name}</p>
+                <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
                   {connected && status?.shopDomain
                     ? status.shopDomain
                     : desc}
@@ -322,14 +326,14 @@ export default function Integrations() {
               {/* Action */}
               <div className="flex items-center gap-2 shrink-0">
                 {loading ? (
-                  <Loader2 size={16} className="text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 animate-spin" />
+                  <Loader2 size={16} className="text-[#3A3A3A]/30 dark:text-[#003349]/25 animate-spin" />
                 ) : connected ? (
                   <>
                     <CheckCircle size={16} className="text-emerald-500" />
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Connected</span>
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-700">Connected</span>
                     <button
                       onClick={() => setDisconnectTarget(id)}
-                      className="ml-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 border border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 hover:border-red-400/60 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      className="ml-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 border border-[#3A3A3A]/15 dark:border-[#003349]/15 hover:border-red-400/60 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                     >
                       Disconnect
                     </button>
@@ -338,14 +342,14 @@ export default function Integrations() {
                   <button
                     onClick={() => setShopifyModal(true)}
                     className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] transition-opacity hover:opacity-80"
-                    style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                    style={{ background: brandGradient(theme) }}
                   >
                     Connect
                   </button>
                 ) : (
                   <button
                     disabled
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 cursor-not-allowed"
+                    className="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 border border-[#3A3A3A]/10 dark:border-[#003349]/10 cursor-not-allowed"
                     title="OAuth coming soon"
                   >
                     Coming soon

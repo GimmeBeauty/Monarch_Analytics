@@ -64,7 +64,7 @@ function PrivateRoute({ component: Component }: { component: React.ComponentType
 
 function AuthLoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FFF9F2] dark:bg-[#120d06]">
+    <div className="min-h-screen flex items-center justify-center bg-[#FFF9F2] dark:bg-[#FFFFFF]">
       <Throbber size={96} />
     </div>
   );

@@ -23,15 +23,17 @@ import {
 } from "@/context/AlertsContext";
 import { useProfile } from "@/context/ProfileContext";
 import { evaluateAlert, getAnalyticsData, fmtMetric, type EvaluationResult } from "@/lib/alertEngine";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 
-const CARD = "p-5 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30";
-const LABEL_SM = "text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider";
-const INPUT = "w-full px-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none transition-colors";
+const CARD = "p-5 rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30";
+const LABEL_SM = "text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider";
+const INPUT = "w-full px-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none transition-colors";
 const SELECT = INPUT + " cursor-pointer";
 const BTN_PRIMARY = "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all";
-const BTN_GHOST = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors";
+const BTN_GHOST = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors";
 
 // ─── Alert Type Icons ─────────────────────────────────────────────────────────
 
@@ -55,9 +57,9 @@ const TYPE_COLORS: Record<AlertType, string> = {
 
 function StatusBadge({ status }: { status: PerformanceAlert["status"] }) {
   const styles: Record<string, string> = {
-    active: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
-    muted:  "bg-amber-100  dark:bg-amber-900/30  text-amber-700  dark:text-amber-400",
-    paused: "bg-slate-100  dark:bg-slate-800/50  text-slate-500  dark:text-slate-400",
+    active: "bg-emerald-100 dark:bg-emerald-100 text-emerald-700 dark:text-emerald-700",
+    muted:  "bg-amber-100  dark:bg-amber-100  text-amber-700  dark:text-amber-700",
+    paused: "bg-slate-100  dark:bg-slate-100  text-slate-500  dark:text-slate-600",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${styles[status]}`}>
@@ -75,7 +77,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       aria-checked={checked}
       onClick={onChange}
       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        checked ? "bg-[#FFBC80]" : "bg-[#3A3A3A]/20 dark:bg-[#FFF9F2]/15"
+        checked ? "bg-[#FFBC80] dark:bg-[#BFA1E3]" : "bg-[#3A3A3A]/20 dark:bg-[#003349]/15"
       }`}
     >
       <span
@@ -101,12 +103,13 @@ function ChannelPicker<T extends string>({
   selected: T[];
   onChange: (v: T[]) => void;
 }) {
+  const { theme } = useTheme();
   const toggle = (ch: T) =>
     onChange(selected.includes(ch) ? selected.filter((x) => x !== ch) : [...selected, ch]);
 
   return (
     <div>
-      <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">{label}</p>
+      <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-2">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((ch) => {
           const active = selected.includes(ch);
@@ -117,10 +120,10 @@ function ChannelPicker<T extends string>({
               onClick={() => toggle(ch)}
               className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
                 active
-                  ? "border-[#FFBC80] text-[#3A3A3A] dark:text-[#FFF9F2]"
-                  : "border-[#FFBC80]/30 text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:border-[#FFBC80]/60"
+                  ? "border-[#FFBC80] dark:border-[#BFA1E3] text-[#3A3A3A] dark:text-[#003349]"
+                  : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60"
               }`}
-              style={active ? { background: "linear-gradient(135deg, rgba(255,188,128,0.25), rgba(255,226,154,0.25))" } : {}}
+              style={active ? { background: theme === "dark" ? "linear-gradient(135deg, rgba(191,161,227,0.25), rgba(155,219,243,0.25))" : "linear-gradient(135deg, rgba(255,188,128,0.25), rgba(255,226,154,0.25))" } : {}}
             >
               {ch}
             </button>
@@ -128,7 +131,7 @@ function ChannelPicker<T extends string>({
         })}
       </div>
       {selected.length === 0 && (
-        <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1">All {label.toLowerCase()} included</p>
+        <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1">All {label.toLowerCase()} included</p>
       )}
     </div>
   );
@@ -154,8 +157,8 @@ function TestResultBanner({
     <div
       className={`rounded-xl p-4 border flex gap-3 items-start ${
         result.didTrigger
-          ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800"
-          : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+          ? "bg-rose-50 dark:bg-rose-100 border-rose-300 dark:border-rose-300"
+          : "bg-emerald-50 dark:bg-emerald-100 border-emerald-300 dark:border-emerald-300"
       }`}
     >
       <div className="mt-0.5 shrink-0">
@@ -164,21 +167,21 @@ function TestResultBanner({
           : <Check size={15} className="text-emerald-600" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+        <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
           {result.didTrigger ? `⚡ Alert triggered: ${alertName}` : `✓ No trigger: ${alertName}`}
         </p>
-        <p className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 mt-0.5">{result.explanation}</p>
+        <p className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50 mt-0.5">{result.explanation}</p>
         {result.channelBreakdown.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5">
             {result.channelBreakdown.slice(0, 4).map((c) => (
-              <span key={c.channel} className="text-[11px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
-                {c.channel}: <strong className="text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{fmtMetric(c.value, "revenue")}</strong>
+              <span key={c.channel} className="text-[11px] text-[#3A3A3A]/50 dark:text-[#003349]/40">
+                {c.channel}: <strong className="text-[#3A3A3A]/70 dark:text-[#003349]/60">{fmtMetric(c.value, "revenue")}</strong>
               </span>
             ))}
           </div>
         )}
       </div>
-      <button onClick={onDismiss} className="shrink-0 text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors">
+      <button onClick={onDismiss} className="shrink-0 text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors">
         <X size={13} />
       </button>
     </div>
@@ -243,6 +246,7 @@ function AlertFormModal({
   onSave: (data: FormData) => void;
   onCancel: () => void;
 }) {
+  const { theme } = useTheme();
   const [form, setForm] = useState<FormData>(
     initial
       ? {
@@ -292,18 +296,18 @@ function AlertFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-[#FFF9F2] dark:bg-[#1a1208] shadow-2xl">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-[#FFF9F2] dark:bg-[#FFFFFF] shadow-2xl">
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-[#FFBC80]/25 bg-[#FFF9F2] dark:bg-[#1a1208]">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-[#FFBC80]/25 dark:border-[#9BDBF3]/25 bg-[#FFF9F2] dark:bg-[#FFFFFF]">
           <div>
-            <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">
+            <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">
               {initial ? "Edit Alert" : "New Performance Alert"}
             </h3>
-            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
               Define when and how you want to be notified.
             </p>
           </div>
-          <button onClick={onCancel} className="text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors">
+          <button onClick={onCancel} className="text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -350,9 +354,9 @@ function AlertFormModal({
           </div>
 
           {/* Alert type description */}
-          <div className="flex gap-2 px-3 py-2.5 rounded-lg bg-[#FFBC80]/8 border border-[#FFBC80]/20">
-            <Info size={13} className="text-[#FFBC80] shrink-0 mt-0.5" />
-            <p className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+          <div className="flex gap-2 px-3 py-2.5 rounded-lg bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+            <Info size={13} className="text-[#FFBC80] dark:text-[#BFA1E3] shrink-0 mt-0.5" />
+            <p className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50">
               {ALERT_TYPE_META[form.alertType].description}
             </p>
           </div>
@@ -382,7 +386,7 @@ function AlertFormModal({
                   className={INPUT}
                   placeholder={thresholdLabel}
                 />
-                <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1">{thresholdLabel}</p>
+                <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1">{thresholdLabel}</p>
               </div>
             </div>
           </div>
@@ -399,7 +403,7 @@ function AlertFormModal({
                 onChange={(e) => set("baselinePeriods", parseInt(e.target.value) || 14)}
                 className={INPUT}
               />
-              <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1">
+              <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1">
                 Number of historical days to use as baseline for anomaly detection
               </p>
             </div>
@@ -417,8 +421,8 @@ function AlertFormModal({
                   className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-all capitalize"
                   style={
                     form.timeGranularity === g
-                      ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)", borderColor: "transparent", color: "#3A3A3A" }
-                      : { borderColor: "rgba(255,188,128,0.3)", color: "rgba(58,58,58,0.55)" }
+                      ? { background: brandGradient(theme), borderColor: "transparent", color: "#3A3A3A" }
+                      : { borderColor: theme === "dark" ? "rgba(155,219,243,0.3)" : "rgba(255,188,128,0.3)", color: "rgba(58,58,58,0.55)" }
                   }
                 >
                   {g}
@@ -459,8 +463,8 @@ function AlertFormModal({
                   className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-all capitalize"
                   style={
                     form.schedule === s
-                      ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)", borderColor: "transparent", color: "#3A3A3A" }
-                      : { borderColor: "rgba(255,188,128,0.3)", color: "rgba(58,58,58,0.55)" }
+                      ? { background: brandGradient(theme), borderColor: "transparent", color: "#3A3A3A" }
+                      : { borderColor: theme === "dark" ? "rgba(155,219,243,0.3)" : "rgba(255,188,128,0.3)", color: "rgba(58,58,58,0.55)" }
                   }
                 >
                   {s}
@@ -480,7 +484,7 @@ function AlertFormModal({
               onChange={(e) => set("cooldownMinutes", parseInt(e.target.value) || 60)}
               className={INPUT}
             />
-            <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1">
+            <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1">
               Minimum time between repeated notifications for this alert ({Math.round(form.cooldownMinutes / 60)}h)
             </p>
           </div>
@@ -499,13 +503,13 @@ function AlertFormModal({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-[#FFBC80]/25 bg-[#FFF9F2] dark:bg-[#1a1208]">
+        <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-[#FFBC80]/25 dark:border-[#9BDBF3]/25 bg-[#FFF9F2] dark:bg-[#FFFFFF]">
           <button onClick={onCancel} className={BTN_GHOST}>Cancel</button>
           <button
             onClick={() => isValid && onSave(form)}
             disabled={!isValid}
             className={`${BTN_PRIMARY} disabled:opacity-40 disabled:cursor-not-allowed`}
-            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+            style={{ background: brandGradient(theme) }}
           >
             <Check size={13} />
             {initial ? "Save Changes" : "Create Alert"}
@@ -577,8 +581,8 @@ function AlertCard({
   return (
     <div className={`rounded-xl border transition-all ${
       alert.status === "active"
-        ? "border-[#FFBC80]/30 bg-white dark:bg-[#231a0e]"
-        : "border-[#FFBC80]/15 bg-[#FFBC80]/3 dark:bg-[#1a1208]/60 opacity-70"
+        ? "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF]"
+        : "border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 bg-[#FFBC80]/3 dark:bg-[#FFFFFF]/60 opacity-70"
     }`}>
       {/* Card header */}
       <div className="px-4 pt-4 pb-3">
@@ -589,22 +593,22 @@ function AlertCard({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{alert.name}</span>
+                <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] truncate">{alert.name}</span>
                 <StatusBadge status={alert.status} />
               </div>
-              <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mt-0.5 truncate">{conditionSummary()}</p>
+              <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mt-0.5 truncate">{conditionSummary()}</p>
             </div>
           </div>
           <button
             onClick={() => setExpanded((e) => !e)}
-            className="shrink-0 text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"
+            className="shrink-0 text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
           >
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
 
         {/* Meta row */}
-        <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+        <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">
           <span className="flex items-center gap-1"><Clock size={10} /> {alert.schedule}</span>
           <span className="flex items-center gap-1"><Bell size={10} /> Last: {relativeTime(alert.lastTriggeredAt)} ({alert.triggerCount}×)</span>
           <span className="flex items-center gap-1"><RefreshCw size={10} /> Checked: {relativeTime(alert.lastEvaluatedAt)}</span>
@@ -618,12 +622,12 @@ function AlertCard({
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-4 pb-3 pt-1 border-t border-[#FFBC80]/15 space-y-2 text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">
+        <div className="px-4 pb-3 pt-1 border-t border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 space-y-2 text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45">
           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-            <span>Period: <strong className="text-[#3A3A3A] dark:text-[#FFF9F2]">{alert.timeGranularity}</strong></span>
-            <span>Cooldown: <strong className="text-[#3A3A3A] dark:text-[#FFF9F2]">{Math.round(alert.cooldownMinutes / 60)}h</strong></span>
-            <span>Email: <strong className="text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{alert.notificationEmail || "—"}</strong></span>
-            <span>Type: <strong className="text-[#3A3A3A] dark:text-[#FFF9F2]">{ALERT_TYPE_META[alert.alertType].label}</strong></span>
+            <span>Period: <strong className="text-[#3A3A3A] dark:text-[#003349]">{alert.timeGranularity}</strong></span>
+            <span>Cooldown: <strong className="text-[#3A3A3A] dark:text-[#003349]">{Math.round(alert.cooldownMinutes / 60)}h</strong></span>
+            <span>Email: <strong className="text-[#3A3A3A] dark:text-[#003349] truncate">{alert.notificationEmail || "—"}</strong></span>
+            <span>Type: <strong className="text-[#3A3A3A] dark:text-[#003349]">{ALERT_TYPE_META[alert.alertType].label}</strong></span>
           </div>
         </div>
       )}
@@ -658,7 +662,7 @@ function AlertCard({
         </button>
         <button
           onClick={onDelete}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-rose-500 hover:bg-rose-500/10 transition-colors ml-auto"
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/40 dark:text-[#003349]/30 hover:text-rose-500 hover:bg-rose-500/10 transition-colors ml-auto"
           title="Delete alert"
         >
           <Trash2 size={11} /> Delete
@@ -689,19 +693,19 @@ function ActivityLog() {
             key={ev.id}
             className={`rounded-lg px-3 py-2.5 border text-xs ${
               ev.didTrigger
-                ? "bg-rose-50 dark:bg-rose-950/25 border-rose-200 dark:border-rose-800"
-                : "bg-[#FFF9F2] dark:bg-[#1a1208] border-[#FFBC80]/20"
+                ? "bg-rose-50 dark:bg-rose-100 border-rose-200 dark:border-rose-300"
+                : "bg-[#FFF9F2] dark:bg-[#FFFFFF] border-[#FFBC80]/20 dark:border-[#9BDBF3]/20"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">
+              <span className="font-semibold text-[#3A3A3A] dark:text-[#003349] truncate">
                 {ev.didTrigger ? "⚡" : "✓"} {ev.alertName}
               </span>
-              <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 shrink-0">
+              <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 shrink-0">
                 {new Date(ev.triggeredAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
               </span>
             </div>
-            <p className="text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mt-0.5 leading-relaxed">{ev.explanation}</p>
+            <p className="text-[#3A3A3A]/55 dark:text-[#003349]/45 mt-0.5 leading-relaxed">{ev.explanation}</p>
           </div>
         ))}
       </div>
@@ -720,6 +724,7 @@ export default function NotificationsPanel() {
   } = useAlerts();
 
   const { profile } = useProfile();
+  const { theme } = useTheme();
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -815,8 +820,8 @@ export default function NotificationsPanel() {
       <div className="space-y-5">
         {/* Header */}
         <div>
-          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Notifications</h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Notifications</h2>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
             Create personal performance alerts. Conditions are evaluated on your schedule and notify you by email when triggered.
           </p>
         </div>
@@ -826,12 +831,12 @@ export default function NotificationsPanel() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {alertsEnabled
-                ? <Bell size={16} className="text-[#FFBC80]" />
-                : <BellOff size={16} className="text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25" />
+                ? <Bell size={16} className="text-[#FFBC80] dark:text-[#BFA1E3]" />
+                : <BellOff size={16} className="text-[#3A3A3A]/35 dark:text-[#003349]/25" />
               }
               <div>
-                <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Performance Alerts</p>
-                <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+                <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Performance Alerts</p>
+                <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">
                   {alertsEnabled
                     ? `${activeCount} active alert${activeCount !== 1 ? "s" : ""} — evaluating on schedule`
                     : "All alerts are paused"}
@@ -846,7 +851,7 @@ export default function NotificationsPanel() {
         <div className={CARD}>
           <p className={`${LABEL_SM} mb-3`}>Notification Email</p>
           <div className="flex gap-2 items-center">
-            <Mail size={14} className="text-[#FFBC80] shrink-0" />
+            <Mail size={14} className="text-[#FFBC80] dark:text-[#BFA1E3] shrink-0" />
             <input
               type="email"
               placeholder="your@email.com"
@@ -855,7 +860,7 @@ export default function NotificationsPanel() {
               className={INPUT}
             />
           </div>
-          <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1.5 ml-5">
+          <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1.5 ml-5">
             Used as the default for new alerts. Each alert can have its own email.
           </p>
         </div>
@@ -874,14 +879,14 @@ export default function NotificationsPanel() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className={LABEL_SM}>Performance Alerts</p>
-              <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-0.5">
+              <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-0.5">
                 {alerts.length} total · {activeCount} active
               </p>
             </div>
             <button
               onClick={() => setShowForm(true)}
               className={`${BTN_PRIMARY}`}
-              style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+              style={{ background: brandGradient(theme) }}
             >
               <Plus size={13} /> New Alert
             </button>
@@ -889,17 +894,17 @@ export default function NotificationsPanel() {
 
           {alerts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3">
-              <Inbox size={28} className="text-[#FFBC80]/40" />
+              <Inbox size={28} className="text-[#FFBC80]/40 dark:text-[#BFA1E3]/40" />
               <div className="text-center">
-                <p className="text-sm font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/35">No alerts yet</p>
-                <p className="text-xs text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-0.5">
+                <p className="text-sm font-medium text-[#3A3A3A]/50 dark:text-[#003349]/35">No alerts yet</p>
+                <p className="text-xs text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-0.5">
                   Create an alert to get notified when your metrics cross defined thresholds.
                 </p>
               </div>
               <button
                 onClick={() => setShowForm(true)}
                 className={`${BTN_PRIMARY} mt-1`}
-                style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                style={{ background: brandGradient(theme) }}
               >
                 <Plus size={13} /> Create your first alert
               </button>
@@ -925,19 +930,19 @@ export default function NotificationsPanel() {
         <ActivityLog />
 
         {/* Alert types guide */}
-        <div className="rounded-xl border border-[#FFBC80]/30 overflow-hidden">
-          <div className="px-5 py-3 border-b border-[#FFBC80]/20 bg-[#FFBC80]/5">
+        <div className="rounded-xl border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 overflow-hidden">
+          <div className="px-5 py-3 border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 bg-[#FFBC80]/5 dark:bg-[#EFBAE1]/5">
             <p className={LABEL_SM}>Alert Type Reference</p>
           </div>
-          <div className="divide-y divide-[#FFBC80]/15">
+          <div className="divide-y divide-[#FFBC80]/15 dark:divide-[#9BDBF3]/15">
             {(Object.entries(ALERT_TYPE_META) as [AlertType, typeof ALERT_TYPE_META[AlertType]][]).map(([type, meta]) => {
               const Icon = TYPE_ICONS[type];
               return (
-                <div key={type} className="flex items-start gap-3 px-5 py-3 bg-white dark:bg-[#231a0e]">
+                <div key={type} className="flex items-start gap-3 px-5 py-3 bg-white dark:bg-[#FFFFFF]">
                   <Icon size={14} className={`${TYPE_COLORS[type]} shrink-0 mt-0.5`} />
                   <div>
-                    <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{meta.label}</p>
-                    <p className="text-[11px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{meta.description}</p>
+                    <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349]">{meta.label}</p>
+                    <p className="text-[11px] text-[#3A3A3A]/50 dark:text-[#003349]/40">{meta.description}</p>
                   </div>
                 </div>
               );

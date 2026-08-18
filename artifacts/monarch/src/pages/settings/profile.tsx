@@ -3,10 +3,13 @@ import { Check, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useProfile } from "@/context/ProfileContext";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 export default function ProfileSettings() {
   const { profile, saveProfile, saveAvatar } = useProfile();
   const { user } = useAuth();
+  const { theme } = useTheme();
 
   const [name,       setName]       = useState(profile.name);
   const [title,      setTitle]      = useState(profile.title);
@@ -81,7 +84,7 @@ export default function ProfileSettings() {
 
         {/* Avatar */}
         <div className="rounded-xl p-6 monarch-card-settings">
-          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-5">Profile Picture</h2>
+          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-5">Profile Picture</h2>
           <div className="flex items-center gap-6">
             <div>
               {profile.picture ? (
@@ -93,7 +96,7 @@ export default function ProfileSettings() {
               ) : (
                 <div
                   className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-[#3A3A3A]"
-                  style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                  style={{ background: brandGradient(theme) }}
                 >
                   {initials}
                 </div>
@@ -106,7 +109,7 @@ export default function ProfileSettings() {
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
                 className="px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] transition-opacity hover:opacity-80 disabled:opacity-50"
-                style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                style={{ background: brandGradient(theme) }}
               >
                 {uploading ? "Saving…" : "Upload Photo"}
               </button>
@@ -114,12 +117,12 @@ export default function ProfileSettings() {
                 <button
                   onClick={handleRemoveAvatar}
                   disabled={uploading}
-                  className="ml-3 px-4 py-2 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10 transition-colors disabled:opacity-50"
+                  className="ml-3 px-4 py-2 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors disabled:opacity-50"
                 >
                   Remove
                 </button>
               )}
-              <p className="mt-2 text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
+              <p className="mt-2 text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35">
                 JPG, PNG or GIF. Max 500KB.
               </p>
               <input
@@ -135,10 +138,10 @@ export default function ProfileSettings() {
 
         {/* Name & title */}
         <div className="rounded-xl p-6 monarch-card-settings">
-          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-5">Personal Details</h2>
+          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-5">Personal Details</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-1.5 uppercase tracking-wider">
                 Full Name
               </label>
               <input
@@ -147,12 +150,12 @@ export default function ProfileSettings() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your full name"
-                className="w-full px-4 py-2.5 rounded-lg text-sm text-[#3A3A3A] dark:text-[#FFF9F2] bg-[#FFF9F2] dark:bg-[#1a1208] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#FFF9F2]/25 focus:ring-2 focus:ring-[#FFBC80]/50"
-                style={{ border: "1px solid #FFBC80" }}
+                className="w-full px-4 py-2.5 rounded-lg text-sm text-[#3A3A3A] dark:text-[#003349] bg-[#FFF9F2] dark:bg-[#FFFFFF] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#003349]/25 focus:ring-2 focus:ring-[#FFBC80]/50 dark:focus:ring-[#BFA1E3]/50"
+                style={{ border: theme === "dark" ? "1px solid #9BDBF3" : "1px solid #FFBC80" }}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-1.5 uppercase tracking-wider">
                 Title / Role
               </label>
               <input
@@ -161,8 +164,8 @@ export default function ProfileSettings() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Growth Analyst"
-                className="w-full px-4 py-2.5 rounded-lg text-sm text-[#3A3A3A] dark:text-[#FFF9F2] bg-[#FFF9F2] dark:bg-[#1a1208] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#FFF9F2]/25 focus:ring-2 focus:ring-[#FFBC80]/50"
-                style={{ border: "1px solid #FFBC80" }}
+                className="w-full px-4 py-2.5 rounded-lg text-sm text-[#3A3A3A] dark:text-[#003349] bg-[#FFF9F2] dark:bg-[#FFFFFF] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#003349]/25 focus:ring-2 focus:ring-[#FFBC80]/50 dark:focus:ring-[#BFA1E3]/50"
+                style={{ border: theme === "dark" ? "1px solid #9BDBF3" : "1px solid #FFBC80" }}
               />
             </div>
           </div>
@@ -177,7 +180,7 @@ export default function ProfileSettings() {
               onClick={handleSave}
               disabled={saving}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-[#3A3A3A] transition-all hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+              style={{ background: brandGradient(theme) }}
             >
               {saving
                 ? <Loader2 size={14} className="animate-spin" />
@@ -191,8 +194,8 @@ export default function ProfileSettings() {
 
         {/* Preview */}
         <div className="rounded-xl p-6 monarch-card-settings">
-          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-4">Sidebar Preview</h2>
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-[#FFBC80]/8">
+          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-4">Sidebar Preview</h2>
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8">
             {profile.picture ? (
               <img
                 src={profile.picture}
@@ -202,16 +205,16 @@ export default function ProfileSettings() {
             ) : (
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-[#3A3A3A] shrink-0"
-                style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                style={{ background: brandGradient(theme) }}
               >
                 {initials}
               </div>
             )}
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">
+              <div className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] truncate">
                 {name || user?.email || "Your Name"}
               </div>
-              <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">
+              <div className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 truncate">
                 {title || "Your Title"}
               </div>
             </div>

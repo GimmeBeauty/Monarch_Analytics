@@ -17,15 +17,15 @@ type View = "both" | "mer" | "roas";
 function CustomTooltip({ active, payload, label, view }: TooltipProps<number, string> & { view: View }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-[#FFBC80]/30 bg-white/95 dark:bg-[#1a1208]/95 backdrop-blur-sm shadow-lg px-3 py-2.5 space-y-1">
-      <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-1.5">{label}</p>
+    <div className="rounded-xl border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white/95 dark:bg-[#FFFFFF]/95 backdrop-blur-sm shadow-lg px-3 py-2.5 space-y-1">
+      <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-1.5">{label}</p>
       {payload.map((entry) => (
         <div key={entry.dataKey} className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full shrink-0" style={{ background: entry.color }} />
-          <span className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 w-10">
+          <span className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50 w-10">
             {entry.dataKey === "mer" ? "MER" : "ROAS"}
           </span>
-          <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">
+          <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349] tabular-nums">
             {(entry.value as number).toFixed(2)}x
           </span>
         </div>
@@ -50,24 +50,24 @@ export default function EfficiencyTrendChart({ data }: EfficiencyTrendChartProps
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+          <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
             Efficiency Trend
           </h3>
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
             MER and ROAS over time
           </p>
         </div>
 
         {/* Toggle */}
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#FFF9F2]/5">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#003349]/5">
           {(["both", "mer", "roas"] as View[]).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
                 view === v
-                  ? "bg-white dark:bg-[#2a1f0f] text-[#3A3A3A] dark:text-[#FFF9F2] shadow-sm"
-                  : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/60"
+                  ? "bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] shadow-sm"
+                  : "text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#003349]/60"
               }`}
             >
               {v === "both" ? "Both" : v.toUpperCase()}
@@ -81,11 +81,11 @@ export default function EfficiencyTrendChart({ data }: EfficiencyTrendChartProps
         <div className="flex items-center gap-3 mb-3">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-0.5 rounded-full bg-[#34D399]" />
-            <span className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">MER</span>
+            <span className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45">MER</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-0.5 rounded-full bg-[#A78BFA]" />
-            <span className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Blended ROAS</span>
+            <span className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45">Blended ROAS</span>
           </div>
         </div>
       )}
@@ -96,18 +96,18 @@ export default function EfficiencyTrendChart({ data }: EfficiencyTrendChartProps
           <CartesianGrid
             strokeDasharray="3 3"
             stroke="currentColor"
-            className="text-[#3A3A3A]/8 dark:text-[#FFF9F2]/8"
+            className="text-[#3A3A3A]/8 dark:text-[#003349]/8"
             vertical={false}
           />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+            tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
             tickLine={false}
             axisLine={false}
             interval={tickInterval}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+            tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
             tickLine={false}
             axisLine={false}
             width={36}

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Blend, LayoutDashboard, FileSpreadsheet, RefreshCw, Check, Upload, X, AlertCircle } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -77,12 +79,12 @@ function NumericField({ label, hint, prefix, suffix, value, onChange, step = 0.0
 
   return (
     <div>
-      <label className="block text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">
+      <label className="block text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-2">
         {label}
       </label>
-      <div className="flex items-center rounded-lg border border-[#FFBC80]/40 bg-[#FFF9F2] dark:bg-[#1a1208] overflow-hidden focus-within:border-[#FFBC80] transition-colors">
+      <div className="flex items-center rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 bg-[#FFF9F2] dark:bg-[#FFFFFF] overflow-hidden focus-within:border-[#FFBC80] dark:focus-within:border-[#9BDBF3] transition-colors">
         {prefix && (
-          <span className="pl-3 pr-1 text-sm font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 select-none">
+          <span className="pl-3 pr-1 text-sm font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 select-none">
             {prefix}
           </span>
         )}
@@ -96,16 +98,16 @@ function NumericField({ label, hint, prefix, suffix, value, onChange, step = 0.0
           onChange={(e) => setRaw(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && commit()}
-          className="flex-1 px-3 py-2.5 text-sm bg-transparent text-[#3A3A3A] dark:text-[#FFF9F2] outline-none min-w-0"
+          className="flex-1 px-3 py-2.5 text-sm bg-transparent text-[#3A3A3A] dark:text-[#003349] outline-none min-w-0"
           style={{ MozAppearance: "textfield" } as React.CSSProperties}
         />
         {suffix && (
-          <span className="pr-3 pl-1 text-sm font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 select-none">
+          <span className="pr-3 pl-1 text-sm font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 select-none">
             {suffix}
           </span>
         )}
       </div>
-      {hint && <p className="mt-1.5 text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35">{hint}</p>}
     </div>
   );
 }
@@ -113,13 +115,14 @@ function NumericField({ label, hint, prefix, suffix, value, onChange, step = 0.0
 // ─── Section card ─────────────────────────────────────────────────────────────
 
 function SectionCard({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+  const { theme } = useTheme();
   return (
-    <div className="rounded-xl border border-[#FFBC80]/30 bg-white dark:bg-[#231a0e] overflow-hidden">
-      <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#FFBC80]/15">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
+    <div className="rounded-xl border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF] overflow-hidden">
+      <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: brandGradient(theme) }}>
           <Icon size={14} className="text-[#3A3A3A]" strokeWidth={2.5} />
         </div>
-        <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{title}</h3>
+        <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{title}</h3>
       </div>
       <div className="p-5">{children}</div>
     </div>
@@ -144,6 +147,7 @@ function parseCsv(text: string): SkuRow[] {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function FinancialSettings({ readOnly = false }: { readOnly?: boolean }) {
+  const { theme } = useTheme();
   const [cfg, setCfg] = useState<FinancialConfig>(loadConfig);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -183,8 +187,8 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
   return (
     <div className={`space-y-5 ${readOnly ? "pointer-events-none select-none opacity-75" : ""}`}>
       <div>
-        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Financial Settings</h2>
-        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Financial Settings</h2>
+        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
           Configure cost inputs to calculate true contribution margins across all orders.
         </p>
       </div>
@@ -258,10 +262,10 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
 
       {/* SKU-Level COGS */}
       <SectionCard icon={FileSpreadsheet} title="SKU-Level COGS (Optional)">
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-4 leading-relaxed">
+        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-4 leading-relaxed">
           Upload a CSV with SKU-specific costs. When available, these override the blended COGS % above.
           <br />
-          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block bg-[#FFBC80]/15 text-[#3A3A3A]/70 dark:text-[#FFF9F2]/55">
+          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 text-[#3A3A3A]/70 dark:text-[#003349]/55">
             Format: SKU, Cost Per Item
           </span>
         </p>
@@ -269,7 +273,7 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#FFBC80]/50 text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] hover:bg-[#FFBC80]/10 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors"
           >
             <Upload size={14} strokeWidth={2.5} />
             Upload CSV
@@ -277,26 +281,26 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvUpload} />
 
           {cfg.skuRows.length > 0 && (
-            <span className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">
+            <span className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45">
               {cfg.skuRows.length} SKU{cfg.skuRows.length !== 1 ? "s" : ""} loaded
             </span>
           )}
         </div>
 
         {csvError && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 mb-4">
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-100 border border-red-200 dark:border-red-300/40 mb-4">
             <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-red-600 dark:text-red-400">{csvError}</p>
+            <p className="text-xs text-red-600 dark:text-red-700">{csvError}</p>
           </div>
         )}
 
         {cfg.skuRows.length > 0 && (
-          <div className="rounded-lg border border-[#FFBC80]/20 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-[#FFF9F2] dark:bg-[#1a1208] border-b border-[#FFBC80]/20">
-              <p className="text-[11px] font-bold tracking-wider text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase">SKU Data</p>
+          <div className="rounded-lg border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#FFF9F2] dark:bg-[#FFFFFF] border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+              <p className="text-[11px] font-bold tracking-wider text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase">SKU Data</p>
               <button
                 onClick={() => setCfg((prev) => ({ ...prev, skuRows: [] }))}
-                className="flex items-center gap-1 text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:text-red-500 transition-colors"
+                className="flex items-center gap-1 text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-red-500 transition-colors"
               >
                 <X size={11} /> Clear
               </button>
@@ -304,16 +308,16 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
             <div className="max-h-52 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-[#FFBC80]/15">
-                    <th className="px-4 py-2 text-left font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">SKU</th>
-                    <th className="px-4 py-2 text-right font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Cost Per Item</th>
+                  <tr className="border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+                    <th className="px-4 py-2 text-left font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">SKU</th>
+                    <th className="px-4 py-2 text-right font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Cost Per Item</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cfg.skuRows.map((row, i) => (
-                    <tr key={i} className={`border-b border-[#FFBC80]/10 last:border-0 ${i % 2 === 0 ? "" : "bg-[#FFBC80]/5"}`}>
-                      <td className="px-4 py-2 font-mono text-[#3A3A3A] dark:text-[#FFF9F2]">{row.sku}</td>
-                      <td className="px-4 py-2 text-right text-[#3A3A3A] dark:text-[#FFF9F2]">${row.costPerItem.toFixed(2)}</td>
+                    <tr key={i} className={`border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0 ${i % 2 === 0 ? "" : "bg-[#FFBC80]/5 dark:bg-[#EFBAE1]/5"}`}>
+                      <td className="px-4 py-2 font-mono text-[#3A3A3A] dark:text-[#003349]">{row.sku}</td>
+                      <td className="px-4 py-2 text-right text-[#3A3A3A] dark:text-[#003349]">${row.costPerItem.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -324,14 +328,14 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
       </SectionCard>
 
       {/* Save & Recalculate */}
-      <div className="rounded-xl border border-[#FFBC80]/30 bg-white dark:bg-[#231a0e] p-5">
+      <div className="rounded-xl border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF] p-5">
         <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: brandGradient(theme) }}>
             <RefreshCw size={14} className="text-[#3A3A3A]" strokeWidth={2.5} />
           </div>
-          <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Save & Recalculate</h3>
+          <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Save & Recalculate</h3>
         </div>
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-4 ml-[38px]">
+        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-4 ml-[38px]">
           Save your settings and recalculate contribution margins for all orders. This feeds into your attribution models.
         </p>
         <div className="ml-[38px]">
@@ -339,7 +343,7 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
             onClick={handleSaveRecalculate}
             disabled={status === "saving" || readOnly}
             className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+            style={{ background: brandGradient(theme) }}
           >
             {status === "saving" && (
               <RefreshCw size={14} strokeWidth={2.5} className="animate-spin" />
@@ -353,7 +357,7 @@ export default function FinancialSettings({ readOnly = false }: { readOnly?: boo
             {status === "saving" ? "Recalculating…" : status === "saved" ? "Recalculated!" : "Save & Recalculate"}
           </button>
           {status === "saved" && (
-            <p className="mt-2 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+            <p className="mt-2 text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">
               Contribution margins updated across all attribution models.
             </p>
           )}

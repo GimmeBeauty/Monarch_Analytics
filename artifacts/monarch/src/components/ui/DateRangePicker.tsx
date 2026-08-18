@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronRight, ChevronLeft, ChevronDown, X } from "lucide-react";
 import { useDateRange, buildPreset, fmtLabel, fmt, today, addDays, quarterDates, currentQuarter } from "@/context/DateRangeContext";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,7 @@ interface CalendarProps {
 }
 
 function MonthCalendar({ year, month, selecting, hovered, onDayClick, onDayHover }: CalendarProps) {
+  const { theme } = useTheme();
   const firstDay = new Date(year, month, 1);
   const startDow = firstDay.getDay(); // 0=Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -74,7 +77,7 @@ function MonthCalendar({ year, month, selecting, hovered, onDayClick, onDayHover
     <div className="min-w-[220px]">
       <div className="grid grid-cols-7 mb-1">
         {["Su","Mo","Tu","We","Th","Fr","Sa"].map((d) => (
-          <div key={d} className="text-center text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 py-1">{d}</div>
+          <div key={d} className="text-center text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 py-1">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7">
@@ -97,14 +100,14 @@ function MonthCalendar({ year, month, selecting, hovered, onDayClick, onDayHover
             innerCls += "text-[#3A3A3A] font-bold ";
             // gradient background
           } else if (inRange) {
-            cellCls += "bg-[#FFBC80]/15 ";
-            innerCls += "text-[#3A3A3A] dark:text-[#FFF9F2] hover:bg-[#FFBC80]/20 ";
+            cellCls += "bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 ";
+            innerCls += "text-[#3A3A3A] dark:text-[#003349] hover:bg-[#FFBC80]/20 dark:hover:bg-[#EFBAE1]/20 ";
           } else {
-            innerCls += "text-[#3A3A3A] dark:text-[#FFF9F2] hover:bg-[#FFBC80]/15 ";
+            innerCls += "text-[#3A3A3A] dark:text-[#003349] hover:bg-[#FFBC80]/15 dark:hover:bg-[#EFBAE1]/15 ";
           }
 
           if (isToday && !isStart && !isEnd) {
-            innerCls += "ring-1 ring-[#FFBC80]/60 ";
+            innerCls += "ring-1 ring-[#FFBC80]/60 dark:ring-[#9BDBF3]/60 ";
           }
 
           // Range cap styling
@@ -121,13 +124,13 @@ function MonthCalendar({ year, month, selecting, hovered, onDayClick, onDayHover
             >
               {/* Range fill behind cap */}
               {(capLeft || inRange || capRight) && (
-                <div className={`absolute inset-y-1 bg-[#FFBC80]/15 ${
+                <div className={`absolute inset-y-1 bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 ${
                   capLeft ? "left-1/2 right-0" : capRight ? "left-0 right-1/2" : "left-0 right-0"
                 }`} />
               )}
               <div
                 className={innerCls}
-                style={isStart || isEnd ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={isStart || isEnd ? { background: brandGradient(theme) } : {}}
               >
                 {day.getDate()}
               </div>
@@ -148,6 +151,7 @@ interface Props {
 }
 
 export function DateRangePicker({ onClose }: Props) {
+  const { theme } = useTheme();
   const { dateRange, setRange, setPreset, toggleCompare, setCompareRange } = useDateRange();
 
   // Pending selection (before Apply)
@@ -236,7 +240,7 @@ export function DateRangePicker({ onClose }: Props) {
   const endLabelStr = endLabel ? inputFmt(endLabel instanceof Date ? endLabel : parseDate(String(endLabel))) : pendingStart ? inputFmt(pendingStart) : "End date";
 
   const btnActive = "w-full text-left px-3 py-1.5 rounded-lg text-sm font-semibold text-[#3A3A3A]";
-  const btnInactive = "w-full text-left px-3 py-1.5 rounded-lg text-sm text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 hover:bg-[#FFBC80]/10 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors";
+  const btnInactive = "w-full text-left px-3 py-1.5 rounded-lg text-sm text-[#3A3A3A]/70 dark:text-[#003349]/60 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors";
 
   const lastItems = [
     { key: "last7d", label: "Last 7 Days" },
@@ -261,29 +265,29 @@ export function DateRangePicker({ onClose }: Props) {
       className="absolute right-0 top-full mt-2 z-50 rounded-xl shadow-2xl overflow-hidden flex"
       style={{
         background: "var(--color-bg-card, #fff)",
-        border: "1px solid #FFBC80",
+        border: `1px solid ${theme === "dark" ? "#9BDBF3" : "#FFBC80"}`,
         minWidth: 620,
       }}
     >
       {/* ── Left preset panel ───────────────────────────────────────────── */}
-      <div className="w-44 border-r border-[#FFBC80]/20 py-2 shrink-0 bg-[#FFF9F2] dark:bg-[#1a1208]">
+      <div className="w-44 border-r border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 py-2 shrink-0 bg-[#FFF9F2] dark:bg-[#FFFFFF]">
         {leftPanel === "main" && (
           <nav className="space-y-0.5 px-2">
             <button
               className={activePreset === "today" ? btnActive : btnInactive}
-              style={activePreset === "today" ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+              style={activePreset === "today" ? { background: brandGradient(theme) } : {}}
               onClick={() => selectPreset("today")}
             >Today</button>
             <button
               className={activePreset === "yesterday" ? btnActive : btnInactive}
-              style={activePreset === "yesterday" ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+              style={activePreset === "yesterday" ? { background: brandGradient(theme) } : {}}
               onClick={() => selectPreset("yesterday")}
             >Yesterday</button>
 
             <div className="pt-1 pb-0.5">
               <button
                 className={`${isLastActive ? btnActive : btnInactive} flex items-center justify-between`}
-                style={isLastActive ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={isLastActive ? { background: brandGradient(theme) } : {}}
                 onClick={() => setLeftPanel("last")}
               >
                 <span>Last</span>
@@ -294,7 +298,7 @@ export function DateRangePicker({ onClose }: Props) {
             <div className="pt-0.5">
               <button
                 className={`${isQuarterActive ? btnActive : btnInactive} flex items-center justify-between`}
-                style={isQuarterActive ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={isQuarterActive ? { background: brandGradient(theme) } : {}}
                 onClick={() => setLeftPanel("quarters")}
               >
                 <span>Quarters</span>
@@ -305,7 +309,7 @@ export function DateRangePicker({ onClose }: Props) {
             <div className="pt-1">
               <button
                 className={activePreset === "custom" ? btnActive : btnInactive}
-                style={activePreset === "custom" ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={activePreset === "custom" ? { background: brandGradient(theme) } : {}}
                 onClick={() => { setActivePreset("custom"); setClickCount(0); }}
               >Custom Range</button>
             </div>
@@ -316,7 +320,7 @@ export function DateRangePicker({ onClose }: Props) {
           <div>
             <button
               onClick={() => setLeftPanel("main")}
-              className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors w-full"
+              className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors w-full"
             >
               <ChevronLeft size={13} /> Last
             </button>
@@ -325,7 +329,7 @@ export function DateRangePicker({ onClose }: Props) {
                 <button
                   key={item.key}
                   className={activePreset === item.key ? btnActive : btnInactive}
-                  style={activePreset === item.key ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                  style={activePreset === item.key ? { background: brandGradient(theme) } : {}}
                   onClick={() => selectPreset(item.key)}
                 >
                   {item.label}
@@ -339,7 +343,7 @@ export function DateRangePicker({ onClose }: Props) {
           <div>
             <button
               onClick={() => setLeftPanel("main")}
-              className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors w-full"
+              className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors w-full"
             >
               <ChevronLeft size={13} /> Quarters
             </button>
@@ -348,7 +352,7 @@ export function DateRangePicker({ onClose }: Props) {
                 <button
                   key={item.key}
                   className={activePreset === item.key ? btnActive : btnInactive}
-                  style={activePreset === item.key ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                  style={activePreset === item.key ? { background: brandGradient(theme) } : {}}
                   onClick={() => selectPreset(item.key)}
                 >
                   {item.label}
@@ -360,14 +364,14 @@ export function DateRangePicker({ onClose }: Props) {
       </div>
 
       {/* ── Right: calendar + inputs ─────────────────────────────────────── */}
-      <div className="flex flex-col bg-white dark:bg-[#231a0e]">
+      <div className="flex flex-col bg-white dark:bg-[#FFFFFF]">
         {/* Date text inputs */}
-        <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-[#FFBC80]/15">
-          <div className="flex-1 px-3 py-1.5 rounded-lg border border-[#FFBC80]/40 text-sm text-[#3A3A3A] dark:text-[#FFF9F2] bg-[#FFF9F2] dark:bg-[#1a1208] min-w-[160px] truncate">
+        <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+          <div className="flex-1 px-3 py-1.5 rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 text-sm text-[#3A3A3A] dark:text-[#003349] bg-[#FFF9F2] dark:bg-[#FFFFFF] min-w-[160px] truncate">
             {startLabel}
           </div>
-          <span className="text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 text-sm">→</span>
-          <div className="flex-1 px-3 py-1.5 rounded-lg border border-[#FFBC80]/40 text-sm text-[#3A3A3A] dark:text-[#FFF9F2] bg-[#FFF9F2] dark:bg-[#1a1208] min-w-[160px] truncate">
+          <span className="text-[#3A3A3A]/40 dark:text-[#003349]/30 text-sm">→</span>
+          <div className="flex-1 px-3 py-1.5 rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 text-sm text-[#3A3A3A] dark:text-[#003349] bg-[#FFF9F2] dark:bg-[#FFFFFF] min-w-[160px] truncate">
             {endLabelStr}
           </div>
         </div>
@@ -382,11 +386,11 @@ export function DateRangePicker({ onClose }: Props) {
                   if (leftMonth === 0) { setCalYear(calYear - 1); setCalMonth(11); }
                   else setCalMonth(calMonth - 1);
                 }}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#FFBC80]/15 transition-colors text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40"
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#FFBC80]/15 dark:hover:bg-[#EFBAE1]/15 transition-colors text-[#3A3A3A]/50 dark:text-[#003349]/40"
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">
+              <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349]">
                 {new Date(leftYear, leftMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
               </span>
               <div className="w-6" />
@@ -404,7 +408,7 @@ export function DateRangePicker({ onClose }: Props) {
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="w-6" />
-              <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">
+              <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349]">
                 {new Date(calYear, calMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
               </span>
               <button
@@ -412,7 +416,7 @@ export function DateRangePicker({ onClose }: Props) {
                   if (calMonth === 11) { setCalYear(calYear + 1); setCalMonth(0); }
                   else setCalMonth(calMonth + 1);
                 }}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#FFBC80]/15 transition-colors text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40"
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#FFBC80]/15 dark:hover:bg-[#EFBAE1]/15 transition-colors text-[#3A3A3A]/50 dark:text-[#003349]/40"
               >
                 <ChevronRight size={14} />
               </button>
@@ -428,13 +432,13 @@ export function DateRangePicker({ onClose }: Props) {
         </div>
 
         {/* Comparison toggle */}
-        <div className="px-5 pt-3 pb-2 border-t border-[#FFBC80]/15 mt-3">
+        <div className="px-5 pt-3 pb-2 border-t border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 mt-3">
           <button
             onClick={() => setCompareEnabled((v) => !v)}
-            className="flex items-center gap-2 text-xs font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"
+            className="flex items-center gap-2 text-xs font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
           >
-            <div className={`w-8 h-4 rounded-full transition-colors relative ${compareEnabled ? "" : "bg-[#3A3A3A]/15 dark:bg-[#FFF9F2]/15"}`}
-              style={compareEnabled ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}>
+            <div className={`w-8 h-4 rounded-full transition-colors relative ${compareEnabled ? "" : "bg-[#3A3A3A]/15 dark:bg-[#003349]/15"}`}
+              style={compareEnabled ? { background: brandGradient(theme) } : {}}>
               <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${compareEnabled ? "left-[18px]" : "left-0.5"}`} />
             </div>
             Compare to previous period
@@ -445,8 +449,8 @@ export function DateRangePicker({ onClose }: Props) {
                 <button
                   key={opt}
                   onClick={() => setComparePreset(opt)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${comparePreset === opt ? "text-[#3A3A3A]" : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10"}`}
-                  style={comparePreset === opt ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${comparePreset === opt ? "text-[#3A3A3A]" : "text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"}`}
+                  style={comparePreset === opt ? { background: brandGradient(theme) } : {}}
                 >
                   {opt === "previous_period" ? "Previous period" : "Previous year"}
                 </button>
@@ -456,10 +460,10 @@ export function DateRangePicker({ onClose }: Props) {
         </div>
 
         {/* Action row */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#FFBC80]/15">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:bg-[#FFBC80]/10 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors border border-[#FFBC80]/30"
+            className="px-4 py-1.5 rounded-lg text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30"
           >
             Cancel
           </button>
@@ -467,7 +471,7 @@ export function DateRangePicker({ onClose }: Props) {
             onClick={handleApply}
             disabled={!pendingStart}
             className="px-5 py-1.5 rounded-lg text-sm font-bold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+            style={{ background: brandGradient(theme) }}
           >
             Apply
           </button>
@@ -480,6 +484,7 @@ export function DateRangePicker({ onClose }: Props) {
 // ─── Trigger button + overlay ────────────────────────────────────────────────
 
 export function DateRangeButton() {
+  const { theme } = useTheme();
   const { dateRange } = useDateRange();
   const [open, setOpen] = useState(false);
 
@@ -494,8 +499,8 @@ export function DateRangeButton() {
       <button
         data-testid="date-range-selector"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[#3A3A3A] dark:text-[#FFF9F2] transition-all hover:bg-[#FFBC80]/10"
-        style={{ border: "1px solid #FFBC80" }}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[#3A3A3A] dark:text-[#003349] transition-all hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
+        style={{ border: `1px solid ${theme === "dark" ? "#9BDBF3" : "#FFBC80"}` }}
       >
         <span className="max-w-[200px] truncate">{label}</span>
         <ChevronDown size={13} className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />

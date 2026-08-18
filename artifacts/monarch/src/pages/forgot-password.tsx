@@ -43,10 +43,10 @@ export default function ForgotPassword() {
       {sent ? (
         <div className="text-center py-4">
           <CheckCircle2 size={36} className="text-green-500 mx-auto mb-3" />
-          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">
+          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349] mb-2">
             Check your email
           </h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-5 leading-relaxed">
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-5 leading-relaxed">
             If an account exists for <span className="font-medium">{email}</span>, we've sent a password reset link. It expires in 24 hours.
           </p>
           <button
@@ -61,15 +61,15 @@ export default function ForgotPassword() {
           <button
             type="button"
             onClick={() => setLocation("/login")}
-            className="flex items-center gap-1.5 text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:text-[#3A3A3A]/70 dark:hover:text-[#FFF9F2]/60 mb-5 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A]/70 dark:hover:text-[#003349]/60 mb-5 transition-colors"
           >
             <ArrowLeft size={13} /> Back to login
           </button>
 
-          <h2 className="text-lg font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
+          <h2 className="text-lg font-bold text-[#3A3A3A] dark:text-[#003349] mb-1">
             Forgot password?
           </h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-6 leading-relaxed">
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-6 leading-relaxed">
             Enter the email address associated with your account and we'll send you a reset link.
           </p>
 

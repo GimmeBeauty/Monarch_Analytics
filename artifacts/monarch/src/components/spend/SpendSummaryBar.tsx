@@ -30,19 +30,19 @@ function Metric({ icon: Icon, label, value, sub, subColor, tooltip }: MetricProp
     <div className="rounded-2xl p-4 monarch-card h-full flex flex-col">
       <div className="flex items-start justify-between mb-2 gap-1">
         <div className="flex items-start gap-1.5 min-w-0 flex-1">
-          <span className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider leading-tight">
+          <span className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase tracking-wider leading-tight">
             {label}
           </span>
           {tooltip && <MetricTooltip content={tooltip} />}
         </div>
-        <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-[#FFBC80]/15 shrink-0 mt-0.5">
-          <Icon className="w-3 h-3 text-[#FFBC80]" />
+        <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 shrink-0 mt-0.5">
+          <Icon className="w-3 h-3 text-[#FFBC80] dark:text-[#BFA1E3]" />
         </div>
       </div>
       <div className="flex-1 flex flex-col justify-end">
-        <p className="text-2xl font-black text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums leading-none">{value}</p>
+        <p className="text-2xl font-black text-[#3A3A3A] dark:text-[#003349] tabular-nums leading-none">{value}</p>
         {sub && (
-          <p className={`text-xs mt-1.5 ${subColor ?? "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35"}`}>{sub}</p>
+          <p className={`text-xs mt-1.5 ${subColor ?? "text-[#3A3A3A]/45 dark:text-[#003349]/35"}`}>{sub}</p>
         )}
       </div>
     </div>
@@ -54,9 +54,9 @@ interface SpendSummaryBarProps {
 }
 
 export default function SpendSummaryBar({ summary }: SpendSummaryBarProps) {
-  const uptideColor = summary.reallocationUpside > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold" : undefined;
-  const mapeColor = summary.modelMape < 0.1 ? "text-emerald-600 dark:text-emerald-400" :
-    summary.modelMape < 0.15 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+  const uptideColor = summary.reallocationUpside > 0 ? "text-emerald-600 dark:text-emerald-700 font-semibold" : undefined;
+  const mapeColor = summary.modelMape < 0.1 ? "text-emerald-600 dark:text-emerald-700" :
+    summary.modelMape < 0.15 ? "text-amber-600 dark:text-amber-700" : "text-red-500 dark:text-red-700";
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 items-stretch">

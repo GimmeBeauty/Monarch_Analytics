@@ -8,6 +8,8 @@ import {
   Plus, ShoppingBag, Target, Zap, ChartBar, Link2, X, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { API_BASE } from "@/lib/apiBase";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,6 +173,7 @@ const SECTIONS = ["eCommerce", "Advertising", "Analytics", "Attribution & Insigh
 // ─── ShopifyModal ─────────────────────────────────────────────────────────────
 
 function ShopifyModal({ onClose }: { onClose: () => void }) {
+  const { theme } = useTheme();
   const [shop, setShop] = useState("");
   const [error, setError] = useState("");
 
@@ -186,21 +189,21 @@ function ShopifyModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <SiShopify size={16} color="#96BF48" />
-            <span className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Connect Shopify</span>
+            <span className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Connect Shopify</span>
           </div>
-          <button onClick={onClose} className="opacity-40 hover:opacity-80 transition-opacity text-[#3A3A3A] dark:text-[#FFF9F2]"><X size={16} /></button>
+          <button onClick={onClose} className="opacity-40 hover:opacity-80 transition-opacity text-[#3A3A3A] dark:text-[#003349]"><X size={16} /></button>
         </div>
-        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-4">You'll be redirected to Shopify to approve access and then returned here.</p>
+        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-4">You'll be redirected to Shopify to approve access and then returned here.</p>
         <input
           autoFocus value={shop} onChange={e => { setShop(e.target.value); setError(""); }}
           onKeyDown={e => e.key === "Enter" && go()}
           placeholder="mystore.myshopify.com"
-          className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/30 dark:placeholder-[#FFF9F2]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 transition-all"
+          className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] placeholder-[#3A3A3A]/30 dark:placeholder-[#003349]/25 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/60 dark:focus:ring-[#BFA1E3]/60 transition-all"
         />
         {error && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle size={11} />{error}</p>}
         <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors">Cancel</button>
-          <button onClick={go} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>Authorize with Shopify</button>
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#003349]/10 text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#003349]/5 transition-colors">Cancel</button>
+          <button onClick={go} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity" style={{ background: brandGradient(theme) }}>Authorize with Shopify</button>
         </div>
       </div>
     </div>
@@ -217,6 +220,7 @@ function IntegrationCard({
   onSaved:        (p: string, fields: string[]) => void;
   onDisconnected: (p: string) => void;
 }) {
+  const { theme } = useTheme();
   const connected = status?.connected ?? false;
   const [editing,          setEditing]          = useState(false);
   const [saving,           setSaving]           = useState(false);
@@ -283,21 +287,21 @@ function IntegrationCard({
         {/* ── Header ─────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#2e2010]">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-gray-50 dark:bg-[#FFFFFF]">
               <Icon size={18} color={color} />
             </div>
             <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] leading-tight">{provider.name}</p>
-              <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5 leading-snug">{provider.desc}</p>
+              <p className="text-[13px] font-semibold text-[#3A3A3A] dark:text-[#003349] leading-tight">{provider.name}</p>
+              <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5 leading-snug">{provider.desc}</p>
             </div>
           </div>
           <div className="shrink-0">
             {connected ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-900/25 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-100 text-emerald-600 dark:text-emerald-700 border border-emerald-200/50 dark:border-emerald-300/40">
                 <CheckCircle2 size={10} />Connected
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#3A3A3A]/6 dark:bg-[#FFF9F2]/6 text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#3A3A3A]/6 dark:bg-[#003349]/6 text-[#3A3A3A]/45 dark:text-[#003349]/35 border border-[#3A3A3A]/10 dark:border-[#003349]/10">
                 <XCircle size={10} />Not connected
               </span>
             )}
@@ -313,8 +317,8 @@ function IntegrationCard({
                   const saved = status?.savedFields?.includes(f.key);
                   return (
                     <div key={f.key} className="flex items-center gap-1">
-                      <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{f.label}</span>
-                      <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${saved ? "text-emerald-500" : "text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25"}`}>
+                      <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#003349]/40">{f.label}</span>
+                      <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${saved ? "text-emerald-500" : "text-[#3A3A3A]/30 dark:text-[#003349]/25"}`}>
                         <CheckCircle2 size={9} />{saved ? "Saved" : "Not set"}
                       </span>
                     </div>
@@ -322,7 +326,7 @@ function IntegrationCard({
                 })}
                 {provider.authMode === "oauth_shopify" && status?.shopDomain && (
                   <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Store</span>
+                    <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#003349]/40">Store</span>
                     <span className="text-[10px] font-semibold text-emerald-500">{status.shopDomain}</span>
                   </div>
                 )}
@@ -333,14 +337,14 @@ function IntegrationCard({
                 <button
                   onClick={handleOAuth}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
-                  style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+                  style={{ background: brandGradient(theme) }}
                 >
                   <RefreshCw size={11} />Reconnect
                 </button>
               ) : (
                 <button
                   onClick={() => { setEditing(true); setErr(""); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-[#FFBC80]/50 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#003349]/12 text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:border-[#FFBC80]/50 dark:hover:border-[#9BDBF3]/50 transition-colors"
                 >
                   <Pencil size={11} />Edit
                 </button>
@@ -348,13 +352,13 @@ function IntegrationCard({
               {!confirm ? (
                 <button
                   onClick={() => setConfirm(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#FFF9F2]/12 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-red-400/50 hover:text-red-500 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/12 dark:border-[#003349]/12 text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:border-red-400/50 hover:text-red-500 transition-colors"
                 >
                   <Trash2 size={11} />Disconnect
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Are you sure?</span>
+                  <span className="text-[11px] text-[#3A3A3A]/55 dark:text-[#003349]/45">Are you sure?</span>
                   <button
                     onClick={handleRemove}
                     disabled={removing}
@@ -364,7 +368,7 @@ function IntegrationCard({
                   </button>
                   <button
                     onClick={() => setConfirm(false)}
-                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors"
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-[#3A3A3A]/10 dark:border-[#003349]/10 text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#3A3A3A]/5 transition-colors"
                   >
                     Cancel
                   </button>
@@ -380,7 +384,7 @@ function IntegrationCard({
             onClick={handleOAuth}
             disabled={oauthRedirecting}
             className="w-full py-2.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5"
-            style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+            style={{ background: brandGradient(theme) }}
           >
             {oauthRedirecting ? (
               <><Loader2 size={13} className="animate-spin" />Redirecting…</>
@@ -393,11 +397,11 @@ function IntegrationCard({
         {/* ── Divider (OAuth providers with manual fallback) ── */}
         {!connected && isOAuth && hasFields && (
           <div className="flex items-center gap-3 py-0.5">
-            <div className="flex-1 h-px bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10" />
-            <span className="text-[9px] font-semibold text-[#3A3A3A]/35 dark:text-[#FFF9F2]/28 uppercase tracking-widest whitespace-nowrap">
+            <div className="flex-1 h-px bg-[#3A3A3A]/10 dark:bg-[#003349]/10" />
+            <span className="text-[9px] font-semibold text-[#3A3A3A]/35 dark:text-[#003349]/28 uppercase tracking-widest whitespace-nowrap">
               or enter credentials manually
             </span>
-            <div className="flex-1 h-px bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10" />
+            <div className="flex-1 h-px bg-[#3A3A3A]/10 dark:bg-[#003349]/10" />
           </div>
         )}
 
@@ -406,7 +410,7 @@ function IntegrationCard({
           <div className="space-y-2.5">
             {(provider.fields ?? []).map(f => (
               <div key={f.key}>
-                <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1">
                   {f.label}
                 </label>
                 <div className="relative">
@@ -416,14 +420,14 @@ function IntegrationCard({
                     onChange={e => { setVal(f.key, e.target.value); setErr(""); }}
                     placeholder={f.placeholder}
                     autoComplete="new-password"
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all font-mono"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 dark:border-[#9BDBF3]/35 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] placeholder-[#3A3A3A]/25 dark:placeholder-[#003349]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 dark:focus:ring-[#BFA1E3]/50 transition-all font-mono"
                     style={{ paddingRight: f.secret ? "2.25rem" : undefined }}
                   />
                   {f.secret && (
                     <button
                       type="button"
                       onClick={() => toggleReveal(f.key)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 hover:text-[#3A3A3A]/60 dark:hover:text-[#FFF9F2]/55"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3A3A3A]/30 dark:text-[#003349]/25 hover:text-[#3A3A3A]/60 dark:hover:text-[#003349]/55"
                     >
                       {revealed[f.key] ? <EyeOff size={12} /> : <Eye size={12} />}
                     </button>
@@ -442,7 +446,7 @@ function IntegrationCard({
               {editing && (
                 <button
                   onClick={() => { setEditing(false); setVals({}); setErr(""); }}
-                  className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors"
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#003349]/10 text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#3A3A3A]/5 transition-colors"
                 >
                   Cancel
                 </button>
@@ -453,7 +457,7 @@ function IntegrationCard({
                   onClick={handleSave}
                   disabled={saving}
                   className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5"
-                  style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+                  style={{ background: brandGradient(theme) }}
                 >
                   {saving ? <Loader2 size={12} className="animate-spin" /> : null}
                   {editing ? "Update Credentials" : "Save & Connect"}
@@ -462,7 +466,7 @@ function IntegrationCard({
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 hover:bg-[#FFBC80]/10 hover:border-[#FFBC80]/40 disabled:opacity-60 transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/15 dark:border-[#003349]/15 text-[#3A3A3A]/65 dark:text-[#003349]/55 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 hover:border-[#FFBC80]/40 dark:hover:border-[#9BDBF3]/40 disabled:opacity-60 transition-all flex items-center justify-center gap-1.5"
                 >
                   {saving ? <Loader2 size={12} className="animate-spin" /> : null}
                   Save & Connect
@@ -481,6 +485,7 @@ function IntegrationCard({
 interface Sheet { id: string; name: string; url: string; tab?: string; }
 
 function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
+  const { theme } = useTheme();
   const [sheets,   setSheets]   = useState<Sheet[]>(initialSheets);
   const [adding,   setAdding]   = useState(false);
   const [saving,   setSaving]   = useState(false);
@@ -520,13 +525,13 @@ function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Data Exports</h3>
-          <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">Google Sheets — add as many sheets as needed</p>
+          <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#003349]">Data Exports</h3>
+          <p className="text-[11px] text-[#3A3A3A]/45 dark:text-[#003349]/35">Google Sheets — add as many sheets as needed</p>
         </div>
         <button
           onClick={() => { setAdding(true); setErr(""); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
-          style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}
+          style={{ background: brandGradient(theme) }}
         >
           <Plus size={13} />Add Sheet
         </button>
@@ -536,7 +541,7 @@ function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
         {sheets.length === 0 && !adding && (
           <div className="rounded-xl p-5 monarch-card-settings text-center">
             <SiGooglesheets size={24} color="#34A853" className="mx-auto mb-2 opacity-60" />
-            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">No sheets connected yet. Click "Add Sheet" to link a Google Sheet.</p>
+            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35">No sheets connected yet. Click "Add Sheet" to link a Google Sheet.</p>
           </div>
         )}
 
@@ -544,13 +549,13 @@ function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
           <div key={s.id} className="flex items-center gap-3 px-4 py-3 rounded-xl monarch-card-settings">
             <SiGooglesheets size={16} color="#34A853" className="shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{s.name}</p>
-              <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 truncate">{s.url}{s.tab ? ` · ${s.tab}` : ""}</p>
+              <p className="text-[12px] font-semibold text-[#3A3A3A] dark:text-[#003349] truncate">{s.name}</p>
+              <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 truncate">{s.url}{s.tab ? ` · ${s.tab}` : ""}</p>
             </div>
             <button
               onClick={() => handleRemove(s.id)}
               disabled={removing === s.id}
-              className="shrink-0 p-1.5 rounded-lg text-[#3A3A3A]/35 dark:text-[#FFF9F2]/30 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              className="shrink-0 p-1.5 rounded-lg text-[#3A3A3A]/35 dark:text-[#003349]/30 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
               {removing === s.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
             </button>
@@ -559,23 +564,23 @@ function GoogleSheetsSection({ initialSheets }: { initialSheets: Sheet[] }) {
 
         {adding && (
           <div className="rounded-xl p-4 monarch-card-settings space-y-2.5">
-            <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">New Google Sheet</p>
+            <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349] mb-1">New Google Sheet</p>
             <div>
-              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">Sheet Name</label>
-              <input autoFocus value={name} onChange={e => { setName(e.target.value); setErr(""); }} placeholder="e.g. Sales Data Q1" className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all" />
+              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1">Sheet Name</label>
+              <input autoFocus value={name} onChange={e => { setName(e.target.value); setErr(""); }} placeholder="e.g. Sales Data Q1" className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 dark:border-[#9BDBF3]/35 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] placeholder-[#3A3A3A]/25 dark:placeholder-[#003349]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 dark:focus:ring-[#BFA1E3]/50 transition-all" />
             </div>
             <div>
-              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">Sheet URL</label>
-              <input value={url} onChange={e => { setUrl(e.target.value); setErr(""); }} placeholder="https://docs.google.com/spreadsheets/d/..." className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all font-mono" />
+              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1">Sheet URL</label>
+              <input value={url} onChange={e => { setUrl(e.target.value); setErr(""); }} placeholder="https://docs.google.com/spreadsheets/d/..." className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 dark:border-[#9BDBF3]/35 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] placeholder-[#3A3A3A]/25 dark:placeholder-[#003349]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 dark:focus:ring-[#BFA1E3]/50 transition-all font-mono" />
             </div>
             <div>
-              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1">Tab Name <span className="normal-case font-normal opacity-60">(optional)</span></label>
-              <input value={tab} onChange={e => setTab(e.target.value)} placeholder="Sheet1" className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 bg-white dark:bg-[#2e2010] text-[#3A3A3A] dark:text-[#FFF9F2] placeholder-[#3A3A3A]/25 dark:placeholder-[#FFF9F2]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 transition-all" />
+              <label className="block text-[10px] font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1">Tab Name <span className="normal-case font-normal opacity-60">(optional)</span></label>
+              <input value={tab} onChange={e => setTab(e.target.value)} placeholder="Sheet1" className="w-full px-3 py-2 text-xs rounded-lg border border-[#FFBC80]/35 dark:border-[#9BDBF3]/35 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] placeholder-[#3A3A3A]/25 dark:placeholder-[#003349]/20 focus:outline-none focus:ring-2 focus:ring-[#FFBC80]/50 dark:focus:ring-[#BFA1E3]/50 transition-all" />
             </div>
             {err && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{err}</p>}
             <div className="flex gap-2 pt-0.5">
-              <button onClick={() => { setAdding(false); setName(""); setUrl(""); setTab(""); setErr(""); }} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
-              <button onClick={handleAdd} disabled={saving} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5" style={{ background: "linear-gradient(135deg,#FFBC80,#FFE29A)" }}>
+              <button onClick={() => { setAdding(false); setName(""); setUrl(""); setTab(""); setErr(""); }} className="flex-1 py-2 rounded-lg text-xs font-semibold border border-[#3A3A3A]/10 dark:border-[#003349]/10 text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#3A3A3A]/5 transition-colors">Cancel</button>
+              <button onClick={handleAdd} disabled={saving} className="flex-1 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 disabled:opacity-60 transition-opacity flex items-center justify-center gap-1.5" style={{ background: brandGradient(theme) }}>
                 {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}Add Sheet
               </button>
             </div>
@@ -660,7 +665,7 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 size={24} className="animate-spin text-[#FFBC80]" />
+        <Loader2 size={24} className="animate-spin text-[#FFBC80] dark:text-[#BFA1E3]" />
       </div>
     );
   }
@@ -669,7 +674,7 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
     <div className="space-y-8">
       {/* Banner */}
       {banner && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${banner.type === "success" ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200/60 dark:border-red-800/40"}`}>
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${banner.type === "success" ? "bg-emerald-50 dark:bg-emerald-100 text-emerald-700 dark:text-emerald-700 border border-emerald-200/60 dark:border-emerald-300/40" : "bg-red-50 dark:bg-red-100 text-red-700 dark:text-red-700 border border-red-200/60 dark:border-red-300/40"}`}>
           {banner.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
           {banner.msg}
           <button onClick={() => setBanner(null)} className="ml-auto opacity-60 hover:opacity-100"><X size={14} /></button>
@@ -684,8 +689,8 @@ export default function IntegrationsPanel({ readOnly = false }: { readOnly?: boo
         return (
           <div key={section}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{section}</h3>
-              <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#FFBC80]/15 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+              <h3 className="text-[13px] font-bold text-[#3A3A3A] dark:text-[#003349]">{section}</h3>
+              <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 text-[#3A3A3A]/60 dark:text-[#003349]/50">
                 {connectedCount}/{sectionProviders.length} connected
               </span>
             </div>

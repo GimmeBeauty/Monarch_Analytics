@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, Cell, type TooltipProps,
 } from "recharts";
 import type { ChannelMMM, SpendSummary } from "@/lib/spendData";
+import { useTheme } from "@/context/ThemeContext";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,20 +28,20 @@ function AllocationTooltip({ active, payload, label }: AllocationTooltipProps) {
   const current = payload.find((p) => p.dataKey === "spend");
   const rec     = payload.find((p) => p.dataKey === "recommendedSpend");
   return (
-    <div className="rounded-xl border border-[#FFBC80]/30 bg-white/97 dark:bg-[#1a1208]/97 shadow-lg px-3 py-2.5 text-xs">
-      <p className="font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1.5">{label}</p>
+    <div className="rounded-xl border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white/97 dark:bg-[#FFFFFF]/97 shadow-lg px-3 py-2.5 text-xs">
+      <p className="font-semibold text-[#3A3A3A] dark:text-[#003349] mb-1.5">{label}</p>
       {current && (
         <div className="flex gap-3 items-center">
-          <span className="w-2 h-2 rounded-full bg-[#FFBC80] inline-block" />
-          <span className="text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 w-16">Current</span>
-          <span className="font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{fmtK(current.value as number)}</span>
+          <span className="w-2 h-2 rounded-full bg-[#FFBC80] dark:bg-[#BFA1E3] inline-block" />
+          <span className="text-[#3A3A3A]/60 dark:text-[#003349]/50 w-16">Current</span>
+          <span className="font-bold text-[#3A3A3A] dark:text-[#003349] tabular-nums">{fmtK(current.value as number)}</span>
         </div>
       )}
       {rec && (
         <div className="flex gap-3 items-center mt-0.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-          <span className="text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 w-16">Recommended</span>
-          <span className="font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{fmtK(rec.value as number)}</span>
+          <span className="text-[#3A3A3A]/60 dark:text-[#003349]/50 w-16">Recommended</span>
+          <span className="font-bold text-[#3A3A3A] dark:text-[#003349] tabular-nums">{fmtK(rec.value as number)}</span>
         </div>
       )}
     </div>
@@ -74,7 +75,7 @@ function RevenueDecomposition({ channels, totalBase }: { channels: ChannelMMM[];
 
   return (
     <div>
-      <h4 className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-3">
+      <h4 className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-3">
         Revenue Decomposition
       </h4>
 
@@ -95,8 +96,8 @@ function RevenueDecomposition({ channels, totalBase }: { channels: ChannelMMM[];
         {segments.map((seg) => (
           <div key={seg.label} className="flex items-center gap-2 min-w-0">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: seg.color }} />
-            <span className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 truncate">{seg.label}</span>
-            <span className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums ml-auto shrink-0">
+            <span className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50 truncate">{seg.label}</span>
+            <span className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349] tabular-nums ml-auto shrink-0">
               {seg.pct.toFixed(1)}%
             </span>
           </div>
@@ -114,6 +115,7 @@ interface BudgetAllocationProps {
 }
 
 export default function BudgetAllocation({ channels, summary }: BudgetAllocationProps) {
+  const { theme } = useTheme();
   const sorted = [...channels].sort((a, b) => b.spend - a.spend);
 
   const barData = sorted.map((ch) => ({
@@ -132,19 +134,19 @@ export default function BudgetAllocation({ channels, summary }: BudgetAllocation
       {/* Header */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Budget Allocation</h3>
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">Current vs MMM-recommended spend</p>
+          <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Budget Allocation</h3>
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">Current vs MMM-recommended spend</p>
         </div>
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-[#FFBC80]" />
-            <span className="text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Current</span>
+            <div className="w-3 h-3 rounded bg-[#FFBC80] dark:bg-[#BFA1E3]" />
+            <span className="text-[#3A3A3A]/55 dark:text-[#003349]/45">Current</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-emerald-500" />
-            <span className="text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Recommended</span>
+            <span className="text-[#3A3A3A]/55 dark:text-[#003349]/45">Recommended</span>
           </div>
-          <div className={`px-2 py-0.5 rounded-md font-semibold ${isDeltaPositive ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" : "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"}`}>
+          <div className={`px-2 py-0.5 rounded-md font-semibold ${isDeltaPositive ? "bg-emerald-50 dark:bg-emerald-100 text-emerald-600 dark:text-emerald-700" : "bg-amber-50 dark:bg-amber-100 text-amber-600 dark:text-amber-700"}`}>
             {isDeltaPositive ? "+" : ""}{fmtK(totalDelta)} total
           </div>
         </div>
@@ -157,17 +159,17 @@ export default function BudgetAllocation({ channels, summary }: BudgetAllocation
             <BarChart data={barData} barGap={2} barCategoryGap="25%"
               margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false}
-                stroke="currentColor" className="text-[#3A3A3A]/8 dark:text-[#FFF9F2]/8" />
+                stroke="currentColor" className="text-[#3A3A3A]/8 dark:text-[#003349]/8" />
               <XAxis dataKey="label"
-                tick={{ fontSize: 10, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+                tick={{ fontSize: 10, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
                 tickLine={false} axisLine={false} />
               <YAxis
-                tick={{ fontSize: 10, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+                tick={{ fontSize: 10, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
                 tickLine={false} axisLine={false} width={44}
                 tickFormatter={(v: number) => fmtK(v)} />
-              <Tooltip content={<AllocationTooltip />} cursor={{ fill: "currentColor", className: "text-[#3A3A3A]/4 dark:text-[#FFF9F2]/4" }} />
+              <Tooltip content={<AllocationTooltip />} cursor={{ fill: "currentColor", className: "text-[#3A3A3A]/4 dark:text-[#003349]/4" }} />
               <Bar dataKey="spend" name="Current Spend" radius={[3, 3, 0, 0]}>
-                {barData.map((d, i) => <Cell key={i} fill="#FFBC80" fillOpacity={0.85} />)}
+                {barData.map((d, i) => <Cell key={i} fill={theme === "dark" ? "#BFA1E3" : "#FFBC80"} fillOpacity={0.85} />)}
               </Bar>
               <Bar dataKey="recommendedSpend" name="Recommended" radius={[3, 3, 0, 0]}>
                 {barData.map((d, i) => (

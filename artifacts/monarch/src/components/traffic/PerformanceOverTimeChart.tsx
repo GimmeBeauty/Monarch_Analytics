@@ -460,7 +460,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
   return (
     <div className="rounded-2xl p-6 monarch-card">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-base font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+        <h2 className="text-base font-semibold text-[#3A3A3A] dark:text-[#003349]">
           Performance Over Time
         </h2>
         <div className="flex items-center gap-2">
@@ -474,7 +474,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
             </button>
           )}
           {/* Metric toggle */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#FFF9F2]/5">
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#003349]/5">
             {(["revenue", "volume", "efficiency"] as Metric[]).map((m) => {
               const tooltips: Record<Metric, string> = {
                 revenue:    "Total net revenue per day across selected stores.",
@@ -487,8 +487,8 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                     onClick={() => setMetric(m)}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${
                       metric === m
-                        ? "bg-white dark:bg-[#2a1f0f] text-[#3A3A3A] dark:text-[#FFF9F2] shadow-sm"
-                        : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/60"
+                        ? "bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] shadow-sm"
+                        : "text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#003349]/60"
                     }`}
                   >
                     {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -532,13 +532,13 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke="currentColor"
-                className="text-[#3A3A3A]/8 dark:text-[#FFF9F2]/8"
+                className="text-[#3A3A3A]/8 dark:text-[#003349]/8"
                 vertical={false}
               />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatDate}
-                tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+                tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
                 axisLine={false}
                 tickLine={false}
                 minTickGap={48}
@@ -546,7 +546,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               <YAxis
                 yAxisId="left"
                 tickFormatter={formatCurrency}
-                tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+                tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
                 axisLine={false}
                 tickLine={false}
                 width={64}
@@ -556,7 +556,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                   yAxisId="right"
                   orientation="right"
                   tickFormatter={metric === "volume" ? formatUnits : formatDPSW}
-                  tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" }}
+                  tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
                   axisLine={false}
                   tickLine={false}
                   width={52}

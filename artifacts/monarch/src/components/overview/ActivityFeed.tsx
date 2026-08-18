@@ -20,21 +20,21 @@ const TABS: { id: FilterTab; label: string }[] = [
 const SEVERITY_STYLES: Record<ActivitySeverity, { border: string; bg: string; dot: string; icon: string }> = {
   critical: {
     border: "border-l-red-500",
-    bg: "bg-red-50 dark:bg-red-950/20",
+    bg: "bg-red-50 dark:bg-red-100",
     dot: "bg-red-500",
     icon: "text-red-500",
   },
   warning: {
     border: "border-l-amber-400",
-    bg: "bg-amber-50 dark:bg-amber-950/20",
+    bg: "bg-amber-50 dark:bg-amber-100",
     dot: "bg-amber-400",
-    icon: "text-amber-500 dark:text-amber-400",
+    icon: "text-amber-500 dark:text-amber-700",
   },
   info: {
-    border: "border-l-[#FFBC80]/60",
+    border: "border-l-[#FFBC80]/60 dark:border-l-[#9BDBF3]/60",
     bg: "bg-transparent",
-    dot: "bg-[#FFBC80]",
-    icon: "text-[#FFBC80] dark:text-[#FFE29A]",
+    dot: "bg-[#FFBC80] dark:bg-[#9BDBF3]",
+    icon: "text-[#FFBC80] dark:text-[#9BDBF3]",
   },
 };
 
@@ -84,7 +84,7 @@ function EventItem({ event }: { event: ActivityEvent }) {
       className={`
         flex gap-3 pl-4 pr-4 py-3.5 rounded-xl border-l-2 transition-colors duration-150
         ${styles.border} ${styles.bg}
-        ${event.linkTo ? "cursor-pointer hover:bg-[#3A3A3A]/3 dark:hover:bg-[#FFF9F2]/3" : ""}
+        ${event.linkTo ? "cursor-pointer hover:bg-[#3A3A3A]/3 dark:hover:bg-[#003349]/3" : ""}
       `}
       onClick={handleClick}
     >
@@ -96,23 +96,23 @@ function EventItem({ event }: { event: ActivityEvent }) {
       {/* Body */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] leading-snug">
+          <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] leading-snug">
             {event.title}
           </p>
           <div className="flex items-center gap-1.5 shrink-0">
             <span
-              className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 tabular-nums whitespace-nowrap"
+              className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 tabular-nums whitespace-nowrap"
               title={absTime(event.timestamp)}
             >
               {relativeTime(event.timestamp)}
             </span>
             {event.linkTo && (
-              <ExternalLink className="w-3 h-3 text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25" />
+              <ExternalLink className="w-3 h-3 text-[#3A3A3A]/30 dark:text-[#003349]/25" />
             )}
           </div>
         </div>
 
-        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mt-0.5 leading-relaxed">
+        <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mt-0.5 leading-relaxed">
           {event.description}
         </p>
 
@@ -123,23 +123,23 @@ function EventItem({ event }: { event: ActivityEvent }) {
               className={`
                 text-[10px] font-medium px-1.5 py-0.5 rounded uppercase tracking-wide
                 ${event.category === "alert"
-                  ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                  ? "bg-red-100 dark:bg-red-100 text-red-700 dark:text-red-700"
                   : event.category === "integration"
-                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                  ? "bg-blue-100 dark:bg-blue-100 text-blue-700 dark:text-blue-700"
                   : event.category === "data"
-                  ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-                  : "bg-[#FFBC80]/20 text-[#FFBC80] dark:text-[#FFE29A]"}
+                  ? "bg-purple-100 dark:bg-purple-100 text-purple-700 dark:text-purple-700"
+                  : "bg-[#FFBC80]/20 dark:bg-[#BFA1E3]/20 text-[#FFBC80] dark:text-[#9BDBF3]"}
               `}
             >
               {event.category}
             </span>
             {store && (
-              <span className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
+              <span className="text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35">
                 {store.label}
               </span>
             )}
             {channel && (
-              <span className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
+              <span className="text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35">
                 {channel.channelLabel}
               </span>
             )}
@@ -177,8 +177,8 @@ export default function ActivityFeed({ events }: ActivityFeedProps) {
       <div className="px-5 pt-5 pb-3">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-[#FFBC80]" />
-            <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+            <Bell className="w-4 h-4 text-[#FFBC80] dark:text-[#9BDBF3]" />
+            <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
               Activity Feed
             </h3>
             {alertCount > 0 && (
@@ -187,7 +187,7 @@ export default function ActivityFeed({ events }: ActivityFeedProps) {
               </span>
             )}
           </div>
-          <span className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+          <span className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">
             {filtered.length} event{filtered.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -205,8 +205,8 @@ export default function ActivityFeed({ events }: ActivityFeedProps) {
                 onClick={() => { setActiveTab(tab.id); setShowAll(false); }}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${
                   activeTab === tab.id
-                    ? "bg-[#FFBC80]/20 text-[#FFBC80] dark:text-[#FFE29A]"
-                    : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5"
+                    ? "bg-[#FFBC80]/20 dark:bg-[#BFA1E3]/20 text-[#FFBC80] dark:text-[#9BDBF3]"
+                    : "text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#003349]/5"
                 }`}
               >
                 {tab.label}
@@ -218,12 +218,12 @@ export default function ActivityFeed({ events }: ActivityFeedProps) {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-[#FFBC80]/15 dark:border-[#FFBC80]/10 mx-5" />
+      <div className="border-t border-[#FFBC80]/15 dark:border-[#BFA1E3]/10 mx-5" />
 
       {/* Events */}
       <div className="p-5 space-y-2">
         {visible.length === 0 ? (
-          <p className="text-sm text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 text-center py-4">
+          <p className="text-sm text-[#3A3A3A]/40 dark:text-[#003349]/30 text-center py-4">
             No events in this category.
           </p>
         ) : (
@@ -236,7 +236,7 @@ export default function ActivityFeed({ events }: ActivityFeedProps) {
         <div className="px-5 pb-5 pt-0">
           <button
             onClick={() => setShowAll((v) => !v)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#FFF9F2]/5 transition-colors border border-[#3A3A3A]/10 dark:border-[#FFF9F2]/10"
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:bg-[#3A3A3A]/5 dark:hover:bg-[#003349]/5 transition-colors border border-[#3A3A3A]/10 dark:border-[#003349]/10"
           >
             {showAll ? (
               <>Show less</>

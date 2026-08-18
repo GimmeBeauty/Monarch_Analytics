@@ -1,6 +1,8 @@
 import { TrendingUp, TrendingDown, Minus, DollarSign, Package, Store, Megaphone, TrendingUp as AdRev, BarChart2 } from "lucide-react";
 import type { TrafficKPI } from "@/lib/trafficData";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 const KPI_ICONS: Record<string, React.FC<{ className?: string }>> = {
   revenue:   DollarSign,
@@ -20,10 +22,10 @@ function ChangeBadge({ change, positive }: { change: number; positive: boolean }
   const isBad  = (isDown && positive) || (isUp && !positive);
 
   const cls = isGood
-    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30"
+    ? "text-emerald-600 dark:text-emerald-700 bg-emerald-50 dark:bg-emerald-100"
     : isBad
-    ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30"
-    : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 bg-[#3A3A3A]/5 dark:bg-[#FFF9F2]/5";
+    ? "text-red-600 dark:text-red-700 bg-red-50 dark:bg-red-100"
+    : "text-[#3A3A3A]/50 dark:text-[#003349]/50 bg-[#3A3A3A]/5 dark:bg-[#003349]/5";
 
   return (
     <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${cls}`}>
@@ -35,6 +37,7 @@ function ChangeBadge({ change, positive }: { change: number; positive: boolean }
 
 function KPICard({ kpi }: { kpi: TrafficKPI }) {
   const Icon = KPI_ICONS[kpi.id] ?? BarChart2;
+  const { theme } = useTheme();
 
   return (
     <div
@@ -43,32 +46,32 @@ function KPICard({ kpi }: { kpi: TrafficKPI }) {
 
       {/* Corner accent */}
       <div className="absolute top-0 right-0 w-24 h-24 opacity-10 rounded-bl-full"
-           style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
+           style={{ background: brandGradient(theme) }} />
 
       <div className="relative">
         <div className="flex items-center justify-between mb-3">
-          <span className="flex items-center gap-1 text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider">
+          <span className="flex items-center gap-1 text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider">
             {kpi.label}
             <MetricTooltip content={kpi.description} />
           </span>
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#FFBC80]/15 dark:bg-[#FFBC80]/10 shrink-0">
-            <Icon className="w-3.5 h-3.5 text-[#FFBC80] dark:text-[#FFE29A]" />
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#FFBC80]/15 dark:bg-[#BFA1E3]/10 shrink-0">
+            <Icon className="w-3.5 h-3.5 text-[#FFBC80] dark:text-[#9BDBF3]" />
           </div>
         </div>
 
-        <div className="text-2xl font-black text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums leading-none mb-2.5">
+        <div className="text-2xl font-black text-[#3A3A3A] dark:text-[#003349] tabular-nums leading-none mb-2.5">
           {kpi.formatted}
         </div>
 
         <div className="flex items-center gap-2">
           <ChangeBadge change={kpi.change} positive={kpi.positive} />
-          <span className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">vs prior period</span>
+          <span className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">vs prior period</span>
         </div>
       </div>
 
       {/* Hover accent line */}
       <div className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-           style={{ background: "linear-gradient(90deg, #FFBC80, #FFE29A)" }} />
+           style={{ background: theme === "dark" ? "linear-gradient(90deg, #BFA1E3, #9BDBF3)" : "linear-gradient(90deg, #FFBC80, #FFE29A)" }} />
     </div>
   );
 }

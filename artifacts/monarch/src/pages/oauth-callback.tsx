@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 /**
  * OAuth 2.0 callback handler.
@@ -17,6 +19,7 @@ import { useLocation } from "wouter";
  *   - Redirects to /settings/integrations
  */
 export default function OAuthCallback() {
+  const { theme } = useTheme();
   const [, setLocation] = useLocation();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMsg, setErrorMsg] = useState("");
@@ -63,39 +66,39 @@ export default function OAuthCallback() {
   }, [setLocation]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FFF9F2] dark:bg-[#120d06]">
+    <div className="min-h-screen flex items-center justify-center bg-[#FFF9F2] dark:bg-[#FFFFFF]">
       <div className="flex flex-col items-center gap-4 p-8 max-w-sm text-center">
 
         {/* Logo mark */}
         <div
           className="w-10 h-10 rounded-xl mb-2"
-          style={{ background: "linear-gradient(135deg, #FFBC80 0%, #FFE29A 100%)" }}
+          style={{ background: brandGradient(theme) }}
         />
 
         {status === "processing" && (
           <>
-            <Loader2 size={28} className="text-[#FFBC80] animate-spin" />
-            <p className="text-sm text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">Completing authorization…</p>
+            <Loader2 size={28} className="text-[#FFBC80] dark:text-[#BFA1E3] animate-spin" />
+            <p className="text-sm text-[#3A3A3A]/60 dark:text-[#003349]/50">Completing authorization…</p>
           </>
         )}
 
         {status === "success" && (
           <>
             <CheckCircle size={28} className="text-emerald-500" />
-            <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Authorization successful</p>
-            <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Returning to settings…</p>
+            <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Authorization successful</p>
+            <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">Returning to settings…</p>
           </>
         )}
 
         {status === "error" && (
           <>
             <XCircle size={28} className="text-rose-500" />
-            <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Authorization failed</p>
-            <p className="text-xs text-rose-600 dark:text-rose-400 leading-relaxed">{errorMsg}</p>
+            <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Authorization failed</p>
+            <p className="text-xs text-rose-600 dark:text-rose-700 leading-relaxed">{errorMsg}</p>
             <button
               onClick={() => setLocation("/settings/integrations")}
               className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A]"
-              style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+              style={{ background: brandGradient(theme) }}
             >
               Back to Settings
             </button>

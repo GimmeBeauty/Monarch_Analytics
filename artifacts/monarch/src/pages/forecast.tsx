@@ -14,6 +14,8 @@ import {
   Tooltip,
 } from "recharts";
 import ErrorState from "@/components/ErrorState";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -70,6 +72,8 @@ interface ForecastChartResp {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Forecast() {
+  const { theme } = useTheme();
+  const accent = theme === "dark" ? "#BFA1E3" : "#FFBC80";
   const [selectedYear, setSelectedYear]   = useState(2026);
   const [granularity,  setGranularity]    = useState<"week" | "month">("month");
   const [showPriorYear, setShowPriorYear] = useState(false);
@@ -135,9 +139,9 @@ export default function Forecast() {
   // Accent color helper
   const pctColor = (pct: number | null) =>
     pct == null ? "" :
-    pct >= 100  ? "text-emerald-600 dark:text-emerald-400" :
-    pct >= 75   ? "text-amber-600 dark:text-amber-400"   :
-                  "text-red-500 dark:text-red-400";
+    pct >= 100  ? "text-emerald-600 dark:text-emerald-700" :
+    pct >= 75   ? "text-amber-600 dark:text-amber-700"   :
+                  "text-red-500 dark:text-red-700";
 
   // Scenario calculations
   const scenarios = useMemo(() => {
@@ -206,14 +210,14 @@ export default function Forecast() {
             className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
               selectedYear === y
                 ? "text-[#3A3A3A]"
-                : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 border border-[#FFBC80]/30 hover:border-[#FFBC80]/60 hover:bg-[#FFBC80]/8"
+                : "text-[#3A3A3A]/55 dark:text-[#003349]/45 border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 hover:bg-[#FFBC80]/8 dark:hover:bg-[#EFBAE1]/8"
             }`}
-            style={selectedYear === y ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+            style={selectedYear === y ? { background: brandGradient(theme) } : {}}
           >
             {y}
           </button>
         ))}
-        <span className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 ml-1">
+        <span className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 ml-1">
           Jan 1 – Dec 31, {selectedYear}
         </span>
       </div>
@@ -227,23 +231,23 @@ export default function Forecast() {
       ) : isLoading ? (
         <div className="animate-pulse space-y-6">
           <div className="grid grid-cols-5 gap-4">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-28 rounded-xl bg-[#FFBC80]/10" />)}
+            {[...Array(5)].map((_, i) => <div key={i} className="h-28 rounded-xl bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10" />)}
           </div>
-          <div className="h-80 rounded-xl bg-[#FFBC80]/10" />
-          <div className="h-52 rounded-xl bg-[#FFBC80]/10" />
+          <div className="h-80 rounded-xl bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10" />
+          <div className="h-52 rounded-xl bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10" />
         </div>
       ) : (
         <div className="space-y-6">
 
           {/* ── 5 KPI Cards ── */}
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#3A3A3A]/40 dark:text-[#003349]/30">
               Key Metrics
             </span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide ${
               isWholesale
-                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                : "bg-[#FFBC80]/20 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50"
+                ? "bg-blue-100 dark:bg-blue-100 text-blue-700 dark:text-blue-700"
+                : "bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A]/60 dark:text-[#003349]/50"
             }`}>
               {isWholesale ? "Wholesale" : "MSRP"}
             </span>
@@ -253,15 +257,15 @@ export default function Forecast() {
               <div key={kpi.label} className="rounded-xl p-5 monarch-card-settings relative overflow-hidden">
                 <div
                   className="absolute top-0 right-0 w-20 h-20 opacity-10 rounded-bl-full"
-                  style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                  style={{ background: brandGradient(theme) }}
                 />
-                <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-2 leading-tight">
+                <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase tracking-wider mb-2 leading-tight">
                   {kpi.label}
                 </p>
-                <p className={`text-2xl font-bold tabular-nums mb-1 ${kpi.color || "text-[#3A3A3A] dark:text-[#FFF9F2]"}`}>
+                <p className={`text-2xl font-bold tabular-nums mb-1 ${kpi.color || "text-[#3A3A3A] dark:text-[#003349]"}`}>
                   {kpi.value}
                 </p>
-                <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">{kpi.sub}</p>
+                <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">{kpi.sub}</p>
               </div>
             ))}
           </div>
@@ -270,8 +274,8 @@ export default function Forecast() {
           <div className="rounded-xl p-6 monarch-card-settings">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Revenue Forecast</h2>
-                <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+                <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Revenue Forecast</h2>
+                <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
                   Solid = actuals · Dashed = projected · Shaded = confidence interval
                 </p>
               </div>
@@ -281,14 +285,14 @@ export default function Forecast() {
                   onClick={() => setShowPriorYear(!showPriorYear)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                     showPriorYear
-                      ? "bg-[#3A3A3A]/10 dark:bg-[#FFF9F2]/10 text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#3A3A3A]/20"
-                      : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 border border-[#FFBC80]/30 hover:border-[#FFBC80]/60"
+                      ? "bg-[#3A3A3A]/10 dark:bg-[#003349]/10 text-[#3A3A3A] dark:text-[#003349] border border-[#3A3A3A]/20"
+                      : "text-[#3A3A3A]/50 dark:text-[#003349]/40 border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60"
                   }`}
                 >
                   {selectedYear - 1} Actual
                 </button>
                 {/* Granularity toggle */}
-                <div className="flex rounded-lg border border-[#FFBC80]/30 overflow-hidden">
+                <div className="flex rounded-lg border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 overflow-hidden">
                   {(["month", "week"] as const).map((g) => (
                     <button
                       key={g}
@@ -296,9 +300,9 @@ export default function Forecast() {
                       className={`px-3 py-1.5 text-xs font-medium transition-all ${
                         granularity === g
                           ? "text-[#3A3A3A]"
-                          : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:bg-[#FFBC80]/8"
+                          : "text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:bg-[#FFBC80]/8 dark:hover:bg-[#EFBAE1]/8"
                       }`}
-                      style={granularity === g ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                      style={granularity === g ? { background: brandGradient(theme) } : {}}
                     >
                       {g === "month" ? "Month" : "Week"}
                     </button>
@@ -311,8 +315,8 @@ export default function Forecast() {
               <ComposedChart data={chartSeries} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradBand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#FFE29A" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#FFE29A" stopOpacity={0.05} />
+                    <stop offset="5%"  stopColor={theme === "dark" ? "#9BDBF3" : "#FFE29A"} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={theme === "dark" ? "#9BDBF3" : "#FFE29A"} stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,58,58,0.06)" vertical={false} />
@@ -333,7 +337,7 @@ export default function Forecast() {
                 <Tooltip
                   contentStyle={{
                     background: "rgba(255,249,242,0.96)",
-                    border: "1px solid #FFBC80",
+                    border: `1px solid ${accent}`,
                     borderRadius: "10px",
                     fontSize: 12,
                   }}
@@ -377,7 +381,7 @@ export default function Forecast() {
                 <Line
                   type="monotone"
                   dataKey="actual"
-                  stroke="#FFBC80"
+                  stroke={accent}
                   strokeWidth={2.5}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -387,9 +391,9 @@ export default function Forecast() {
             </ResponsiveContainer>
 
             {showPriorYear && (
-              <div className="mt-3 flex items-center gap-4 text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
+              <div className="mt-3 flex items-center gap-4 text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35">
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-6 border-t-2 border-[#FFBC80]" />
+                  <span className="inline-block w-6 border-t-2 border-[#FFBC80] dark:border-[#BFA1E3]" />
                   {selectedYear} Actual
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -409,13 +413,13 @@ export default function Forecast() {
             <div className="rounded-xl p-6 monarch-card-settings">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Scenario Comparison</h2>
-                  <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+                  <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Scenario Comparison</h2>
+                  <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
                     Updates daily as actuals come in · Remaining months use forecast model
                   </p>
                 </div>
                 {!s?.annualGoal && (
-                  <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 text-right max-w-[200px] leading-relaxed">
+                  <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 text-right max-w-[200px] leading-relaxed">
                     Set an Annual Revenue Goal in Forecast Settings to calibrate scenarios.
                   </p>
                 )}
@@ -427,36 +431,39 @@ export default function Forecast() {
                     className="rounded-lg p-4"
                     style={
                       i === 1
-                        ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }
-                        : { background: "rgba(255,188,128,0.08)", border: "1px solid rgba(255,188,128,0.3)" }
+                        ? { background: brandGradient(theme) }
+                        : {
+                            background: theme === "dark" ? "rgba(191,161,227,0.08)" : "rgba(255,188,128,0.08)",
+                            border: theme === "dark" ? "1px solid rgba(191,161,227,0.3)" : "1px solid rgba(255,188,128,0.3)",
+                          }
                     }
                   >
                     <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${
-                      i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40"
+                      i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A]/50 dark:text-[#003349]/40"
                     }`}>
                       {sc.label}
                     </p>
                     <p className={`text-xl font-bold tabular-nums mb-1 ${
-                      i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#FFF9F2]"
+                      i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#003349]"
                     }`}>
                       {fmt$(sc.revenue)}
                     </p>
-                    <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/70" : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40"}`}>
+                    <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/70" : "text-[#3A3A3A]/50 dark:text-[#003349]/40"}`}>
                       Revenue
                     </p>
                     <div className={`mt-3 pt-3 border-t ${
-                      i === 1 ? "border-[#3A3A3A]/20" : "border-[#FFBC80]/20"
+                      i === 1 ? "border-[#3A3A3A]/20" : "border-[#FFBC80]/20 dark:border-[#9BDBF3]/20"
                     } flex justify-between`}>
                       <div>
-                        <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/60" : "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35"}`}>Spend</p>
+                        <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/60" : "text-[#3A3A3A]/45 dark:text-[#003349]/35"}`}>Spend</p>
                         <p className={`text-sm font-semibold tabular-nums ${
-                          i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#FFF9F2]"
+                          i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#003349]"
                         }`}>{fmt$(sc.spend)}</p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/60" : "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35"}`}>ROAS</p>
+                        <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/60" : "text-[#3A3A3A]/45 dark:text-[#003349]/35"}`}>ROAS</p>
                         <p className={`text-sm font-semibold tabular-nums ${
-                          i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#FFF9F2]"
+                          i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#003349]"
                         }`}>{sc.roas}x</p>
                       </div>
                     </div>

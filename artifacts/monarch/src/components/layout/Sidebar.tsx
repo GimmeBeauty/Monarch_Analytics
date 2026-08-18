@@ -32,7 +32,10 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const { theme } = useTheme();
 
-  const logoSrc = theme === "dark" ? "/monarch-logo.jpg" : "/monarch-logo-light.jpg";
+  const logoSrc = "/monarch-logo-light.jpg";
+  const accentGradient = theme === "dark"
+    ? "linear-gradient(135deg, #BFA1E3, #9BDBF3)"
+    : "linear-gradient(135deg, #FFBC80, #FFE29A)";
 
   const isActive = (path: string) => location === path || location.startsWith(path + "/");
 
@@ -50,7 +53,7 @@ export default function Sidebar() {
   return (
     <aside
       data-testid="sidebar"
-      className="flex flex-col h-screen w-56 shrink-0 bg-[#FFF9F2] dark:bg-[#1a1208] relative"
+      className="flex flex-col h-screen w-56 shrink-0 bg-[#FFF9F2] dark:bg-white relative"
       style={{
         borderRight: "1px solid transparent",
         backgroundImage: "linear-gradient(#FFF9F2, #FFF9F2), linear-gradient(135deg, #FFBC80, #FFE29A)",
@@ -60,15 +63,15 @@ export default function Sidebar() {
     >
       <style>{`
         .dark aside[data-testid="sidebar"] {
-          background-image: linear-gradient(#1a1208, #1a1208), linear-gradient(135deg, #FFBC80, #FFE29A) !important;
+          background-image: linear-gradient(#ffffff, #ffffff), linear-gradient(135deg, #BFA1E3, #9BDBF3) !important;
         }
       `}</style>
 
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 shrink-0">
+      <div className="px-5 py-5 border-b border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 shrink-0">
         <div className="flex items-center gap-2">
           <img src={logoSrc} alt="Monarch" className="w-7 h-7 rounded-md object-cover object-center" />
-          <span className="font-black text-xl tracking-widest text-[#3A3A3A] dark:text-[#FFF9F2]">MONARCH</span>
+          <span className="font-black text-xl tracking-widest text-[#3A3A3A] dark:text-[#003349]">MONARCH</span>
         </div>
       </div>
 
@@ -83,10 +86,10 @@ export default function Sidebar() {
                 data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
                   active
-                    ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                    : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+                    ? "text-[#3A3A3A] dark:text-[#003349]"
+                    : "text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:text-[#3A3A3A] dark:hover:text-[#003349] hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
                 }`}
-                style={active ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={active ? { background: accentGradient } : {}}
               >
                 <Icon size={15} strokeWidth={active ? 2.5 : 2} />
                 {item.label}
@@ -97,16 +100,16 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom navigation */}
-      <div className="px-2 pb-3 space-y-0.5 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20 pt-3 shrink-0">
+      <div className="px-2 pb-3 space-y-0.5 border-t border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 pt-3 shrink-0">
         <Link href="/knowledge-hub" asChild>
           <button
             data-testid="nav-knowledge-hub"
             className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
               isActive("/knowledge-hub")
-                ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+                ? "text-[#3A3A3A] dark:text-[#003349]"
+                : "text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:text-[#3A3A3A] dark:hover:text-[#003349] hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
             }`}
-            style={isActive("/knowledge-hub") ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+            style={isActive("/knowledge-hub") ? { background: accentGradient } : {}}
           >
             <BookOpen size={15} />
             Knowledge Hub
@@ -118,10 +121,10 @@ export default function Sidebar() {
             data-testid="nav-settings"
             className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
               isActive("/settings") || isActive("/integrations")
-                ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] hover:bg-[#FFBC80]/10"
+                ? "text-[#3A3A3A] dark:text-[#003349]"
+                : "text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:text-[#3A3A3A] dark:hover:text-[#003349] hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
             }`}
-            style={isActive("/settings") || isActive("/integrations") ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+            style={isActive("/settings") || isActive("/integrations") ? { background: accentGradient } : {}}
           >
             <Settings size={15} />
             Settings
@@ -129,35 +132,35 @@ export default function Sidebar() {
         </Link>
 
         {/* User section */}
-        <div className="mt-2 pt-3 border-t border-[#FFBC80]/30 dark:border-[#FFBC80]/20">
-          <div className="px-3 py-1 text-[10px] font-medium text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider">
+        <div className="mt-2 pt-3 border-t border-[#FFBC80]/30 dark:border-[#9BDBF3]/30">
+          <div className="px-3 py-1 text-[10px] font-medium text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wider">
             Signed in as
           </div>
           <Link href="/settings/profile" asChild>
             <button
               data-testid="user-section"
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#FFBC80]/10 transition-all duration-150 cursor-pointer"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-all duration-150 cursor-pointer"
             >
               {profile.picture ? (
                 <img src={profile.picture} alt={profile.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
               ) : (
                 <div
                   className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-[#3A3A3A] shrink-0"
-                  style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                  style={{ background: accentGradient }}
                 >
                   {initials}
                 </div>
               )}
               <div className="min-w-0 text-left">
-                <div className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">{displayName}</div>
-                <div className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 truncate">{displaySub}</div>
+                <div className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349] truncate">{displayName}</div>
+                <div className="text-[10px] text-[#3A3A3A]/50 dark:text-[#003349]/40 truncate">{displaySub}</div>
               </div>
             </button>
           </Link>
           <button
             data-testid="sign-out-button"
             onClick={logout}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 mt-0.5"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 mt-0.5"
           >
             <LogOut size={15} />
             Sign Out

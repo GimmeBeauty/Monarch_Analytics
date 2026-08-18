@@ -14,6 +14,8 @@ import { type BlendedMetric, type AdSignal, type ChannelFunnel, type AdvancedRow
 import { API_BASE } from "@/lib/apiBase";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
 import ErrorState from "@/components/ErrorState";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -36,15 +38,15 @@ const CARD_CLASS = "monarch-card-settings rounded-xl";
 // ─── ROAS Color Helpers ───────────────────────────────────────────────────────
 
 function roasTextColor(roas: number): string {
-  if (roas >= 3) return "text-emerald-600 dark:text-emerald-400";
-  if (roas >= 1.5) return "text-amber-600 dark:text-amber-400";
-  return "text-red-500 dark:text-red-400";
+  if (roas >= 3) return "text-emerald-600 dark:text-emerald-700";
+  if (roas >= 1.5) return "text-amber-600 dark:text-amber-700";
+  return "text-red-500 dark:text-red-700";
 }
 
 function roasBadgeClass(roas: number): string {
-  if (roas >= 3) return "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400";
-  if (roas >= 1.5) return "bg-amber-400/12 text-amber-600 dark:text-amber-400";
-  return "bg-red-500/12 text-red-500 dark:text-red-400";
+  if (roas >= 3) return "bg-emerald-500/12 text-emerald-600 dark:text-emerald-700";
+  if (roas >= 1.5) return "bg-amber-400/12 text-amber-600 dark:text-amber-700";
+  return "bg-red-500/12 text-red-500 dark:text-red-700";
 }
 
 // ─── Channel Selector ─────────────────────────────────────────────────────────
@@ -90,33 +92,33 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left select-none"
       >
-        <SlidersHorizontal size={13} className="text-[#FFBC80] flex-shrink-0" />
-        <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Channels</span>
+        <SlidersHorizontal size={13} className="text-[#FFBC80] dark:text-[#BFA1E3] flex-shrink-0" />
+        <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Channels</span>
         <div className="flex items-center -space-x-0.5 ml-1">
           {previewDots.map(ch => (
             <span
               key={ch.channelId}
-              className="w-2 h-2 rounded-full ring-1 ring-white dark:ring-[#231a0e]"
+              className="w-2 h-2 rounded-full ring-1 ring-white dark:ring-[#FFFFFF]"
               style={{ background: ch.color }}
             />
           ))}
           {overflow > 0 && (
-            <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 pl-1.5">+{overflow}</span>
+            <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 pl-1.5">+{overflow}</span>
           )}
         </div>
-        <span className="ml-auto text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 flex-shrink-0">
+        <span className="ml-auto text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 flex-shrink-0">
           {activeCount} of {allChannels.length} active
         </span>
         <ChevronDown
           size={14}
-          className={`text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`text-[#3A3A3A]/30 dark:text-[#003349]/25 flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
 
       <div className={`overflow-hidden transition-all duration-200 ${open ? "max-h-[440px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="px-4 pb-4 border-t border-[#FFBC80]/10">
+        <div className="px-4 pb-4 border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
           <div className="flex items-center justify-between pt-3 mb-3">
-            <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-widest">
+            <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-widest">
               Filter channels
             </p>
             <div className="flex items-center gap-0.5">
@@ -124,16 +126,16 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
                 onClick={onSelectAll}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                   isAll
-                    ? "bg-[#FFBC80]/20 text-[#3A3A3A] dark:text-[#FFF9F2]"
-                    : "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2]"
+                    ? "bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A] dark:text-[#003349]"
+                    : "text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349]"
                 }`}
               >
                 All
               </button>
-              <span className="text-[#3A3A3A]/15 dark:text-[#FFF9F2]/15 select-none">·</span>
+              <span className="text-[#3A3A3A]/15 dark:text-[#003349]/15 select-none">·</span>
               <button
                 onClick={onClearAll}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"
+                className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
               >
                 None
               </button>
@@ -142,7 +144,7 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
           <div className="space-y-3.5">
             {groups.map(({ family, channels }) => (
               <div key={family}>
-                <p className="text-[9px] font-bold text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 uppercase tracking-widest mb-1.5">
+                <p className="text-[9px] font-bold text-[#3A3A3A]/30 dark:text-[#003349]/25 uppercase tracking-widest mb-1.5">
                   {FAMILY_LABELS[family] ?? family}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -180,23 +182,24 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
 // ─── Blended Metric Card ──────────────────────────────────────────────────────
 
 function BlendedMetricCard({ m }: { m: BlendedMetric }) {
+  const { theme } = useTheme();
   const isGood    = m.positiveIsUp ? m.change > 0 : m.change < 0;
   const isNeutral = m.change === 0;
   const colorCls  = isNeutral
-    ? "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30"
+    ? "text-[#3A3A3A]/40 dark:text-[#003349]/30"
     : isGood
-    ? "text-emerald-500 dark:text-emerald-400"
-    : "text-red-500 dark:text-red-400";
+    ? "text-emerald-500 dark:text-emerald-700"
+    : "text-red-500 dark:text-red-600";
 
   return (
     <div className={`${CARD_CLASS} p-4 relative overflow-hidden`}>
       <div className="absolute top-0 right-0 w-16 h-16 opacity-8 rounded-bl-full"
-        style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }} />
-      <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
+        style={{ background: brandGradient(theme) }} />
+      <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider mb-1.5">
         {m.label}
         <MetricTooltip content={m.description} />
       </p>
-      <p className="text-xl font-black tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2] mb-2 leading-none">
+      <p className="text-xl font-black tabular-nums text-[#3A3A3A] dark:text-[#003349] mb-2 leading-none">
         {m.formatted}
       </p>
       <div className={`flex items-center gap-1 text-[11px] font-medium ${colorCls}`}>
@@ -211,15 +214,15 @@ function BlendedMetricCard({ m }: { m: BlendedMetric }) {
 
 function SmallKpiCard({ label, value, sub, tooltip }: { label: string; value: string; sub?: string; tooltip?: string }) {
   return (
-    <div className="rounded-xl p-3.5 bg-[#FFBC80]/6 border border-[#FFBC80]/15">
-      <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">
+    <div className="rounded-xl p-3.5 bg-[#FFBC80]/6 dark:bg-[#EFBAE1]/6 border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+      <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider mb-1.5">
         {label}
         {tooltip && <MetricTooltip content={tooltip} />}
       </p>
-      <p className="text-base font-black tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2] leading-none">
+      <p className="text-base font-black tabular-nums text-[#3A3A3A] dark:text-[#003349] leading-none">
         {value}
       </p>
-      {sub && <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1">{sub}</p>}
+      {sub && <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -354,16 +357,16 @@ function useChannelDetail(channelParam: string | null, start: string, end: strin
 
 // ─── Table Class Helpers ──────────────────────────────────────────────────────
 
-const TH  = "px-3 py-2 text-left text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider whitespace-nowrap";
+const TH  = "px-3 py-2 text-left text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wider whitespace-nowrap";
 const THR = TH + " text-right";
-const TD  = "px-3 py-2.5 text-right tabular-nums text-xs text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 whitespace-nowrap";
-const TDL = "px-3 py-2.5 text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2]";
+const TD  = "px-3 py-2.5 text-right tabular-nums text-xs text-[#3A3A3A]/70 dark:text-[#003349]/60 whitespace-nowrap";
+const TDL = "px-3 py-2.5 text-xs font-medium text-[#3A3A3A] dark:text-[#003349]";
 
 // ─── Loading / Empty States ───────────────────────────────────────────────────
 
 function DetailLoader() {
   return (
-    <div className="flex items-center justify-center py-8 gap-2 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+    <div className="flex items-center justify-center py-8 gap-2 text-[#3A3A3A]/40 dark:text-[#003349]/30">
       <Loader2 size={14} className="animate-spin" />
       <span className="text-xs">Loading detail…</span>
     </div>
@@ -372,7 +375,7 @@ function DetailLoader() {
 
 function DetailEmpty() {
   return (
-    <p className="text-center text-xs text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 py-6">
+    <p className="text-center text-xs text-[#3A3A3A]/35 dark:text-[#003349]/25 py-6">
       No data available for this channel in the selected date range.
     </p>
   );
@@ -391,9 +394,9 @@ function MetaDetailPanel({ data }: { data: MetaDetailData }) {
         <SmallKpiCard label="Init. Checkout"   value={fmtNumber(k.initiateCheckout)} />
         <SmallKpiCard label="Reach"            value={fmtNumber(k.reach)} />
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         <table className="w-full text-xs min-w-[720px]">
-          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
             <tr>
               <th className={`${TH} min-w-[200px]`}>Campaign</th>
               <th className={THR}>Spend</th>
@@ -409,7 +412,7 @@ function MetaDetailPanel({ data }: { data: MetaDetailData }) {
           </thead>
           <tbody>
             {data.campaigns.map(c => (
-              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className={TDL}>
                   <span className="line-clamp-1 max-w-[240px] block">{c.campaignName}</span>
                 </td>
@@ -427,7 +430,7 @@ function MetaDetailPanel({ data }: { data: MetaDetailData }) {
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 italic px-0.5">
+      <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 italic px-0.5">
         Per-campaign revenue not available in raw data — channel total shown above.
       </p>
     </div>
@@ -446,9 +449,9 @@ function GoogleDetailPanel({ data }: { data: GoogleDetailData }) {
         <SmallKpiCard label="CPC"         value={`$${k.cpc.toFixed(2)}`} />
         <SmallKpiCard label="CPM"         value={`$${k.cpm.toFixed(2)}`} />
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         <table className="w-full text-xs min-w-[740px]">
-          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
             <tr>
               <th className={`${TH} min-w-[200px]`}>Campaign</th>
               <th className={THR}>Spend</th>
@@ -464,7 +467,7 @@ function GoogleDetailPanel({ data }: { data: GoogleDetailData }) {
           </thead>
           <tbody>
             {data.campaigns.map(c => (
-              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className={TDL}>
                   <span className="line-clamp-1 max-w-[240px] block">{c.campaignName}</span>
                 </td>
@@ -475,7 +478,7 @@ function GoogleDetailPanel({ data }: { data: GoogleDetailData }) {
                 <td className={TD}>${c.cpc.toFixed(2)}</td>
                 <td className={TD}>${c.cpm.toFixed(2)}</td>
                 <td className={TD}>{fmtNumber(c.conversions)}</td>
-                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
                   {fmtCurrency(c.revenue)}
                 </td>
                 <td className={`${TD} font-semibold ${roasTextColor(c.roas)}`}>
@@ -521,9 +524,9 @@ function CriteoDetailPanel({ data }: { data: CriteoDetailData }) {
           sub={k.roas >= 3 ? "Strong" : k.roas >= 1.5 ? "Moderate" : "Below target"}
         />
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         <table className="w-full text-xs min-w-[740px]">
-          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
             <tr>
               <th className={`${TH} min-w-[180px]`}>Campaign</th>
               <th className={TH}>Type</th>
@@ -539,11 +542,11 @@ function CriteoDetailPanel({ data }: { data: CriteoDetailData }) {
           </thead>
           <tbody>
             {data.campaigns.map(c => (
-              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className={TDL}>
                   <span className="line-clamp-1 max-w-[200px] block">{c.campaignName}</span>
                 </td>
-                <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 whitespace-nowrap">
+                <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 whitespace-nowrap">
                   {c.campaignType}
                 </td>
                 <td className={TD}>{fmtCurrency(c.spend)}</td>
@@ -551,7 +554,7 @@ function CriteoDetailPanel({ data }: { data: CriteoDetailData }) {
                 <td className={TD}>{fmtNumber(c.clicks)}</td>
                 <td className={TD}>{c.ctr.toFixed(2)}%</td>
                 <td className={TD}>${c.cpc.toFixed(2)}</td>
-                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
                   {fmtCurrency(c.revenue)}
                 </td>
                 <td className={TD}>{c.orders}</td>
@@ -581,9 +584,9 @@ function RoundelDetailPanel({ data }: { data: RoundelDetailData }) {
           sub={k.roas >= 3 ? "Strong" : k.roas >= 1.5 ? "Moderate" : "Below target"}
         />
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         <table className="w-full text-xs min-w-[660px]">
-          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
             <tr>
               <th className={`${TH} min-w-[110px]`}>Week</th>
               <th className={THR}>Spend</th>
@@ -598,10 +601,10 @@ function RoundelDetailPanel({ data }: { data: RoundelDetailData }) {
           </thead>
           <tbody>
             {data.weeks.map((w, i) => (
-              <tr key={i} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={i} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className={TDL}>{w.week}</td>
                 <td className={TD}>{fmtCurrency(w.spend)}</td>
-                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
                   {fmtCurrency(w.revenue)}
                 </td>
                 <td className={`${TD} font-semibold ${roasTextColor(w.roas)}`}>
@@ -663,11 +666,11 @@ function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend:
       </div>
       <div className="flex items-start gap-1.5 px-1 py-2 rounded-lg" style={{ background: `${accentColor}14`, border: `1px solid ${accentColor}33` }}>
         <Info size={12} className="flex-shrink-0 mt-0.5" style={{ color: accentColor }} />
-        <p className="text-[10px] text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 leading-relaxed">{note}</p>
+        <p className="text-[10px] text-[#3A3A3A]/60 dark:text-[#003349]/50 leading-relaxed">{note}</p>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         <table className="w-full text-xs min-w-[500px]">
-          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
             <tr>
               <th className={`${TH} min-w-[140px]`}>Source</th>
               <th className={THR}>Spend</th>
@@ -678,11 +681,11 @@ function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend:
           </thead>
           <tbody>
             {data.bySource.map((s, i) => (
-              <tr key={i} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={i} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className={TDL}>{s.source}</td>
                 <td className={TD}>{fmtCurrency(s.spend)}</td>
                 <td className={TD}>{fmtNumber(s.impressions)}</td>
-                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
                   {fmtCurrency(s.revenue)}
                 </td>
                 <td className={`${TD} font-semibold ${roasTextColor(s.roas)}`}>
@@ -693,9 +696,9 @@ function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend:
           </tbody>
         </table>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15">
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         <table className="w-full text-xs min-w-[740px]">
-          <thead className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/4">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
             <tr>
               <th className={`${TH} min-w-[200px]`}>Campaign</th>
               <th className={TH}>Source</th>
@@ -708,17 +711,17 @@ function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend:
           </thead>
           <tbody>
             {data.byCampaign.map((r, i) => (
-              <tr key={i} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={i} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className={TDL}>
                   <span className="line-clamp-1 max-w-[240px] block">{r.campaign}</span>
                 </td>
-                <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 whitespace-nowrap">
+                <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 whitespace-nowrap">
                   {r.source}
                 </td>
                 <td className={TD}>{fmtCurrency(r.spend)}</td>
                 <td className={TD}>{fmtNumber(r.impressions)}</td>
                 <td className={TD}>{fmtNumber(r.clicks)}</td>
-                <td className={`${TD} text-emerald-600 dark:text-emerald-400 font-semibold`}>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
                   {fmtCurrency(r.revenue)}
                 </td>
                 <td className={`${TD} font-semibold ${roasTextColor(r.roas)}`}>
@@ -803,14 +806,14 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
 
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
-  const thCls  = "px-4 py-3 text-left text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider whitespace-nowrap";
+  const thCls  = "px-4 py-3 text-left text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wider whitespace-nowrap";
   const thRCls = thCls + " text-right";
 
   return (
     <div className={`${CARD_CLASS} overflow-hidden`}>
-      <div className="px-5 py-4 border-b border-[#FFBC80]/15">
-        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Channel Performance</h2>
-        <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+      <div className="px-5 py-4 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Channel Performance</h2>
+        <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
           Expand a row to view campaign-level detail
         </p>
       </div>
@@ -818,8 +821,8 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
       <div className="overflow-x-auto">
         <table className="w-full text-xs min-w-[680px]">
           <thead>
-            <tr className="border-b border-[#FFBC80]/10">
-              <th className={`${thCls} min-w-[160px] sticky left-0 bg-white dark:bg-[#231a0e]`}>
+            <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
+              <th className={`${thCls} min-w-[160px] sticky left-0 bg-white dark:bg-[#FFFFFF]`}>
                 Channel
               </th>
               <th className={thRCls}><span className="flex items-center justify-end gap-1">Spend <MetricTooltip content="Total ad spend across all campaigns for this channel in the selected period." /></span></th>
@@ -836,34 +839,34 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
             {rows.map(row => {
               const isExpanded = expandedId === row.channelId;
               const stickyBg   = isExpanded
-                ? "bg-[#FFBC80]/8"
-                : "bg-white dark:bg-[#231a0e]";
+                ? "bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8"
+                : "bg-white dark:bg-[#FFFFFF]";
 
               return (
                 <Fragment key={row.channelId}>
                   <tr
                     onClick={() => toggle(row.channelId)}
-                    className={`border-b border-[#FFBC80]/8 cursor-pointer select-none transition-colors ${
-                      isExpanded ? "bg-[#FFBC80]/8" : "hover:bg-[#FFBC80]/4"
+                    className={`border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 cursor-pointer select-none transition-colors ${
+                      isExpanded ? "bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8" : "hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4"
                     }`}
                   >
                     {/* Channel name — sticky */}
                     <td className={`px-4 py-3 sticky left-0 transition-colors ${stickyBg}`}>
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} />
-                        <span className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2] whitespace-nowrap">
+                        <span className="font-medium text-[#3A3A3A] dark:text-[#003349] whitespace-nowrap">
                           {row.channelLabel}
                         </span>
-                        <span className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-[#FFBC80]/12 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wide">
+                        <span className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-[#FFBC80]/12 dark:bg-[#EFBAE1]/12 text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wide">
                           {row.channelFamily}
                         </span>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/75 dark:text-[#FFF9F2]/65 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/75 dark:text-[#003349]/65 whitespace-nowrap">
                       {fmtCurrency(row.spend)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-700 whitespace-nowrap">
                       {fmtCurrency(row.revenue)}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -871,32 +874,32 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
                         {row.roas.toFixed(2)}x
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap">
                       {fmtNumber(row.conversions)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap">
                       {fmtNumber(row.impressions)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap">
                       {row.ctr.toFixed(2)}%
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap">
                       ${row.cpc.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {isExpanded
-                        ? <ChevronDown  size={14} className="text-[#FFBC80] mx-auto" />
-                        : <ChevronRight size={14} className="text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 mx-auto" />
+                        ? <ChevronDown  size={14} className="text-[#FFBC80] dark:text-[#BFA1E3] mx-auto" />
+                        : <ChevronRight size={14} className="text-[#3A3A3A]/30 dark:text-[#003349]/25 mx-auto" />
                       }
                     </td>
                   </tr>
 
                   {isExpanded && (
-                    <tr className="border-b border-[#FFBC80]/15">
-                      <td colSpan={9} className="px-5 py-4 bg-[#FFBC80]/3 dark:bg-[#FFF9F2]/2">
+                    <tr className="border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+                      <td colSpan={9} className="px-5 py-4 bg-[#FFBC80]/3 dark:bg-[#003349]/2">
                         <div className="flex items-center gap-2 mb-3">
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} />
-                          <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">
+                          <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349]">
                             {row.channelLabel} Detail
                           </span>
                         </div>
@@ -927,12 +930,12 @@ const SEV_STYLES = {
   critical: {
     wrap:  "border-red-500/25 bg-red-500/5 dark:bg-red-500/8",
     icon:  "text-red-500",
-    badge: "bg-red-500/12 text-red-600 dark:text-red-400",
+    badge: "bg-red-500/12 text-red-600 dark:text-red-700",
   },
   warning: {
     wrap:  "border-amber-400/30 bg-amber-400/5 dark:bg-amber-400/8",
     icon:  "text-amber-500",
-    badge: "bg-amber-400/12 text-amber-600 dark:text-amber-400",
+    badge: "bg-amber-400/12 text-amber-600 dark:text-amber-700",
   },
 };
 
@@ -949,26 +952,26 @@ function SignalCard({ signal }: { signal: AdSignal }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-2">
-            <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{signal.issue}</h3>
+            <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{signal.issue}</h3>
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${sev.badge}`}>
               {signal.severity}
             </span>
           </div>
           <div className="flex items-center gap-2 mb-2">
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: signal.color }} />
-            <span className="text-xs font-medium text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55">{signal.channelLabel}</span>
-            <span className="text-xs text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25">·</span>
-            <span className="text-[11px] tabular-nums text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 font-mono">
+            <span className="text-xs font-medium text-[#3A3A3A]/65 dark:text-[#003349]/55">{signal.channelLabel}</span>
+            <span className="text-xs text-[#3A3A3A]/30 dark:text-[#003349]/25">·</span>
+            <span className="text-[11px] tabular-nums text-[#3A3A3A]/55 dark:text-[#003349]/45 font-mono">
               {signal.priorValue} → <strong className={sev.icon}>{signal.currentValue}</strong>
             </span>
             <span className={`text-[10px] font-medium ${sev.icon}`}>({signal.changeText})</span>
           </div>
-          <p className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 leading-relaxed mb-2.5">
+          <p className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50 leading-relaxed mb-2.5">
             {signal.explanation}
           </p>
           <div className="flex items-start gap-1.5 p-2 rounded-lg bg-white/60 dark:bg-white/5">
-            <ArrowRight size={11} className="mt-0.5 text-[#FFBC80] flex-shrink-0" />
-            <p className="text-xs text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 italic leading-relaxed">
+            <ArrowRight size={11} className="mt-0.5 text-[#FFBC80] dark:text-[#BFA1E3] flex-shrink-0" />
+            <p className="text-xs text-[#3A3A3A]/70 dark:text-[#003349]/60 italic leading-relaxed">
               {signal.recommendation}
             </p>
           </div>
@@ -987,16 +990,16 @@ function FunnelView({ funnel }: { funnel: ChannelFunnel }) {
     <div className="space-y-1">
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">Impressions</span>
-          <span className="text-sm font-bold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">{impressions.formatted}</span>
+          <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60">Impressions</span>
+          <span className="text-sm font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">{impressions.formatted}</span>
         </div>
-        <div className="h-7 rounded-md overflow-hidden bg-[#FFBC80]/10">
+        <div className="h-7 rounded-md overflow-hidden bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10">
           <div className="h-full rounded-md" style={{ width: "100%", background: funnel.color, opacity: 0.85 }} />
         </div>
       </div>
 
       <div className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs ${
-        clicks.isLargestDropOff ? "bg-red-500/8 text-red-500" : "bg-amber-400/8 text-amber-600 dark:text-amber-400"
+        clicks.isLargestDropOff ? "bg-red-500/8 text-red-500" : "bg-amber-400/8 text-amber-600 dark:text-amber-700"
       }`}>
         <ArrowDown size={12} className="flex-shrink-0" />
         <span className="font-medium">
@@ -1009,16 +1012,16 @@ function FunnelView({ funnel }: { funnel: ChannelFunnel }) {
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">Clicks</span>
-          <span className="text-sm font-bold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">{clicks.formatted}</span>
+          <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60">Clicks</span>
+          <span className="text-sm font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">{clicks.formatted}</span>
         </div>
-        <div className="h-7 rounded-md overflow-hidden bg-[#FFBC80]/10">
+        <div className="h-7 rounded-md overflow-hidden bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10">
           <div className="h-full rounded-md transition-all" style={{ width: `${Math.max(clicks.relativeWidth, 1)}%`, background: funnel.color, opacity: 0.65 }} />
         </div>
       </div>
 
       <div className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs ${
-        conversions.isLargestDropOff ? "bg-red-500/8 text-red-500" : "bg-amber-400/8 text-amber-600 dark:text-amber-400"
+        conversions.isLargestDropOff ? "bg-red-500/8 text-red-500" : "bg-amber-400/8 text-amber-600 dark:text-amber-700"
       }`}>
         <ArrowDown size={12} className="flex-shrink-0" />
         <span className="font-medium">
@@ -1031,22 +1034,22 @@ function FunnelView({ funnel }: { funnel: ChannelFunnel }) {
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">Conversions</span>
-          <span className="text-sm font-bold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">{conversions.formatted}</span>
+          <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60">Conversions</span>
+          <span className="text-sm font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">{conversions.formatted}</span>
         </div>
-        <div className="h-7 rounded-md overflow-hidden bg-[#FFBC80]/10">
+        <div className="h-7 rounded-md overflow-hidden bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10">
           <div className="h-full rounded-md transition-all" style={{ width: `${Math.max(conversions.relativeWidth, 0.3)}%`, background: funnel.color, opacity: 0.45 }} />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#FFBC80]/15">
-        <div className="rounded-lg p-2.5 bg-[#FFBC80]/8 border border-[#FFBC80]/20">
-          <p className="text-[10px] font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wide mb-1">ROAS</p>
-          <p className="text-base font-black tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">{funnel.roas.toFixed(1)}x</p>
+      <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+        <div className="rounded-lg p-2.5 bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+          <p className="text-[10px] font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase tracking-wide mb-1">ROAS</p>
+          <p className="text-base font-black tabular-nums text-[#3A3A3A] dark:text-[#003349]">{funnel.roas.toFixed(1)}x</p>
         </div>
         <div className="rounded-lg p-2.5 bg-emerald-500/8 border border-emerald-500/20">
-          <p className="text-[10px] font-semibold text-emerald-600/70 dark:text-emerald-400/60 uppercase tracking-wide mb-1">Revenue</p>
-          <p className="text-base font-black tabular-nums text-emerald-600 dark:text-emerald-400">{fmtCurrency(funnel.revenue)}</p>
+          <p className="text-[10px] font-semibold text-emerald-600/70 dark:text-emerald-700/60 uppercase tracking-wide mb-1">Revenue</p>
+          <p className="text-base font-black tabular-nums text-emerald-600 dark:text-emerald-700">{fmtCurrency(funnel.revenue)}</p>
         </div>
       </div>
     </div>
@@ -1056,9 +1059,9 @@ function FunnelView({ funnel }: { funnel: ChannelFunnel }) {
 // ─── Advanced Intelligence Table ──────────────────────────────────────────────
 
 function advancedColor(value: number, type: "elasticity" | "lift" | "ipc" | "decay"): string {
-  const green = "text-emerald-600 dark:text-emerald-400";
-  const amber = "text-amber-600 dark:text-amber-400";
-  const red   = "text-red-500 dark:text-red-400";
+  const green = "text-emerald-600 dark:text-emerald-700";
+  const amber = "text-amber-600 dark:text-amber-700";
+  const red   = "text-red-500 dark:text-red-700";
   if (type === "elasticity") return value >= 0.7 ? green : value >= 0.5 ? amber : red;
   if (type === "lift")       return value >= 75  ? green : value >= 50  ? amber : red;
   if (type === "ipc")        return value <= 25  ? green : value <= 50  ? amber : red;
@@ -1067,7 +1070,7 @@ function advancedColor(value: number, type: "elasticity" | "lift" | "ipc" | "dec
 }
 
 function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
-  const thCls = "px-3 py-2.5 text-left text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider whitespace-nowrap";
+  const thCls = "px-3 py-2.5 text-left text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wider whitespace-nowrap";
   const TOOLTIPS: Record<string, string> = {
     elasticity:          "Sensitivity of revenue to changes in spend (0–1). Higher = more scalable.",
     incrementalLift:     "% of revenue directly attributable to the advertising (not organic).",
@@ -1077,16 +1080,16 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
 
   return (
     <div className={`${CARD_CLASS} overflow-hidden`}>
-      <div className="px-5 py-4 border-b border-[#FFBC80]/15">
-        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Advanced Intelligence</h2>
-        <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+      <div className="px-5 py-4 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+        <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Advanced Intelligence</h2>
+        <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
           Scalability, attribution, and saturation signals per channel
         </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-[#FFBC80]/10">
+            <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
               <th className={thCls + " min-w-[150px]"}>Channel</th>
               {(["elasticity", "incrementalLift", "impressionsPerClick", "efficiencyDecay"] as const).map((key, i) => (
                 <th key={key} className={thCls + " text-right"}>
@@ -1100,16 +1103,16 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
           </thead>
           <tbody>
             {rows.map(row => (
-              <tr key={row.channelId} className="border-b border-[#FFBC80]/8 hover:bg-[#FFBC80]/4 transition-colors">
+              <tr key={row.channelId} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} />
-                    <span className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2] whitespace-nowrap">{row.channelLabel}</span>
+                    <span className="font-medium text-[#3A3A3A] dark:text-[#003349] whitespace-nowrap">{row.channelLabel}</span>
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    <div className="w-14 h-1.5 rounded-full bg-[#3A3A3A]/8 dark:bg-[#FFF9F2]/8 overflow-hidden">
+                    <div className="w-14 h-1.5 rounded-full bg-[#3A3A3A]/8 dark:bg-[#003349]/8 overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${row.elasticity * 100}%`, background: row.elasticity >= 0.7 ? "#10b981" : row.elasticity >= 0.5 ? "#f59e0b" : "#ef4444" }} />
                     </div>
                     <span className={`tabular-nums font-semibold ${advancedColor(row.elasticity, "elasticity")}`}>{row.elasticity.toFixed(2)}</span>
@@ -1124,7 +1127,7 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
                 <td className="px-3 py-2.5 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <span className={`tabular-nums font-semibold ${advancedColor(row.efficiencyDecay, "decay")}`}>{row.efficiencyDecay.toFixed(1)}%</span>
-                    <div className="w-10 h-1.5 rounded-full bg-[#3A3A3A]/8 dark:bg-[#FFF9F2]/8 overflow-hidden">
+                    <div className="w-10 h-1.5 rounded-full bg-[#3A3A3A]/8 dark:bg-[#003349]/8 overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(row.efficiencyDecay / 35 * 100, 100)}%`, background: row.efficiencyDecay <= 12 ? "#10b981" : row.efficiencyDecay <= 22 ? "#f59e0b" : "#ef4444" }} />
                     </div>
                   </div>
@@ -1134,9 +1137,9 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
           </tbody>
         </table>
       </div>
-      <div className="px-5 py-3 border-t border-[#FFBC80]/10 flex flex-wrap gap-3">
+      <div className="px-5 py-3 border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 flex flex-wrap gap-3">
         {[{ color: "bg-emerald-500", label: "Strong / scalable" }, { color: "bg-amber-400", label: "Moderate / watch" }, { color: "bg-red-500", label: "Weak / saturated" }].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
+          <div key={label} className="flex items-center gap-1.5 text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35">
             <span className={`w-2 h-2 rounded-full ${color}`} /> {label}
           </div>
         ))}
@@ -1355,8 +1358,8 @@ export default function Attribution() {
     >
       {allChannels.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <AlertTriangle size={36} className="text-[#FFBC80]/50" />
-          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 text-center max-w-xs">
+          <AlertTriangle size={36} className="text-[#FFBC80]/50 dark:text-[#BFA1E3]/50" />
+          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#003349]/40 text-center max-w-xs">
             No ad channels found for the selected stores. Adjust your store filter to see channel data.
           </p>
         </div>
@@ -1383,12 +1386,12 @@ export default function Attribution() {
           ) : isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+                <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
               ))}
             </div>
           ) : !hasData ? (
             <div className={`${CARD_CLASS} p-10 text-center`}>
-              <p className="text-sm text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">
+              <p className="text-sm text-[#3A3A3A]/45 dark:text-[#003349]/35">
                 No data available — check your Snowflake connection and date range.
               </p>
             </div>
@@ -1397,8 +1400,8 @@ export default function Attribution() {
               {/* Blended KPI cards */}
               <section>
                 <div className="flex items-center gap-2 mb-3">
-                  <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Blended Ad Metrics</h2>
-                  <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">vs prior period</span>
+                  <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Blended Ad Metrics</h2>
+                  <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">vs prior period</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {blendedMetrics.map(m => <BlendedMetricCard key={m.id} m={m} />)}
@@ -1417,22 +1420,22 @@ export default function Attribution() {
               {/* ── Signal Detector ─────────────────────────────────────── */}
               <section>
                 <div className="flex items-center gap-2 mb-3">
-                  <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Signal Detector</h2>
+                  <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Signal Detector</h2>
                   {signals.length > 0 ? (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/12 text-red-600 dark:text-red-400">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/12 text-red-600 dark:text-red-700">
                       {signals.filter(s => s.severity === "critical").length} critical
                       {signals.filter(s => s.severity === "warning").length > 0 &&
                         `, ${signals.filter(s => s.severity === "warning").length} warning`}
                     </span>
                   ) : (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-700">
                       All clear
                     </span>
                   )}
                 </div>
                 {signals.length === 0 ? (
                   <div className={`${CARD_CLASS} p-8 text-center`}>
-                    <p className="text-sm text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+                    <p className="text-sm text-[#3A3A3A]/40 dark:text-[#003349]/30">
                       No performance issues detected for this period.
                     </p>
                   </div>
@@ -1446,12 +1449,12 @@ export default function Attribution() {
               {/* ── Funnel Analysis ─────────────────────────────────────── */}
               <section>
                 <div className="flex items-center gap-2 mb-3">
-                  <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Funnel Analysis</h2>
-                  <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">Impressions → Clicks → Conversions</span>
+                  <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Funnel Analysis</h2>
+                  <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">Impressions → Clicks → Conversions</span>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4">
                   <div className={`${CARD_CLASS} p-4`}>
-                    <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-wider mb-2">
+                    <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wider mb-2">
                       Select Channel
                     </p>
                     <div className="space-y-1">
@@ -1461,14 +1464,14 @@ export default function Attribution() {
                           onClick={() => setFunnelChannelId(f.channelId)}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs transition-all ${
                             effectiveFunnelId === f.channelId
-                              ? "bg-[#FFBC80]/15 font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]"
-                              : "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:bg-[#FFBC80]/8"
+                              ? "bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 font-semibold text-[#3A3A3A] dark:text-[#003349]"
+                              : "text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:bg-[#FFBC80]/8 dark:hover:bg-[#EFBAE1]/8"
                           }`}
                         >
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: f.color }} />
                           <span className="truncate">{f.channelLabel}</span>
                           {effectiveFunnelId === f.channelId && (
-                            <span className="ml-auto text-[9px] font-bold text-[#FFBC80]">▶</span>
+                            <span className="ml-auto text-[9px] font-bold text-[#FFBC80] dark:text-[#BFA1E3]">▶</span>
                           )}
                         </button>
                       ))}
@@ -1480,8 +1483,8 @@ export default function Attribution() {
                       <>
                         <div className="flex items-center gap-2 mb-4">
                           <span className="w-2.5 h-2.5 rounded-full" style={{ background: selectedFunnel.color }} />
-                          <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{selectedFunnel.channelLabel}</h3>
-                          <span className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">conversion funnel</span>
+                          <h3 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{selectedFunnel.channelLabel}</h3>
+                          <span className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">conversion funnel</span>
                         </div>
                         <FunnelView funnel={selectedFunnel} />
                       </>

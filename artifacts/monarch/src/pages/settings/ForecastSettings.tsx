@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Save, Check, ChevronDown, Store, Calendar, AlertCircle, Trash2 } from "lucide-react";
 import { API_BASE } from "@/lib/apiBase";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -55,6 +57,7 @@ function saveData(data: ForecastStore) {
 }
 
 export default function ForecastSettings({ readOnly = false }: { readOnly?: boolean }) {
+  const { theme } = useTheme();
   const [data, setData] = useState<ForecastStore>(() => loadData());
   const [selectedStore, setSelectedStore] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -252,8 +255,8 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     setShowAddYear(false);
   };
 
-  const inputCls = "w-full px-2 py-1.5 rounded-lg text-xs bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none transition-colors text-right";
-  const labelCls = "block text-[10px] font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-0.5";
+  const inputCls = "w-full px-2 py-1.5 rounded-lg text-xs bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none transition-colors text-right";
+  const labelCls = "block text-[10px] font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-0.5";
 
   const formatWithCommas = (val: string): string => {
     const n = parseFloat(val.replace(/,/g, ""));
@@ -269,24 +272,24 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     <div className={`space-y-5 ${readOnly ? "pointer-events-none select-none opacity-75" : ""}`}>
       {/* Header */}
       <div>
-        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Forecast Settings</h2>
-        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Forecast Settings</h2>
+        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
           Set monthly retail and wholesale price forecasts per store and year.
         </p>
       </div>
 
       {/* Annual Revenue Goal */}
-      <div className="rounded-xl p-4 bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
+      <div className="rounded-xl p-4 bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30">
         <div className="flex items-end gap-4 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1.5">
               Annual Revenue Goal{selectedYear ? ` — ${selectedYear}` : ""}
             </label>
-            <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mb-2">
+            <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 mb-2">
               Used for % to Annual Goal KPI and scenario comparison on the Forecast page.
             </p>
             <div className="relative max-w-[220px]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#3A3A3A]/40 dark:text-[#003349]/30">$</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -294,12 +297,12 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 onChange={(e) => setAnnualGoalInput(e.target.value)}
                 onBlur={handleAnnualGoalBlur}
                 placeholder="e.g. 2000000"
-                className="w-full pl-6 pr-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none transition-colors"
+                className="w-full pl-6 pr-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none transition-colors"
               />
             </div>
           </div>
           {annualGoalInput && parseFloat(annualGoalInput.replace(/,/g, "")) > 0 && (
-            <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 pb-2 space-y-0.5">
+            <div className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 pb-2 space-y-0.5">
               <p>Conservative: <span className="font-semibold">${Math.round(parseFloat(annualGoalInput.replace(/,/g, "")) * 0.90 / 1000)}k</span></p>
               <p>BHAG: <span className="font-semibold">${Math.round(parseFloat(annualGoalInput.replace(/,/g, "")) * 1.15 / 1000)}k</span></p>
             </div>
@@ -309,9 +312,9 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/30">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-100 border border-red-200 dark:border-red-300/30">
           <AlertCircle size={14} className="text-red-500 shrink-0" />
-          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-xs text-red-600 dark:text-red-700">{error}</p>
           <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600 text-xs">✕</button>
         </div>
       )}
@@ -320,14 +323,14 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
       <div className="flex flex-wrap items-end gap-3">
         {/* Store selector */}
         <div className="flex-1 min-w-[160px]">
-          <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1.5">
+          <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1.5">
             <Store size={11} className="inline mr-1" />Store
           </label>
           <div className="relative">
             <select
               value={selectedStore ?? ""}
               onChange={(e) => setSelectedStore(Number(e.target.value))}
-              className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#231a0e] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none cursor-pointer"
+              className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none cursor-pointer"
             >
               {data.stores.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -339,14 +342,14 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
         {/* Year selector */}
         <div className="flex-1 min-w-[120px]">
-          <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-1.5">
+          <label className="block text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-1.5">
             <Calendar size={11} className="inline mr-1" />Year
           </label>
           <div className="relative">
             <select
               value={selectedYear ?? ""}
               onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#231a0e] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/40 focus:border-[#FFBC80] outline-none cursor-pointer"
+              className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none cursor-pointer"
             >
               {data.years.map((y) => (
                 <option key={y.id} value={y.year}>{y.year}</option>
@@ -366,19 +369,19 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 value={newYear}
                 onChange={(e) => setNewYear(e.target.value)}
                 placeholder="2027"
-                className="w-20 px-2 py-2 rounded-lg text-sm border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none bg-white dark:bg-[#231a0e] text-[#3A3A3A] dark:text-[#FFF9F2]"
+                className="w-20 px-2 py-2 rounded-lg text-sm border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349]"
                 onKeyDown={(e) => e.key === "Enter" && handleAddYear()}
               />
               <button onClick={handleAddYear}
                 className="px-3 py-2 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity"
-                style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
+                style={{ background: brandGradient(theme) }}>
                 Add
               </button>
-              <button onClick={() => setShowAddYear(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#FFF9F2]/40 px-1">✕</button>
+              <button onClick={() => setShowAddYear(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#003349]/40 px-1">✕</button>
             </div>
           ) : (
             <button onClick={() => setShowAddYear(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#FFBC80]/30 hover:border-[#FFBC80]/60 hover:bg-[#FFBC80]/8 transition-all">
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50 border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 hover:bg-[#FFBC80]/8 dark:hover:bg-[#EFBAE1]/8 transition-all">
               <Plus size={12} /> Add Year
             </button>
           )}
@@ -387,7 +390,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
         {/* Add store */}
         <div>
           <button onClick={() => setShowAddStore(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 border border-[#FFBC80]/30 hover:border-[#FFBC80]/60 hover:bg-[#FFBC80]/8 transition-all">
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50 border border-[#FFBC80]/30 hover:border-[#FFBC80]/60 hover:bg-[#FFBC80]/8 transition-all">
             <Plus size={12} /> Add Store
           </button>
         </div>
@@ -395,8 +398,8 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
       {/* Add store modal */}
       {showAddStore && (
-        <div className="p-4 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/40">
-          <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-3">New Store</p>
+        <div className="p-4 rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40">
+          <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349] mb-3">New Store</p>
           <div className="flex gap-2 items-end flex-wrap">
             <div className="flex-1 min-w-[140px]">
               <label className={labelCls}>Store Name</label>
@@ -405,24 +408,24 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 value={newStoreName}
                 onChange={(e) => setNewStoreName(e.target.value)}
                 placeholder="e.g. Costco"
-                className="w-full px-3 py-1.5 rounded-lg text-sm border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2]"
+                className="w-full px-3 py-1.5 rounded-lg text-sm border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349]"
                 onKeyDown={(e) => e.key === "Enter" && handleAddStore()}
               />
             </div>
             <div>
               <label className={labelCls}>Type</label>
               <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value)}
-                className="px-3 py-1.5 rounded-lg text-sm border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2]">
+                className="px-3 py-1.5 rounded-lg text-sm border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349]">
                 <option value="retail">Retail</option>
                 <option value="shopify">Shopify (DTC)</option>
               </select>
             </div>
             <button onClick={handleAddStore} disabled={!newStoreName.trim()}
               className="px-4 py-1.5 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}>
+              style={{ background: brandGradient(theme) }}>
               Add Store
             </button>
-            <button onClick={() => setShowAddStore(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#FFF9F2]/40 px-1">✕</button>
+            <button onClick={() => setShowAddStore(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#003349]/40 px-1">✕</button>
           </div>
         </div>
       )}
@@ -435,8 +438,8 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
               key={s.id}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-all cursor-pointer ${
                 s.id === selectedStore
-                  ? "border-[#FFBC80] bg-[#FFBC80]/15 text-[#3A3A3A] dark:text-[#FFF9F2] font-semibold"
-                  : "border-[#FFBC80]/30 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:border-[#FFBC80]/60"
+                  ? "border-[#FFBC80] dark:border-[#BFA1E3] bg-[#FFBC80]/15 dark:bg-[#BFA1E3]/15 text-[#3A3A3A] dark:text-[#003349] font-semibold"
+                  : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60"
               }`}
               onClick={() => setSelectedStore(s.id)}
             >
@@ -455,10 +458,10 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
       )}
 
       {/* Monthly grid */}
-      <div className="rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30 overflow-hidden">
+      <div className="rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 overflow-hidden">
         {/* Column headers */}
         <div
-          className={`grid text-[10px] font-bold uppercase tracking-wider text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 px-4 py-2.5 border-b border-[#FFBC80]/15 ${isShopify ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_1fr_1fr]"}`}
+          className={`grid text-[10px] font-bold uppercase tracking-wider text-[#3A3A3A]/55 dark:text-[#003349]/45 px-4 py-2.5 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 ${isShopify ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_1fr_1fr]"}`}
         >
           <span>Month</span>
           <span className="text-right">Retail Price</span>
@@ -466,7 +469,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
         </div>
 
         {data.stores.length === 0 ? (
-          <div className="py-10 text-center text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+          <div className="py-10 text-center text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">
             Add a store to get started.
           </div>
         ) : (
@@ -476,13 +479,13 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
             return (
               <div
                 key={month}
-                className={`grid items-center gap-3 px-4 py-2.5 ${isShopify ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_1fr_1fr]"} ${isEven ? "bg-transparent" : "bg-[#FFBC80]/3 dark:bg-[#FFBC80]/5"}`}
+                className={`grid items-center gap-3 px-4 py-2.5 ${isShopify ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_1fr_1fr]"} ${isEven ? "bg-transparent" : "bg-[#FFBC80]/3 dark:bg-[#BFA1E3]/5"}`}
               >
-                <span className="text-xs font-semibold text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{label}</span>
+                <span className="text-xs font-semibold text-[#3A3A3A]/70 dark:text-[#003349]/60">{label}</span>
 
                 <div>
                   <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">$</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -498,7 +501,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 {!isShopify && (
                   <div>
                     <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">$</span>
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">$</span>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -519,14 +522,14 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
 
       {/* Save row */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+        <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">
           {isShopify ? "Shopify is direct-to-consumer — wholesale price not applicable." : "All prices in USD."}
         </p>
         <button
           onClick={handleSave}
           disabled={saving || data.stores.length === 0}
           className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+          style={{ background: brandGradient(theme) }}
         >
           {savedOk ? <Check size={14} /> : <Save size={14} />}
           {saving ? "Saving…" : savedOk ? "Saved!" : "Save Forecast"}

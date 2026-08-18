@@ -39,6 +39,9 @@ import {
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
 import ErrorState from "@/components/ErrorState";
+import { useTheme } from "@/context/ThemeContext";
+
+type Theme = "light" | "dark";
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
@@ -69,14 +72,16 @@ function fmtCompact(v: number): string {
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 
 
-const TT_STYLE = {
-  background:   "rgba(255,249,242,0.97)",
-  border:       "1px solid #FFBC80",
-  borderRadius: "10px",
-  fontSize:     12,
-  boxShadow:    "0 4px 20px rgba(0,0,0,0.08)",
-  padding:      "8px 12px",
-};
+function ttStyle(theme: Theme) {
+  return {
+    background:   "rgba(255,249,242,0.97)",
+    border:       `1px solid ${theme === "dark" ? "#BFA1E3" : "#FFBC80"}`,
+    borderRadius: "10px",
+    fontSize:     12,
+    boxShadow:    "0 4px 20px rgba(0,0,0,0.08)",
+    padding:      "8px 12px",
+  };
+}
 
 const AXIS_TICK   = { fontSize: 11, fill: "rgba(58,58,58,0.45)" };
 const GRID_STROKE = "rgba(58,58,58,0.06)";
@@ -135,9 +140,9 @@ function ChannelSelectorAccordion({
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left select-none"
       >
-        <SlidersHorizontal size={13} className="text-[#FFBC80] flex-shrink-0" />
+        <SlidersHorizontal size={13} className="text-[#FFBC80] dark:text-[#BFA1E3] flex-shrink-0" />
 
-        <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+        <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
           Channels
         </span>
 
@@ -146,24 +151,24 @@ function ChannelSelectorAccordion({
           {previewDots.map((ch) => (
             <span
               key={ch.channelId}
-              className="w-2 h-2 rounded-full ring-1 ring-white dark:ring-[#231a0e]"
+              className="w-2 h-2 rounded-full ring-1 ring-white dark:ring-[#FFFFFF]"
               style={{ background: ch.color }}
             />
           ))}
           {overflow > 0 && (
-            <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 pl-1.5">
+            <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 pl-1.5">
               +{overflow}
             </span>
           )}
         </div>
 
-        <span className="ml-auto text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 flex-shrink-0">
+        <span className="ml-auto text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 flex-shrink-0">
           {activeCount} of {allChannels.length} active
         </span>
 
         <ChevronDown
           size={14}
-          className={`text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 flex-shrink-0 transition-transform duration-200 ${
+          className={`text-[#3A3A3A]/30 dark:text-[#003349]/25 flex-shrink-0 transition-transform duration-200 ${
             open ? "rotate-180" : ""
           }`}
         />
@@ -175,10 +180,10 @@ function ChannelSelectorAccordion({
           open ? "max-h-[440px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        <div className="px-4 pb-4 border-t border-[#FFBC80]/10">
+        <div className="px-4 pb-4 border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
           {/* All / None controls */}
           <div className="flex items-center justify-between pt-3 mb-3">
-            <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase tracking-widest">
+            <p className="text-[10px] font-semibold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-widest">
               Filter channels
             </p>
             <div className="flex items-center gap-0.5">
@@ -186,16 +191,16 @@ function ChannelSelectorAccordion({
                 onClick={onSelectAll}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                   isAll
-                    ? "bg-[#FFBC80]/20 text-[#3A3A3A] dark:text-[#FFF9F2]"
-                    : "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2]"
+                    ? "bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A] dark:text-[#003349]"
+                    : "text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349]"
                 }`}
               >
                 All
               </button>
-              <span className="text-[#3A3A3A]/15 dark:text-[#FFF9F2]/15 select-none">·</span>
+              <span className="text-[#3A3A3A]/15 dark:text-[#003349]/15 select-none">·</span>
               <button
                 onClick={onClearAll}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"
+                className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
               >
                 None
               </button>
@@ -205,7 +210,7 @@ function ChannelSelectorAccordion({
           <div className="space-y-3.5">
             {groups.map(({ family, channels }) => (
               <div key={family}>
-                <p className="text-[9px] font-bold text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 uppercase tracking-widest mb-1.5">
+                <p className="text-[9px] font-bold text-[#3A3A3A]/30 dark:text-[#003349]/25 uppercase tracking-widest mb-1.5">
                   {FAMILY_LABELS[family] ?? family}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -244,9 +249,9 @@ function ChannelSelectorAccordion({
 
 function SignalBadge({ signal }: { signal: "improving" | "declining" | "stable" }) {
   const cfg = {
-    improving: { Icon: TrendingUp,   label: "Improving", cls: "text-emerald-600 dark:text-emerald-400" },
-    declining: { Icon: TrendingDown, label: "Declining", cls: "text-red-500 dark:text-red-400"         },
-    stable:    { Icon: Minus,        label: "Stable",    cls: "text-blue-500 dark:text-blue-400"        },
+    improving: { Icon: TrendingUp,   label: "Improving", cls: "text-emerald-600 dark:text-emerald-700" },
+    declining: { Icon: TrendingDown, label: "Declining", cls: "text-red-500 dark:text-red-700"         },
+    stable:    { Icon: Minus,        label: "Stable",    cls: "text-blue-500 dark:text-blue-700"        },
   }[signal];
   return (
     <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${cfg.cls}`}>
@@ -265,16 +270,16 @@ interface TooltipBaseProps {
 }
 
 function EfficiencyTooltip({
-  active, payload, label, meta, channelSeries,
-}: TooltipBaseProps & { meta: EfficiencyMetricMeta; channelSeries: ChannelMetricSeries[] }) {
+  active, payload, label, meta, channelSeries, theme,
+}: TooltipBaseProps & { meta: EfficiencyMetricMeta; channelSeries: ChannelMetricSeries[]; theme: Theme }) {
   if (!active || !payload?.length) return null;
   const main = payload.filter(
     (p) => !String(p.dataKey).endsWith("_ma7") && !String(p.dataKey).endsWith("_ma30"),
   );
   if (!main.length) return null;
   return (
-    <div style={TT_STYLE}>
-      <p className="text-xs font-semibold text-[#3A3A3A] mb-2 pb-1.5 border-b border-[#FFBC80]/20">{label}</p>
+    <div style={ttStyle(theme)}>
+      <p className="text-xs font-semibold text-[#3A3A3A] mb-2 pb-1.5 border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">{label}</p>
       {main.map((entry) => {
         const s = channelSeries.find((c) => c.channelId === entry.dataKey);
         if (!s) return null;
@@ -292,10 +297,10 @@ function EfficiencyTooltip({
   );
 }
 
-function DowTooltip({ active, payload, label }: TooltipBaseProps) {
+function DowTooltip({ active, payload, label, theme }: TooltipBaseProps & { theme: Theme }) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={TT_STYLE}>
+    <div style={ttStyle(theme)}>
       <p className="text-xs font-semibold text-[#3A3A3A] mb-2">{label}</p>
       {payload.map((entry) => (
         <div key={entry.dataKey} className="flex justify-between gap-6 py-0.5">
@@ -307,11 +312,11 @@ function DowTooltip({ active, payload, label }: TooltipBaseProps) {
   );
 }
 
-function RevSpendTooltip({ active, payload, label }: TooltipBaseProps) {
+function RevSpendTooltip({ active, payload, label, theme }: TooltipBaseProps & { theme: Theme }) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={TT_STYLE}>
-      <p className="text-xs font-semibold text-[#3A3A3A] mb-2 pb-1.5 border-b border-[#FFBC80]/20">{label}</p>
+    <div style={ttStyle(theme)}>
+      <p className="text-xs font-semibold text-[#3A3A3A] mb-2 pb-1.5 border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">{label}</p>
       {payload.map((entry) => (
         <div key={entry.dataKey} className="flex justify-between gap-6 py-0.5">
           <span className="text-xs" style={{ color: entry.color ?? entry.stroke }}>{entry.name}</span>
@@ -330,27 +335,27 @@ function DowInsightCard({ day, value, type }: { day: DowDataPoint; value: number
     <div
       className={`flex items-center gap-3 px-4 py-3 rounded-xl ${
         isBest
-          ? "bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/60 dark:border-emerald-700/30"
-          : "bg-red-50 dark:bg-red-900/10 border border-red-200/60 dark:border-red-700/30"
+          ? "bg-emerald-50 dark:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-300/30"
+          : "bg-red-50 dark:bg-red-100 border border-red-200/60 dark:border-red-300/30"
       }`}
     >
       <div
         className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-          isBest ? "bg-emerald-100 dark:bg-emerald-800/30" : "bg-red-100 dark:bg-red-800/30"
+          isBest ? "bg-emerald-100 dark:bg-emerald-100" : "bg-red-100 dark:bg-red-100"
         }`}
       >
         {isBest ? (
-          <TrendingUpIcon size={15} className="text-emerald-600 dark:text-emerald-400" />
+          <TrendingUpIcon size={15} className="text-emerald-600 dark:text-emerald-700" />
         ) : (
-          <TrendingDown size={15} className="text-red-500 dark:text-red-400" />
+          <TrendingDown size={15} className="text-red-500 dark:text-red-700" />
         )}
       </div>
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/40 dark:text-[#003349]/30">
           {isBest ? "Best Day" : "Slowest Day"}
         </p>
-        <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{day.dayFull}</p>
-        <p className={`text-xs font-medium ${isBest ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+        <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{day.dayFull}</p>
+        <p className={`text-xs font-medium ${isBest ? "text-emerald-600 dark:text-emerald-700" : "text-red-500 dark:text-red-700"}`}>
           {fmtCurrency(value)} avg revenue
         </p>
       </div>
@@ -363,23 +368,23 @@ function DowInsightCard({ day, value, type }: { day: DowDataPoint; value: number
 function AnomalyRow({ anomaly }: { anomaly: ROASAnomaly }) {
   const isAbove = anomaly.type === "above";
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#120d06]/50 border border-[#FFBC80]/10">
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#FFFFFF]/50 border border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: anomaly.channelColor }} />
-      <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 w-28 truncate">
+      <span className="text-xs font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60 w-28 truncate">
         {anomaly.channelLabel}
       </span>
-      <span className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 w-14 flex-shrink-0">
+      <span className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 w-14 flex-shrink-0">
         {anomaly.label}
       </span>
-      <span className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2] w-12 flex-shrink-0">
+      <span className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349] w-12 flex-shrink-0">
         {anomaly.roasValue.toFixed(2)}x
       </span>
-      <span className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 flex-1 hidden sm:block">
+      <span className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 flex-1 hidden sm:block">
         avg {anomaly.avgRoas.toFixed(2)}x
       </span>
       <span
         className={`ml-auto text-xs font-bold flex-shrink-0 ${
-          isAbove ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"
+          isAbove ? "text-emerald-600 dark:text-emerald-700" : "text-red-500 dark:text-red-600"
         }`}
       >
         {isAbove ? "+" : ""}{anomaly.deviationPct.toFixed(1)}%
@@ -387,8 +392,8 @@ function AnomalyRow({ anomaly }: { anomaly: ROASAnomaly }) {
       <span
         className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
           isAbove
-            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-            : "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-100 dark:text-emerald-700"
+            : "bg-red-100 text-red-700 dark:bg-red-100 dark:text-red-700"
         }`}
       >
         {isAbove ? "Above" : "Below"}
@@ -400,6 +405,8 @@ function AnomalyRow({ anomaly }: { anomaly: ROASAnomaly }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Performance() {
+  const { theme } = useTheme();
+  const accent = theme === "dark" ? "#BFA1E3" : "#FFBC80";
   const { dateRange }   = useDateRange();
   const { selectedIds } = useStoreFilter();
   void usePricingMode(); // kept for store context — not used for MMM generation
@@ -610,11 +617,11 @@ export default function Performance() {
           />
         )}
         {!perfError && perfLoading && (
-          <div className="h-40 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+          <div className="h-40 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
         )}
         {!perfError && !perfLoading && perfApiData?.isEmpty && (
-          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
-            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
               No data available — check your Snowflake connection and date range.
             </p>
           </div>
@@ -624,10 +631,10 @@ export default function Performance() {
           <>
         {/* ── Section 1: Daily Revenue vs Spend Composition ─────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">
-          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
+          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-1">
             Daily Revenue vs. Spend Composition
           </h2>
-          <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mb-5">
+          <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 mb-5">
             Alignment between total revenue and advertising spend over time
           </p>
 
@@ -638,8 +645,8 @@ export default function Performance() {
             >
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#FFBC80" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#FFBC80" stopOpacity={0.02} />
+                  <stop offset="5%"  stopColor={accent} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={accent} stopOpacity={0.02} />
                 </linearGradient>
                 <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor="#60A5FA" stopOpacity={0.45} />
@@ -667,6 +674,7 @@ export default function Performance() {
                     active={props.active}
                     payload={props.payload as TooltipBaseProps["payload"]}
                     label={props.label as string}
+                    theme={theme}
                   />
                 )}
               />
@@ -679,11 +687,11 @@ export default function Performance() {
                 type="monotone"
                 dataKey="revenue"
                 name="Total Revenue"
-                stroke="#FFBC80"
+                stroke={accent}
                 strokeWidth={2}
                 fill="url(#revGrad)"
                 dot={false}
-                activeDot={{ r: 4, fill: "#FFBC80", strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: accent, strokeWidth: 0 }}
                 isAnimationActive={false}
               />
               <Area
@@ -706,10 +714,10 @@ export default function Performance() {
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
             <div>
-              <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+              <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
                 Efficiency Trends
               </h2>
-              <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mt-0.5">
+              <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 mt-0.5">
                 {metricMeta.label} — {metricMeta.description} · one line per active channel
               </p>
             </div>
@@ -721,10 +729,10 @@ export default function Performance() {
                   type="checkbox"
                   checked={showMA7}
                   onChange={(e) => setShowMA7(e.target.checked)}
-                  className="rounded border-[#FFBC80]/40 accent-[#FFBC80]"
+                  className="rounded border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 accent-[#FFBC80] dark:accent-[#BFA1E3]"
                 />
-                <span className="flex items-center gap-1.5 text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/40">
-                  <span style={{ display: "inline-block", width: 18, height: 0, borderTop: "2px dashed #FFBC80" }} />
+                <span className="flex items-center gap-1.5 text-xs text-[#3A3A3A]/55 dark:text-[#003349]/40">
+                  <span style={{ display: "inline-block", width: 18, height: 0, borderTop: `2px dashed ${accent}` }} />
                   7-day MA
                 </span>
               </label>
@@ -733,10 +741,10 @@ export default function Performance() {
                   type="checkbox"
                   checked={showMA30}
                   onChange={(e) => setShowMA30(e.target.checked)}
-                  className="rounded border-[#FFBC80]/40 accent-[#FFBC80]"
+                  className="rounded border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 accent-[#FFBC80] dark:accent-[#BFA1E3]"
                 />
-                <span className="flex items-center gap-1.5 text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/40">
-                  <span style={{ display: "inline-block", width: 18, height: 0, borderTop: "2px dotted #FFBC80" }} />
+                <span className="flex items-center gap-1.5 text-xs text-[#3A3A3A]/55 dark:text-[#003349]/40">
+                  <span style={{ display: "inline-block", width: 18, height: 0, borderTop: `2px dotted ${accent}` }} />
                   30-day MA
                 </span>
               </label>
@@ -754,15 +762,15 @@ export default function Performance() {
                       onClick={() => setMetric(m.id)}
                       className={`flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
                         metric === m.id
-                          ? "bg-[#FFBC80] text-[#3A3A3A] shadow-sm"
-                          : "bg-[#FFF9F2] dark:bg-[#120d06] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 border border-[#FFBC80]/25 hover:border-[#FFBC80]/60 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/70"
+                          ? "bg-[#FFBC80] dark:bg-[#BFA1E3] text-[#3A3A3A] shadow-sm"
+                          : "bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A]/50 dark:text-[#003349]/40 border border-[#FFBC80]/25 dark:border-[#9BDBF3]/25 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 hover:text-[#3A3A3A]/80 dark:hover:text-[#003349]/70"
                       }`}
                     >
                       {m.label}
                       <Info size={10} className="opacity-50 flex-shrink-0" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-[#FFF9F2] dark:bg-[#1a1008] border border-[#FFBC80]/40 text-[#3A3A3A] dark:text-[#FFF9F2] shadow max-w-[220px] text-center leading-relaxed">
+                  <TooltipContent className="bg-[#FFF9F2] dark:bg-[#FFFFFF] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 text-[#3A3A3A] dark:text-[#003349] shadow max-w-[220px] text-center leading-relaxed">
                     {tipText}
                   </TooltipContent>
                 </UITooltip>
@@ -772,11 +780,11 @@ export default function Performance() {
 
           {data.channels.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[280px] text-center">
-              <SlidersHorizontal size={24} className="text-[#FFBC80]/30 mb-3" />
-              <p className="text-sm text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+              <SlidersHorizontal size={24} className="text-[#FFBC80]/30 dark:text-[#BFA1E3]/30 mb-3" />
+              <p className="text-sm text-[#3A3A3A]/40 dark:text-[#003349]/30">
                 No channels selected
               </p>
-              <p className="text-xs text-[#3A3A3A]/25 dark:text-[#FFF9F2]/20 mt-1">
+              <p className="text-xs text-[#3A3A3A]/25 dark:text-[#003349]/20 mt-1">
                 Use the channel filter above to select at least one channel.
               </p>
             </div>
@@ -811,6 +819,7 @@ export default function Performance() {
                         label={props.label as string}
                         meta={metricMeta}
                         channelSeries={data.channelSeries}
+                        theme={theme}
                       />
                     )}
                   />
@@ -883,23 +892,23 @@ export default function Performance() {
               </ResponsiveContainer>
 
               {/* Channel signal badges */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-[#FFBC80]/10">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mt-4 pt-4 border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
                 {data.channelSeries.map((s) => (
                   <div
                     key={s.channelId}
-                    className="flex flex-col gap-1 px-3 py-2 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#120d06]/50"
+                    className="flex flex-col gap-1 px-3 py-2 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#FFFFFF]/50"
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span
                         className="w-2 h-2 rounded-full flex-shrink-0"
                         style={{ background: s.color }}
                       />
-                      <span className="text-[10px] font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 truncate">
+                      <span className="text-[10px] font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60 truncate">
                         {s.channelLabel}
                       </span>
                     </div>
                     <SignalBadge signal={s.signal} />
-                    <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">
+                    <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25">
                       {fmtMetric(s.latestValue, metricMeta)} latest
                     </span>
                   </div>
@@ -911,10 +920,10 @@ export default function Performance() {
 
         {/* ── Section 3: Day-of-Week Seasonality ───────────────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">
-          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
+          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-1">
             Day-of-Week Seasonality
           </h2>
-          <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mb-5">
+          <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 mb-5">
             Average daily revenue and ad spend by weekday across the selected period
           </p>
 
@@ -950,6 +959,7 @@ export default function Performance() {
                     active={props.active}
                     payload={props.payload as TooltipBaseProps["payload"]}
                     label={props.label as string}
+                    theme={theme}
                   />
                 )}
               />
@@ -958,7 +968,7 @@ export default function Performance() {
                 iconSize={8}
                 wrapperStyle={{ fontSize: 11, color: "rgba(58,58,58,0.5)", paddingTop: 12 }}
               />
-              <Bar dataKey="avgRevenue" name="Avg Revenue" fill="#FFBC80" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="avgRevenue" name="Avg Revenue" fill={accent} radius={[4, 4, 0, 0]} />
               <Bar dataKey="avgSpend"   name="Avg Spend"   fill="#60A5FA" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -967,36 +977,36 @@ export default function Performance() {
         {/* ── Section 4: Signal Intelligence ───────────────────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">
           <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle size={14} className="text-[#FFBC80]" />
-            <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+            <AlertTriangle size={14} className="text-[#FFBC80] dark:text-[#BFA1E3]" />
+            <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
               Signal Intelligence
             </h2>
           </div>
-          <p className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mb-5">
+          <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 mb-5">
             ROAS anomalies where daily performance deviates ≥40% from the period average — top 6 by magnitude
           </p>
 
           {data.anomalies.length > 0 && (
-            <div className="flex items-center gap-3 px-3 pb-2 mb-1 border-b border-[#FFBC80]/10">
+            <div className="flex items-center gap-3 px-3 pb-2 mb-1 border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
               <span className="w-2.5" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-28">Channel</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-14">Date</span>
-              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 w-12">ROAS <MetricTooltip content="Return On Ad Spend on this specific day — Revenue ÷ Spend." /></span>
-              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 flex-1 hidden sm:block">Period Avg <MetricTooltip content="Average ROAS for this channel across the full selected date range." /></span>
-              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 ml-auto">Deviation <MetricTooltip content="How far this day's ROAS strays from the period average, as a percentage. Anomalies are flagged at ≥40%." /></span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#003349]/20 w-28">Channel</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#003349]/20 w-14">Date</span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#003349]/20 w-12">ROAS <MetricTooltip content="Return On Ad Spend on this specific day — Revenue ÷ Spend." /></span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#003349]/20 flex-1 hidden sm:block">Period Avg <MetricTooltip content="Average ROAS for this channel across the full selected date range." /></span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#3A3A3A]/30 dark:text-[#003349]/20 ml-auto">Deviation <MetricTooltip content="How far this day's ROAS strays from the period average, as a percentage. Anomalies are flagged at ≥40%." /></span>
               <span className="w-14" />
             </div>
           )}
 
           {data.anomalies.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/10 flex items-center justify-center mb-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-100 flex items-center justify-center mb-3">
                 <TrendingUp size={18} className="text-emerald-500" />
               </div>
-              <p className="text-sm font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/30">
+              <p className="text-sm font-medium text-[#3A3A3A]/50 dark:text-[#003349]/30">
                 No anomalies detected
               </p>
-              <p className="text-xs text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 mt-1">
+              <p className="text-xs text-[#3A3A3A]/30 dark:text-[#003349]/20 mt-1">
                 ROAS is within ±40% of average across all active channels
               </p>
             </div>
@@ -1009,7 +1019,7 @@ export default function Performance() {
           )}
 
           {data.anomalies.length > 0 && (
-            <p className="text-[10px] text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 mt-4">
+            <p className="text-[10px] text-[#3A3A3A]/30 dark:text-[#003349]/20 mt-4">
               Anomaly markers (●) appear on the ROAS trend chart when ROAS is selected.
             </p>
           )}

@@ -17,10 +17,10 @@ export default function ErrorState({
   return (
     <div
       role="alert"
-      className={`flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-red-300/50 bg-red-50/60 dark:bg-red-900/10 dark:border-red-700/40 px-4 py-8 text-center ${className}`}
+      className={`flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-red-300/50 bg-red-50/60 dark:bg-red-100 dark:border-red-300/40 px-4 py-8 text-center ${className}`}
     >
-      <AlertTriangle className="h-6 w-6 text-red-500 dark:text-red-400" />
-      <p className="text-sm font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 max-w-md">
+      <AlertTriangle className="h-6 w-6 text-red-500 dark:text-red-700" />
+      <p className="text-sm font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60 max-w-md">
         {message}
       </p>
       {onRetry && (

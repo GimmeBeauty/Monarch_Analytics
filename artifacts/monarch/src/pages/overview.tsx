@@ -312,8 +312,8 @@ export default function Overview() {
         )}
 
         {isEmpty && !error && (
-          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
-            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
               No data available — check your Snowflake connection and date range.
             </p>
           </div>
@@ -322,7 +322,7 @@ export default function Overview() {
         {isLoading && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+              <div key={i} className="h-24 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
             ))}
           </div>
         )}

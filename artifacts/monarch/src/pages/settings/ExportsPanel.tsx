@@ -14,27 +14,34 @@ import {
   type ScheduleFrequency, type RunParams,
 } from "@/context/ExportsContext";
 import { toast } from "@/hooks/use-toast";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient, type Theme } from "@/lib/brandGradient";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const CARD  = "rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30";
-const LABEL = "text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider";
-const INPUT = "w-full px-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#FFF9F2]/25";
+const CARD  = "rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30";
+const LABEL = "text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider";
+const INPUT = "w-full px-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none transition-colors placeholder-[#3A3A3A]/35 dark:placeholder-[#003349]/25";
 const BTN   = "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed";
-const GHOST = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors";
-const GRAD  = { background: "linear-gradient(135deg,#FFBC80,#FFE29A)" };
+const GHOST = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors";
+
+/** Theme-aware brand gradient style object (was a static GRAD constant). */
+function gradStyle(theme: Theme) { return { background: brandGradient(theme) }; }
 
 // ─── Metadata ─────────────────────────────────────────────────────────────────
 
-const TYPE_META: Record<ExportType, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  performance: { label: "Performance", icon: TrendingUp, color: "#3B82F6", bg: "#EFF6FF" },
-  attribution: { label: "Attribution", icon: GitBranch,  color: "#8B5CF6", bg: "#F3F0FF" },
-  store:       { label: "Store",       icon: Store,      color: "#10B981", bg: "#ECFDF5" },
-  product:     { label: "Product",     icon: Package,    color: "#F59E0B", bg: "#FFFBEB" },
-  timeseries:  { label: "Time-Series", icon: BarChart3,  color: "#EC4899", bg: "#FDF2F8" },
-  raw:         { label: "Raw Data",    icon: Database,   color: "#6B7280", bg: "#F3F4F6" },
-  custom:      { label: "Custom",      icon: Sliders,    color: "#FFBC80", bg: "#FFF9F2" },
-};
+/** Theme-aware type metadata (was a static TYPE_META constant; only "custom" carries brand-orange styling). */
+function typeMeta(theme: Theme): Record<ExportType, { label: string; icon: React.ElementType; color: string; bg: string }> {
+  return {
+    performance: { label: "Performance", icon: TrendingUp, color: "#3B82F6", bg: "#EFF6FF" },
+    attribution: { label: "Attribution", icon: GitBranch,  color: "#8B5CF6", bg: "#F3F0FF" },
+    store:       { label: "Store",       icon: Store,      color: "#10B981", bg: "#ECFDF5" },
+    product:     { label: "Product",     icon: Package,    color: "#F59E0B", bg: "#FFFBEB" },
+    timeseries:  { label: "Time-Series", icon: BarChart3,  color: "#EC4899", bg: "#FDF2F8" },
+    raw:         { label: "Raw Data",    icon: Database,   color: "#6B7280", bg: "#F3F4F6" },
+    custom:      { label: "Custom",      icon: Sliders,    color: theme === "dark" ? "#BFA1E3" : "#FFBC80", bg: theme === "dark" ? "rgba(191,161,227,0.10)" : "#FFF9F2" },
+  };
+}
 
 const FORMAT_META: Record<ExportFormat, { label: string; icon: React.ElementType; ext: string; mime: string }> = {
   csv:  { label: "CSV",   icon: FileText,        ext: "csv",  mime: "text/csv"               },
@@ -117,13 +124,14 @@ function triggerDownload(job: ExportJob) {
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
 
 function Pill({ label, active, onClick, disabled }: { label: string; active: boolean; onClick: () => void; disabled?: boolean }) {
+  const { theme } = useTheme();
   return (
     <button type="button" onClick={onClick} disabled={disabled}
       className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-        active ? "border-[#FFBC80] text-[#3A3A3A] dark:text-[#FFF9F2]"
-               : "border-[#FFBC80]/30 text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:border-[#FFBC80]/55"
+        active ? "border-[#FFBC80] dark:border-[#BFA1E3] text-[#3A3A3A] dark:text-[#003349]"
+               : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:border-[#FFBC80]/55 dark:hover:border-[#9BDBF3]/55"
       }`}
-      style={active ? { background: "linear-gradient(135deg,rgba(255,188,128,0.25),rgba(255,226,154,0.25))" } : {}}>
+      style={active ? { background: theme === "dark" ? "linear-gradient(135deg,rgba(191,161,227,0.25),rgba(155,219,243,0.25))" : "linear-gradient(135deg,rgba(255,188,128,0.25),rgba(255,226,154,0.25))" } : {}}>
       {label}
     </button>
   );
@@ -142,7 +150,7 @@ function DatePicker({ value, onChange, disabled }: { value: DateRangeConfig; onC
         <div className="flex gap-2 mt-2">
           <input type="date" value={value.from ?? ""} disabled={disabled} className={INPUT + " text-xs"}
             onChange={(e) => onChange({ ...value, from: e.target.value })} />
-          <span className="self-center text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">→</span>
+          <span className="self-center text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">→</span>
           <input type="date" value={value.to ?? ""}   disabled={disabled} className={INPUT + " text-xs"}
             onChange={(e) => onChange({ ...value, to: e.target.value })} />
         </div>
@@ -162,7 +170,7 @@ function MetricPicker({ selected, onChange, disabled }: { selected: string[]; on
     <div className="space-y-3">
       {groups.map(([g, keys]) => (
         <div key={g}>
-          <p className="text-[10px] font-bold text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 uppercase tracking-wider mb-1.5">{g}</p>
+          <p className="text-[10px] font-bold text-[#3A3A3A]/35 dark:text-[#003349]/25 uppercase tracking-wider mb-1.5">{g}</p>
           <div className="flex flex-wrap gap-1.5">
             {keys.map((k) => <Pill key={k} label={EXPORT_METRICS[k]?.label ?? k} active={selected.includes(k)} disabled={disabled} onClick={() => toggle(k)} />)}
           </div>
@@ -187,11 +195,11 @@ function FilterGroup({ label, opts, selected, onChange, disabled }: { label: str
   const toggle = (v: string) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
   return (
     <div>
-      <p className="text-[10px] font-bold text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 uppercase tracking-wider mb-1.5">{label}</p>
+      <p className="text-[10px] font-bold text-[#3A3A3A]/35 dark:text-[#003349]/25 uppercase tracking-wider mb-1.5">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {opts.map((v) => <Pill key={v} label={v} active={selected.includes(v)} disabled={disabled} onClick={() => toggle(v)} />)}
       </div>
-      {selected.length === 0 && <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-1">All {label.toLowerCase()} included</p>}
+      {selected.length === 0 && <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-1">All {label.toLowerCase()} included</p>}
     </div>
   );
 }
@@ -201,9 +209,9 @@ function EmailList({ emails, onRemove, disabled }: { emails: string[]; onRemove:
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
       {emails.map((e) => (
-        <span key={e} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[#FFBC80]/15 text-[#3A3A3A] dark:text-[#FFF9F2]">
+        <span key={e} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 text-[#3A3A3A] dark:text-[#003349]">
           {e}
-          {!disabled && <button onClick={() => onRemove(e)} className="text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2]"><X size={9} /></button>}
+          {!disabled && <button onClick={() => onRemove(e)} className="text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:hover:text-[#003349]"><X size={9} /></button>}
         </span>
       ))}
     </div>
@@ -213,44 +221,46 @@ function EmailList({ emails, onRemove, disabled }: { emails: string[]; onRemove:
 // ─── Completed / Progress banners (shared by RunPanel + Builder) ──────────────
 
 function ProgressBanner({ name, format, dateLabel, status }: { name: string; format: ExportFormat; dateLabel: string; status: "queued" | "processing" }) {
+  const { theme } = useTheme();
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2.5">
-        <Loader2 size={16} className="text-[#FFBC80] animate-spin shrink-0" />
+        <Loader2 size={16} className="text-[#FFBC80] dark:text-[#BFA1E3] animate-spin shrink-0" />
         <div>
-          <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{status === "queued" ? "Queued" : "Preparing export…"}</p>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{name} · {FORMAT_META[format].label} · {dateLabel}</p>
+          <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{status === "queued" ? "Queued" : "Preparing export…"}</p>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">{name} · {FORMAT_META[format].label} · {dateLabel}</p>
         </div>
       </div>
-      <div className="h-1.5 rounded-full bg-[#FFBC80]/20 overflow-hidden">
+      <div className="h-1.5 rounded-full bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 overflow-hidden">
         <div className="h-full rounded-full transition-all duration-1000"
-          style={{ ...GRAD, width: status === "processing" ? "72%" : "18%" }} />
+          style={{ ...gradStyle(theme), width: status === "processing" ? "72%" : "18%" }} />
       </div>
-      <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 capitalize">{status}…</p>
+      <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 capitalize">{status}…</p>
     </div>
   );
 }
 
 function CompletedBanner({ job, onDownload, onAgain, onClose }: { job: ExportJob; onDownload: () => void; onAgain: () => void; onClose: () => void }) {
+  const { theme } = useTheme();
   const elapsed = ((Date.now() - new Date(job.startedAt).getTime()) / 1000).toFixed(1);
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={17} className="text-emerald-600 dark:text-emerald-400" />
+          <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-100 flex items-center justify-center shrink-0">
+            <CheckCircle2 size={17} className="text-emerald-600 dark:text-emerald-700" />
           </div>
           <div>
-            <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Export Ready</p>
-            <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">
+            <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Export Ready</p>
+            <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45">
               {job.rowCount?.toLocaleString()} rows · {fmtSize(job.fileSizeKb ?? 0)} · {elapsed}s
             </p>
           </div>
         </div>
-        <button onClick={onClose} className="text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors mt-0.5"><X size={14} /></button>
+        <button onClick={onClose} className="text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors mt-0.5"><X size={14} /></button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button onClick={onDownload} className={BTN} style={GRAD}>
+        <button onClick={onDownload} className={BTN} style={gradStyle(theme)}>
           <Download size={14} /> Download {FORMAT_META[job.format].label}
         </button>
         <button onClick={onAgain} className={GHOST}><RefreshCw size={12} /> Run Again</button>
@@ -277,6 +287,7 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
   onClose:    () => void;
   readOnly?:  boolean;
 }) {
+  const { theme } = useTheme();
   const [dateRange,   setDateRange]   = useState<DateRangeConfig>(target.dateRange);
   const [granularity, setGranularity] = useState<ExportGranularity>(target.granularity);
   const [format,      setFormat]      = useState<ExportFormat>(target.format);
@@ -324,10 +335,10 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
     <div className={`${CARD} p-5 space-y-5`}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Configure Export</p>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">{target.name}</p>
+          <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Configure Export</p>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">{target.name}</p>
         </div>
-        <button onClick={onClose} className="text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"><X size={15} /></button>
+        <button onClick={onClose} className="text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"><X size={15} /></button>
       </div>
 
       <div>
@@ -352,9 +363,9 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
             return (
               <button key={f} onClick={() => !readOnly && setFormat(f)} disabled={readOnly}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  format === f ? "border-[#FFBC80] text-[#3A3A3A] dark:text-[#FFF9F2]" : "border-[#FFBC80]/30 text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:border-[#FFBC80]/55"
+                  format === f ? "border-[#FFBC80] dark:border-[#BFA1E3] text-[#3A3A3A] dark:text-[#003349]" : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:border-[#FFBC80]/55 dark:hover:border-[#9BDBF3]/55"
                 }`}
-                style={format === f ? { background: "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
+                style={format === f ? { background: theme === "dark" ? "linear-gradient(135deg,rgba(191,161,227,0.22),rgba(155,219,243,0.22))" : "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
                 <Icon size={12} />{label}
               </button>
             );
@@ -368,9 +379,9 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
           {([["download","Download",Download],["email","Email",Mail],["schedule","Schedule",Calendar]] as [typeof delivery, string, React.ElementType][]).map(([k, lbl, Icon]) => (
             <button key={k} onClick={() => !readOnly && setDelivery(k)} disabled={readOnly}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                delivery === k ? "border-[#FFBC80] text-[#3A3A3A] dark:text-[#FFF9F2]" : "border-[#FFBC80]/30 text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:border-[#FFBC80]/55"
+                delivery === k ? "border-[#FFBC80] dark:border-[#BFA1E3] text-[#3A3A3A] dark:text-[#003349]" : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:border-[#FFBC80]/55 dark:hover:border-[#9BDBF3]/55"
               }`}
-              style={delivery === k ? { background: "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
+              style={delivery === k ? { background: theme === "dark" ? "linear-gradient(135deg,rgba(191,161,227,0.22),rgba(155,219,243,0.22))" : "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
               <Icon size={12} />{lbl}
             </button>
           ))}
@@ -389,14 +400,14 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
         )}
 
         {delivery === "schedule" && (
-          <div className="p-4 rounded-xl bg-[#FFBC80]/6 border border-[#FFBC80]/25 space-y-3">
+          <div className="p-4 rounded-xl bg-[#FFBC80]/6 dark:bg-[#EFBAE1]/6 border border-[#FFBC80]/25 dark:border-[#9BDBF3]/25 space-y-3">
             <div>
-              <p className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">Schedule Name</p>
+              <p className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider mb-1.5">Schedule Name</p>
               <input type="text" value={schedName} onChange={(e) => setSchedName(e.target.value)}
                 placeholder="Name this scheduled export" className={INPUT + " text-xs"} disabled={readOnly} />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">Frequency</p>
+              <p className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider mb-1.5">Frequency</p>
               <div className="flex gap-1.5">
                 {(["daily","weekly","monthly"] as ScheduleFrequency[]).map((f) => (
                   <Pill key={f} label={SCHED[f]} active={schedFreq === f} disabled={readOnly} onClick={() => setSchedFreq(f)} />
@@ -404,7 +415,7 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
               </div>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider mb-1.5">Delivery Emails</p>
+              <p className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider mb-1.5">Delivery Emails</p>
               <div className="flex gap-2">
                 <input type="email" value={emailInput} placeholder="Add email" disabled={readOnly}
                   onChange={(e) => setEmailInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addEmail()}
@@ -413,7 +424,7 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
               </div>
               <EmailList emails={emails} onRemove={(e) => setEmails(emails.filter((x) => x !== e))} disabled={readOnly} />
             </div>
-            <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+            <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">
               Next run: <span className="font-semibold">{nextRunDate(schedFreq)}</span>
             </p>
           </div>
@@ -423,11 +434,11 @@ function RunPanel({ target, jobs, onRun, onSchedule, onClose, readOnly }: {
       <div className="flex gap-2 pt-1">
         {delivery === "schedule" ? (
           <button onClick={() => onSchedule(target, schedFreq, emails, schedName)}
-            disabled={readOnly || !schedName.trim()} className={BTN} style={GRAD}>
+            disabled={readOnly || !schedName.trim()} className={BTN} style={gradStyle(theme)}>
             <Save size={14} /> Save Schedule
           </button>
         ) : (
-          <button onClick={handleExport} disabled={readOnly || !canExport} className={BTN} style={GRAD}>
+          <button onClick={handleExport} disabled={readOnly || !canExport} className={BTN} style={gradStyle(theme)}>
             <Zap size={14} /> Export Now
           </button>
         )}
@@ -446,45 +457,46 @@ function TemplateCard({ id, name, description, exportType, metrics, granularity,
   schedule?: ExportSchedule | null; isActive: boolean;
   onConfigure: () => void; onDelete?: () => void; readOnly?: boolean;
 }) {
-  const tm   = TYPE_META[exportType];
+  const { theme } = useTheme();
+  const tm   = typeMeta(theme)[exportType];
   const Icon = tm.icon;
   return (
-    <div className={`${CARD} p-4 transition-all ${isActive ? "ring-2 ring-[#FFBC80]/65 shadow-sm" : "hover:shadow-sm"}`}>
+    <div className={`${CARD} p-4 transition-all ${isActive ? "ring-2 ring-[#FFBC80]/65 dark:ring-[#BFA1E3]/65 shadow-sm" : "hover:shadow-sm"}`}>
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center" style={{ background: tm.bg }}>
           <Icon size={16} style={{ color: tm.color }} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-            <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{name}</p>
+            <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{name}</p>
             {schedule?.enabled && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">Scheduled</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-emerald-100 dark:bg-emerald-100 text-emerald-700 dark:text-emerald-700">Scheduled</span>
             )}
             {isBuiltIn && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-[#FFBC80]/15 text-[#3A3A3A]/50 dark:text-[#FFF9F2]/35">Built-in</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 text-[#3A3A3A]/50 dark:text-[#003349]/35">Built-in</span>
             )}
           </div>
-          <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 leading-relaxed line-clamp-2">{description}</p>
+          <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 leading-relaxed line-clamp-2">{description}</p>
           <div className="flex items-center gap-3 mt-1.5">
-            <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">{metrics.length} metrics</span>
-            <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 capitalize">{granularity}</span>
-            <span className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase">{format}</span>
-            {lastRunAt && <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">Last {new Date(lastRunAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
+            <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">{metrics.length} metrics</span>
+            <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 capitalize">{granularity}</span>
+            <span className="text-[10px] font-bold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase">{format}</span>
+            {lastRunAt && <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25">Last {new Date(lastRunAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[#FFBC80]/12">
+      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[#FFBC80]/12 dark:border-[#9BDBF3]/12">
         <button onClick={onConfigure}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#3A3A3A] hover:opacity-90 transition-all"
-          style={isActive ? { background: "rgba(255,188,128,0.35)" } : GRAD}>
+          style={isActive ? { background: theme === "dark" ? "rgba(191,161,227,0.35)" : "rgba(255,188,128,0.35)" } : gradStyle(theme)}>
           {isActive ? <><ChevronRight size={12} className="rotate-90" />Configuring</> : <><Play size={11} />Run</>}
         </button>
         {!isBuiltIn && onDelete && !readOnly && (
-          <button onClick={onDelete} className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+          <button onClick={onDelete} className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#003349]/20 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
             <Trash2 size={12} />
           </button>
         )}
-        {runCount > 0 && <span className="ml-auto text-[10px] text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25">{runCount} run{runCount !== 1 ? "s" : ""}</span>}
+        {runCount > 0 && <span className="ml-auto text-[10px] text-[#3A3A3A]/30 dark:text-[#003349]/25">{runCount} run{runCount !== 1 ? "s" : ""}</span>}
       </div>
     </div>
   );
@@ -522,6 +534,7 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
   jobs: ExportJob[]; onRun: (p: RunParams) => string;
   onSave: (b: BuilderState) => void; onClose: () => void; readOnly?: boolean;
 }) {
+  const { theme } = useTheme();
   const [b, setB] = useState<BuilderState>(BUILDER_INIT);
   const [jobId, setJobId] = useState<string | null>(null);
 
@@ -542,11 +555,11 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
   const handleRun = () => {
     if (!canRun || readOnly) return;
     if (b.saveAsTemplate && b.name.trim()) onSave(b);
-    const name = b.name.trim() || `Custom ${TYPE_META[b.exportType].label} Export`;
+    const name = b.name.trim() || `Custom ${typeMeta(theme)[b.exportType].label} Export`;
     setJobId(onRun({ templateId: null, name, exportType: b.exportType, format: b.format, metrics: b.metrics, dimensions: b.dimensions, filters: b.filters, dateRange: b.dateRange, granularity: b.granularity }));
   };
 
-  const name = b.name.trim() || `Custom ${TYPE_META[b.exportType].label} Export`;
+  const name = b.name.trim() || `Custom ${typeMeta(theme)[b.exportType].label} Export`;
 
   if (isDone && job) {
     return (
@@ -567,28 +580,28 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
     <div className={`${CARD} p-5 space-y-6`}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Custom Export Builder</p>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">Choose any combination of metrics, dimensions, and filters.</p>
+          <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Custom Export Builder</p>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">Choose any combination of metrics, dimensions, and filters.</p>
         </div>
-        <button onClick={onClose} className="text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors"><X size={15} /></button>
+        <button onClick={onClose} className="text-[#3A3A3A]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"><X size={15} /></button>
       </div>
 
       {/* 1 — Type */}
       <div>
         <p className={`${LABEL} mb-2.5`}>1 · Export Type</p>
         <div className="grid grid-cols-3 gap-2">
-          {(Object.entries(TYPE_META) as [ExportType, typeof TYPE_META[ExportType]][]).map(([key, tm]) => {
+          {(Object.entries(typeMeta(theme)) as [ExportType, ReturnType<typeof typeMeta>[ExportType]][]).map(([key, tm]) => {
             const Icon = tm.icon; const active = b.exportType === key;
             return (
               <button key={key} onClick={() => setType(key)} disabled={readOnly}
                 className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-semibold text-left transition-all ${
-                  active ? "border-[#FFBC80]" : "border-[#FFBC80]/25 hover:border-[#FFBC80]/50"
+                  active ? "border-[#FFBC80] dark:border-[#BFA1E3]" : "border-[#FFBC80]/25 dark:border-[#9BDBF3]/25 hover:border-[#FFBC80]/50 dark:hover:border-[#9BDBF3]/50"
                 }`}
-                style={active ? { background: "linear-gradient(135deg,rgba(255,188,128,0.18),rgba(255,226,154,0.18))" } : {}}>
+                style={active ? { background: theme === "dark" ? "linear-gradient(135deg,rgba(191,161,227,0.18),rgba(155,219,243,0.18))" : "linear-gradient(135deg,rgba(255,188,128,0.18),rgba(255,226,154,0.18))" } : {}}>
                 <div className="w-6 h-6 rounded-md shrink-0 flex items-center justify-center" style={{ background: tm.bg }}>
                   <Icon size={13} style={{ color: tm.color }} />
                 </div>
-                <span className="truncate text-[#3A3A3A] dark:text-[#FFF9F2]">{tm.label}</span>
+                <span className="truncate text-[#3A3A3A] dark:text-[#003349]">{tm.label}</span>
               </button>
             );
           })}
@@ -597,19 +610,19 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
 
       {/* 2 — Metrics */}
       <div>
-        <p className={`${LABEL} mb-2.5`}>2 · Metrics <span className="normal-case font-normal text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">({b.metrics.length} selected)</span></p>
+        <p className={`${LABEL} mb-2.5`}>2 · Metrics <span className="normal-case font-normal text-[#3A3A3A]/35 dark:text-[#003349]/25">({b.metrics.length} selected)</span></p>
         <MetricPicker selected={b.metrics} onChange={(v) => p({ metrics: v })} disabled={readOnly} />
       </div>
 
       {/* 3 — Dimensions */}
       <div>
-        <p className={`${LABEL} mb-2.5`}>3 · Dimensions <span className="normal-case font-normal text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">({b.dimensions.length} selected)</span></p>
+        <p className={`${LABEL} mb-2.5`}>3 · Dimensions <span className="normal-case font-normal text-[#3A3A3A]/35 dark:text-[#003349]/25">({b.dimensions.length} selected)</span></p>
         <DimPicker selected={b.dimensions} onChange={(v) => p({ dimensions: v })} disabled={readOnly} />
       </div>
 
       {/* 4 — Filters */}
       <div>
-        <p className={`${LABEL} mb-2.5`}>4 · Filters <span className="normal-case font-normal text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">(empty = all included)</span></p>
+        <p className={`${LABEL} mb-2.5`}>4 · Filters <span className="normal-case font-normal text-[#3A3A3A]/35 dark:text-[#003349]/25">(empty = all included)</span></p>
         <div className="space-y-3">
           <FilterGroup label="Stores"   opts={EXPORT_STORES}   selected={b.filters.stores}   disabled={readOnly} onChange={(v) => p({ filters: { ...b.filters, stores: v } })} />
           <FilterGroup label="Channels" opts={EXPORT_CHANNELS} selected={b.filters.channels} disabled={readOnly} onChange={(v) => p({ filters: { ...b.filters, channels: v } })} />
@@ -636,9 +649,9 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
             return (
               <button key={f} onClick={() => !readOnly && p({ format: f })} disabled={readOnly}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  b.format === f ? "border-[#FFBC80] text-[#3A3A3A] dark:text-[#FFF9F2]" : "border-[#FFBC80]/30 text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:border-[#FFBC80]/55"
+                  b.format === f ? "border-[#FFBC80] dark:border-[#BFA1E3] text-[#3A3A3A] dark:text-[#003349]" : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:border-[#FFBC80]/55 dark:hover:border-[#9BDBF3]/55"
                 }`}
-                style={b.format === f ? { background: "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
+                style={b.format === f ? { background: theme === "dark" ? "linear-gradient(135deg,rgba(191,161,227,0.22),rgba(155,219,243,0.22))" : "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
                 <Icon size={12} />{label}
               </button>
             );
@@ -648,9 +661,9 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
           {([["download","Download",Download],["email","Email",Mail],["schedule","Schedule",Calendar]] as [typeof b.delivery, string, React.ElementType][]).map(([k, lbl, Icon]) => (
             <button key={k} onClick={() => !readOnly && p({ delivery: k })} disabled={readOnly}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                b.delivery === k ? "border-[#FFBC80] text-[#3A3A3A] dark:text-[#FFF9F2]" : "border-[#FFBC80]/30 text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:border-[#FFBC80]/55"
+                b.delivery === k ? "border-[#FFBC80] dark:border-[#BFA1E3] text-[#3A3A3A] dark:text-[#003349]" : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:border-[#FFBC80]/55 dark:hover:border-[#9BDBF3]/55"
               }`}
-              style={b.delivery === k ? { background: "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
+              style={b.delivery === k ? { background: theme === "dark" ? "linear-gradient(135deg,rgba(191,161,227,0.22),rgba(155,219,243,0.22))" : "linear-gradient(135deg,rgba(255,188,128,0.22),rgba(255,226,154,0.22))" } : {}}>
               <Icon size={12} />{lbl}
             </button>
           ))}
@@ -683,20 +696,20 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
         {!readOnly && (
           <button onClick={() => p({ saveAsTemplate: !b.saveAsTemplate })}
             className="flex items-center gap-2 cursor-pointer">
-            <div className={`relative w-9 h-5 rounded-full transition-colors ${b.saveAsTemplate ? "bg-[#FFBC80]" : "bg-[#3A3A3A]/20 dark:bg-[#FFF9F2]/15"}`}>
+            <div className={`relative w-9 h-5 rounded-full transition-colors ${b.saveAsTemplate ? "bg-[#FFBC80] dark:bg-[#BFA1E3]" : "bg-[#3A3A3A]/20 dark:bg-[#003349]/15"}`}>
               <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
                 style={{ transform: b.saveAsTemplate ? "translateX(16px)" : "translateX(0)" }} />
             </div>
-            <span className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">Save as template for future use</span>
+            <span className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50">Save as template for future use</span>
           </button>
         )}
       </div>
 
-      <div className="flex gap-2 pt-1 border-t border-[#FFBC80]/15">
+      <div className="flex gap-2 pt-1 border-t border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
         {!readOnly ? (
-          <button onClick={handleRun} disabled={!canRun} className={BTN} style={GRAD}><Zap size={14} /> Export Now</button>
+          <button onClick={handleRun} disabled={!canRun} className={BTN} style={gradStyle(theme)}><Zap size={14} /> Export Now</button>
         ) : (
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">Contact an Admin to run exports.</p>
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35">Contact an Admin to run exports.</p>
         )}
         <button onClick={onClose} className={GHOST}>Cancel</button>
       </div>
@@ -708,10 +721,10 @@ function CustomBuilder({ jobs, onRun, onSave, onClose, readOnly }: {
 
 function StatusBadge({ status }: { status: ExportJob["status"] }) {
   const cfg = {
-    queued:     { cls: "bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400",                 icon: <Clock size={9} /> },
-    processing: { cls: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400",                 icon: <Loader2 size={9} className="animate-spin" /> },
-    completed:  { cls: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",         icon: <Check size={9} /> },
-    failed:     { cls: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",                        icon: <XCircle size={9} /> },
+    queued:     { cls: "bg-slate-100 dark:bg-slate-100 text-slate-500 dark:text-slate-700",                 icon: <Clock size={9} /> },
+    processing: { cls: "bg-amber-100 dark:bg-amber-100 text-amber-700 dark:text-amber-700",                 icon: <Loader2 size={9} className="animate-spin" /> },
+    completed:  { cls: "bg-emerald-100 dark:bg-emerald-100 text-emerald-700 dark:text-emerald-700",         icon: <Check size={9} /> },
+    failed:     { cls: "bg-red-100 dark:bg-red-100 text-red-600 dark:text-red-700",                        icon: <XCircle size={9} /> },
   }[status];
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${cfg.cls}`}>
@@ -721,35 +734,36 @@ function StatusBadge({ status }: { status: ExportJob["status"] }) {
 }
 
 function HistoryRow({ job }: { job: ExportJob }) {
+  const { theme } = useTheme();
   const [done, setDone] = useState(false);
-  const tm = TYPE_META[job.exportType]; const Icon = tm.icon;
+  const tm = typeMeta(theme)[job.exportType]; const Icon = tm.icon;
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[#FFBC80]/5 transition-colors">
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 transition-colors">
       <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style={{ background: tm.bg }}>
         <Icon size={13} style={{ color: tm.color }} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate max-w-[180px]">{job.templateName}</p>
+          <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349] truncate max-w-[180px]">{job.templateName}</p>
           <StatusBadge status={job.status} />
-          <span className="text-[10px] font-bold text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 uppercase">{job.format}</span>
-          {job.rowCount != null && <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">{job.rowCount.toLocaleString()} rows</span>}
-          {job.fileSizeKb != null && <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">{fmtSize(job.fileSizeKb)}</span>}
+          <span className="text-[10px] font-bold text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase">{job.format}</span>
+          {job.rowCount != null && <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25">{job.rowCount.toLocaleString()} rows</span>}
+          {job.fileSizeKb != null && <span className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25">{fmtSize(job.fileSizeKb)}</span>}
         </div>
-        <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25 mt-0.5">
+        <p className="text-[10px] text-[#3A3A3A]/35 dark:text-[#003349]/25 mt-0.5">
           {fmtTs(job.startedAt)} · {fmtDate(job.dateRange)} · {GRAN[job.granularity]}
         </p>
       </div>
       {job.status === "completed" && (
         <button onClick={() => { triggerDownload(job); setDone(true); setTimeout(() => setDone(false), 2500); }}
           className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-            done ? "border-emerald-400/50 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30"
-                 : "border-[#FFBC80]/35 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:border-[#FFBC80] hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2]"
+            done ? "border-emerald-400/50 text-emerald-600 dark:text-emerald-700 bg-emerald-50 dark:bg-emerald-100"
+                 : "border-[#FFBC80]/35 dark:border-[#9BDBF3]/35 text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:border-[#FFBC80] dark:hover:border-[#9BDBF3] hover:text-[#3A3A3A] dark:hover:text-[#003349]"
           }`}>
           {done ? <><Check size={11} />Done</> : <><Download size={11} />Download</>}
         </button>
       )}
-      {job.status === "processing" && <Loader2 size={13} className="shrink-0 text-[#FFBC80] animate-spin" />}
+      {job.status === "processing" && <Loader2 size={13} className="shrink-0 text-[#FFBC80] dark:text-[#BFA1E3] animate-spin" />}
     </div>
   );
 }
@@ -757,22 +771,23 @@ function HistoryRow({ job }: { job: ExportJob }) {
 // ─── Scheduled row ────────────────────────────────────────────────────────────
 
 function ScheduledRow({ template, onToggle, onDelete, readOnly }: { template: ExportTemplate; onToggle: () => void; onDelete: () => void; readOnly?: boolean }) {
-  const tm = TYPE_META[template.exportType]; const Icon = tm.icon;
+  const { theme } = useTheme();
+  const tm = typeMeta(theme)[template.exportType]; const Icon = tm.icon;
   const sched = template.schedule!;
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[#FFBC80]/5 transition-colors">
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 transition-colors">
       <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style={{ background: tm.bg }}>
         <Icon size={13} style={{ color: tm.color }} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate max-w-[200px]">{template.name}</p>
+          <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349] truncate max-w-[200px]">{template.name}</p>
           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-            sched.enabled ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-                          : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400"
+            sched.enabled ? "bg-emerald-100 dark:bg-emerald-100 text-emerald-700 dark:text-emerald-700"
+                          : "bg-slate-100 dark:bg-slate-100 text-slate-500 dark:text-slate-700"
           }`}>{sched.enabled ? "Active" : "Paused"}</span>
         </div>
-        <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mt-0.5">
+        <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 mt-0.5">
           <span className="font-medium capitalize">{sched.frequency}</span>
           {sched.deliveryEmails.length > 0 && ` → ${sched.deliveryEmails.slice(0, 2).join(", ")}${sched.deliveryEmails.length > 2 ? ` +${sched.deliveryEmails.length - 2}` : ""}`}
           {" · Next: "}<span className="font-medium">{nextRunDate(sched.frequency)}</span>
@@ -781,13 +796,13 @@ function ScheduledRow({ template, onToggle, onDelete, readOnly }: { template: Ex
       <div className="flex items-center gap-2 shrink-0">
         {!readOnly && (
           <button role="switch" aria-checked={sched.enabled} onClick={onToggle}
-            className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${sched.enabled ? "bg-[#FFBC80]" : "bg-[#3A3A3A]/20 dark:bg-[#FFF9F2]/15"}`}>
+            className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${sched.enabled ? "bg-[#FFBC80] dark:bg-[#BFA1E3]" : "bg-[#3A3A3A]/20 dark:bg-[#003349]/15"}`}>
             <span className="absolute w-3.5 h-3.5 rounded-full bg-white shadow transition-transform top-[3px]"
               style={{ transform: sched.enabled ? "translateX(18px)" : "translateX(2px)" }} />
           </button>
         )}
         {!readOnly && (
-          <button onClick={onDelete} className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#FFF9F2]/20 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+          <button onClick={onDelete} className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#003349]/20 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
             <Trash2 size={12} />
           </button>
         )}
@@ -799,6 +814,7 @@ function ScheduledRow({ template, onToggle, onDelete, readOnly }: { template: Ex
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
+  const { theme } = useTheme();
   const { templates, jobs, createTemplate, updateTemplate, deleteTemplate, runExport, clearHistory } = useExports();
 
   const [activeTab,     setActiveTab]     = useState<"templates" | "scheduled" | "history">("templates");
@@ -830,8 +846,8 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
   };
 
   const handleSaveTemplate = (b: BuilderState) => {
-    const name = b.name.trim() || `Custom ${TYPE_META[b.exportType].label}`;
-    createTemplate({ name, description: `Custom ${TYPE_META[b.exportType].label.toLowerCase()} export`, exportType: b.exportType, metrics: b.metrics, dimensions: b.dimensions, filters: b.filters, dateRange: b.dateRange, granularity: b.granularity, format: b.format, isBuiltIn: false, schedule: b.delivery === "schedule" ? { enabled: true, frequency: b.schedFreq, deliveryEmails: b.emails, nextRunAt: null } : null });
+    const name = b.name.trim() || `Custom ${typeMeta(theme)[b.exportType].label}`;
+    createTemplate({ name, description: `Custom ${typeMeta(theme)[b.exportType].label.toLowerCase()} export`, exportType: b.exportType, metrics: b.metrics, dimensions: b.dimensions, filters: b.filters, dateRange: b.dateRange, granularity: b.granularity, format: b.format, isBuiltIn: false, schedule: b.delivery === "schedule" ? { enabled: true, frequency: b.schedFreq, deliveryEmails: b.emails, nextRunAt: null } : null });
     toast({ title: "Template saved", description: `"${name}" added to My Templates.` });
   };
 
@@ -849,14 +865,14 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Exports</h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Exports</h2>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
             Download, schedule, and automate data exports. Your exports are private to your account.
           </p>
         </div>
         {!readOnly && (
           <button onClick={() => { setConfiguringId(null); setBuilderOpen((o) => !o); setActiveTab("templates"); }}
-            className={`${BTN} shrink-0`} style={GRAD}>
+            className={`${BTN} shrink-0`} style={gradStyle(theme)}>
             <Plus size={14} /> New Export
           </button>
         )}
@@ -869,7 +885,7 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-[#FFBC80]/10 dark:bg-[#FFBC80]/8">
+      <div className="flex gap-1 p-1 rounded-xl bg-[#FFBC80]/10 dark:bg-[#BFA1E3]/8">
         {([
           ["templates", "Templates",  undefined       ],
           ["scheduled", "Scheduled",  scheduled.length],
@@ -877,12 +893,12 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
         ] as [typeof activeTab, string, number | undefined][]).map(([key, label, count]) => (
           <button key={key} onClick={() => setActiveTab(key)}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === key ? "text-[#3A3A3A] shadow-sm" : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2]"
+              activeTab === key ? "text-[#3A3A3A] shadow-sm" : "text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:text-[#3A3A3A] dark:hover:text-[#003349]"
             }`}
-            style={activeTab === key ? GRAD : {}}>
+            style={activeTab === key ? gradStyle(theme) : {}}>
             {label}
             {count != null && count > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${activeTab === key ? "bg-[#3A3A3A]/20" : "bg-[#FFBC80]/30 dark:bg-[#FFBC80]/20"}`}>{count}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${activeTab === key ? "bg-[#3A3A3A]/20" : "bg-[#FFBC80]/30 dark:bg-[#BFA1E3]/20"}`}>{count}</span>
             )}
           </button>
         ))}
@@ -911,10 +927,10 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
             <p className={`${LABEL} mb-4`}>My Templates</p>
             {templates.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 gap-2">
-                <div className="w-10 h-10 rounded-xl bg-[#FFBC80]/15 flex items-center justify-center">
-                  <Sliders size={18} className="text-[#FFBC80]/55" />
+                <div className="w-10 h-10 rounded-xl bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 flex items-center justify-center">
+                  <Sliders size={18} className="text-[#FFBC80]/55 dark:text-[#BFA1E3]/55" />
                 </div>
-                <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 text-center max-w-[220px] leading-relaxed">
+                <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 text-center max-w-[220px] leading-relaxed">
                   No saved templates yet. Build a custom export or schedule a built-in to create one.
                 </p>
                 {!readOnly && (
@@ -941,13 +957,13 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
       {activeTab === "scheduled" && (
         <div className={`${CARD} p-5`}>
           <p className={`${LABEL} mb-1`}>Scheduled Exports</p>
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mb-4">Recurring exports that run automatically and deliver to your specified emails.</p>
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mb-4">Recurring exports that run automatically and deliver to your specified emails.</p>
           {scheduled.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2">
-              <div className="w-10 h-10 rounded-xl bg-[#FFBC80]/15 flex items-center justify-center">
-                <Calendar size={18} className="text-[#FFBC80]/55" />
+              <div className="w-10 h-10 rounded-xl bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 flex items-center justify-center">
+                <Calendar size={18} className="text-[#FFBC80]/55 dark:text-[#BFA1E3]/55" />
               </div>
-              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 text-center max-w-[240px] leading-relaxed">
+              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 text-center max-w-[240px] leading-relaxed">
                 No scheduled exports. Open a template, choose "Schedule" delivery, and save.
               </p>
               {!readOnly && (
@@ -975,7 +991,7 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className={LABEL}>Export History</p>
-              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
                 {jobs.length} export{jobs.length !== 1 ? "s" : ""}. Downloads available for completed exports.
               </p>
             </div>
@@ -987,10 +1003,10 @@ export default function ExportsPanel({ readOnly }: { readOnly?: boolean }) {
           </div>
           {jobs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2">
-              <div className="w-10 h-10 rounded-xl bg-[#FFBC80]/15 flex items-center justify-center">
-                <Download size={18} className="text-[#FFBC80]/55" />
+              <div className="w-10 h-10 rounded-xl bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 flex items-center justify-center">
+                <Download size={18} className="text-[#FFBC80]/55 dark:text-[#BFA1E3]/55" />
               </div>
-              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">No exports yet. Run a template to get started.</p>
+              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35">No exports yet. Run a template to get started.</p>
             </div>
           ) : (
             <div className="space-y-1 -mx-1">

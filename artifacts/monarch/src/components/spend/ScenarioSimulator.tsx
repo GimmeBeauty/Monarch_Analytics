@@ -6,6 +6,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { RotateCcw, Lock, Unlock, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type { ChannelMMM, SpendSummary, ScenarioResult } from "@/lib/spendData";
+import { useTheme } from "@/context/ThemeContext";
 
 // Inline Hill response — same formula as the MMM engine
 function hillResponse(spend: number, alpha: number, gamma: number, kappa: number): number {
@@ -35,9 +36,9 @@ function DeltaLabel({ current, projected, prefix = "", suffix = "", inverse = fa
 
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums ${
-      good ? "text-emerald-600 dark:text-emerald-400" :
-      Math.abs(pct) < 0.5 ? "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" :
-      "text-red-500 dark:text-red-400"
+      good ? "text-emerald-600 dark:text-emerald-700" :
+      Math.abs(pct) < 0.5 ? "text-[#3A3A3A]/40 dark:text-[#003349]/30" :
+      "text-red-500 dark:text-red-700"
     }`}>
       {isUp ? <TrendingUp className="w-3 h-3" /> : delta < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
       {isUp ? "+" : ""}{prefix}{Math.abs(delta) >= 1_000_000 ? `${(Math.abs(delta) / 1_000_000).toFixed(2)}M` : Math.abs(delta) >= 1_000 ? `${(Math.abs(delta) / 1_000).toFixed(1)}K` : Math.round(Math.abs(delta)).toLocaleString()}{suffix}
@@ -53,6 +54,8 @@ function SpendSlider({ channel, multiplier, onChange, locked }: {
   onChange: (v: number) => void;
   locked: boolean;
 }) {
+  const { theme } = useTheme();
+  const neutralColor = theme === "dark" ? "#BFA1E3" : "#FFBC80";
   const newSpend = channel.spend * multiplier;
   const delta = newSpend - channel.spend;
 
@@ -60,14 +63,14 @@ function SpendSlider({ channel, multiplier, onChange, locked }: {
     ? "accent-emerald-500"
     : multiplier < 1
     ? "accent-red-400"
-    : "accent-[#FFBC80]";
+    : "accent-[#FFBC80] dark:accent-[#BFA1E3]";
 
   return (
     <div className="flex items-center gap-3">
       {/* Color dot + label */}
       <div className="flex items-center gap-1.5 w-28 shrink-0">
         <div className="w-2 h-2 rounded-full shrink-0" style={{ background: channel.color }} />
-        <span className="text-xs text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 truncate">
+        <span className="text-xs text-[#3A3A3A]/70 dark:text-[#003349]/60 truncate">
           {channel.channelLabel}
         </span>
       </div>
@@ -84,32 +87,32 @@ function SpendSlider({ channel, multiplier, onChange, locked }: {
         className={`flex-1 h-1.5 rounded-full appearance-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${trackBg}`}
         style={{
           background: `linear-gradient(to right, ${
-            multiplier > 1 ? "#10B981" : multiplier < 1 ? "#F87171" : "#FFBC80"
+            multiplier > 1 ? "#10B981" : multiplier < 1 ? "#F87171" : neutralColor
           } 0%, ${
-            multiplier > 1 ? "#10B981" : multiplier < 1 ? "#F87171" : "#FFBC80"
+            multiplier > 1 ? "#10B981" : multiplier < 1 ? "#F87171" : neutralColor
           } ${(multiplier - 0.5) / 1.5 * 100}%, #E5E7EB ${(multiplier - 0.5) / 1.5 * 100}%, #E5E7EB 100%)`,
         }}
       />
 
       {/* Current multiplier */}
       <span className={`text-xs font-bold tabular-nums w-10 text-right shrink-0 ${
-        multiplier > 1 ? "text-emerald-600 dark:text-emerald-400" :
-        multiplier < 1 ? "text-red-500 dark:text-red-400" :
-        "text-[#3A3A3A] dark:text-[#FFF9F2]"
+        multiplier > 1 ? "text-emerald-600 dark:text-emerald-700" :
+        multiplier < 1 ? "text-red-500 dark:text-red-700" :
+        "text-[#3A3A3A] dark:text-[#003349]"
       }`}>
         {Math.round(multiplier * 100)}%
       </span>
 
       {/* New spend amount */}
-      <span className="text-xs tabular-nums text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 w-20 text-right shrink-0">
+      <span className="text-xs tabular-nums text-[#3A3A3A]/55 dark:text-[#003349]/45 w-20 text-right shrink-0">
         {fmtCurrency(newSpend)}
       </span>
 
       {/* Delta */}
       <span className={`text-xs font-medium tabular-nums w-16 text-right shrink-0 ${
-        delta > 0 ? "text-emerald-600 dark:text-emerald-400" :
-        delta < 0 ? "text-red-500 dark:text-red-400" :
-        "text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25"
+        delta > 0 ? "text-emerald-600 dark:text-emerald-700" :
+        delta < 0 ? "text-red-500 dark:text-red-700" :
+        "text-[#3A3A3A]/35 dark:text-[#003349]/25"
       }`}>
         {delta > 0 ? "+" : ""}{fmtCurrency(delta)}
       </span>
@@ -135,8 +138,8 @@ function MetricPanel({
 
   return (
     <div className="rounded-xl p-3.5 monarch-card">
-      <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-1.5">{label}</p>
-      <p className="text-xl font-black text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums leading-none mb-1">
+      <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase tracking-wider mb-1.5">{label}</p>
+      <p className="text-xl font-black text-[#3A3A3A] dark:text-[#003349] tabular-nums leading-none mb-1">
         {fmt(projected)}
       </p>
       <DeltaLabel current={current} projected={projected}
@@ -244,8 +247,8 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
       {/* Header */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Scenario Simulator</h3>
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+          <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Scenario Simulator</h3>
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
             Adjust channel spend to project revenue, MER, and iROAS outcomes
           </p>
         </div>
@@ -254,8 +257,8 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
             onClick={() => setBudgetLocked((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
               budgetLocked
-                ? "border-[#FFBC80] bg-[#FFBC80]/15 text-[#3A3A3A] dark:text-[#FFF9F2]"
-                : "border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:border-[#FFBC80]/50"
+                ? "border-[#FFBC80] dark:border-[#BFA1E3] bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 text-[#3A3A3A] dark:text-[#003349]"
+                : "border-[#3A3A3A]/15 dark:border-[#003349]/15 text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:border-[#FFBC80]/50 dark:hover:border-[#9BDBF3]/50"
             }`}
           >
             {budgetLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
@@ -263,14 +266,14 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
           </button>
           <button
             onClick={applyRecommendations}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-300 bg-emerald-50 dark:bg-emerald-100 text-xs font-medium text-emerald-700 dark:text-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
           >
             Apply recommendations
           </button>
           {hasChanges && (
             <button
               onClick={() => setMultipliers(defaultMults)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#3A3A3A]/15 dark:border-[#FFF9F2]/15 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 hover:bg-[#3A3A3A]/5 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#3A3A3A]/15 dark:border-[#003349]/15 text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:bg-[#3A3A3A]/5 transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
               Reset
@@ -282,7 +285,7 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         {/* Sliders — 3/5 */}
         <div className="xl:col-span-3 space-y-3">
-          <div className="flex items-center gap-3 pb-1.5 border-b border-[#FFBC80]/15 text-[10px] font-medium uppercase tracking-wider text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">
+          <div className="flex items-center gap-3 pb-1.5 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 text-[10px] font-medium uppercase tracking-wider text-[#3A3A3A]/35 dark:text-[#003349]/25">
             <span className="w-28 shrink-0">Channel</span>
             <span className="flex-1">Allocation</span>
             <span className="w-10 text-right shrink-0">%</span>
@@ -302,7 +305,7 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
 
         {/* Projected metrics — 2/5 */}
         <div className="xl:col-span-2 flex flex-col gap-3">
-          <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider">
+          <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider">
             Projected Outcomes
           </p>
 
@@ -335,11 +338,11 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
           </div>
 
           {/* Incremental revenue highlight */}
-          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 p-3">
-            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-0.5">
+          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-100 border border-emerald-200 dark:border-emerald-300/40 p-3">
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-700 mb-0.5">
               Incremental Revenue
             </p>
-            <p className="text-xl font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
+            <p className="text-xl font-black text-emerald-700 dark:text-emerald-700 tabular-nums">
               {fmtCurrency(scenario.incrementalRevenue)}
             </p>
             <DeltaLabel
@@ -350,9 +353,9 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
           </div>
 
           {/* Budget delta summary */}
-          <div className="rounded-xl bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 p-3 text-xs">
+          <div className="rounded-xl bg-[#3A3A3A]/4 dark:bg-[#003349]/5 p-3 text-xs">
             <div className="flex justify-between items-center mb-1.5">
-              <span className="text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Spend delta</span>
+              <span className="text-[#3A3A3A]/55 dark:text-[#003349]/45">Spend delta</span>
               <span className={`font-bold tabular-nums ${
                 scenario.totalSpend > summary.totalSpend ? "text-amber-600" : "text-emerald-600"
               }`}>
@@ -360,7 +363,7 @@ export default function ScenarioSimulator({ channels, summary, totalBaseRevenue 
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Revenue delta</span>
+              <span className="text-[#3A3A3A]/55 dark:text-[#003349]/45">Revenue delta</span>
               <span className={`font-bold tabular-nums ${scenario.revenueDelta >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                 {scenario.revenueDelta >= 0 ? "+" : ""}{fmtCurrency(scenario.revenueDelta)}
               </span>

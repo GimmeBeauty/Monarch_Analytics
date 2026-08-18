@@ -14,6 +14,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { useTheme } from "@/context/ThemeContext";
 
 interface TimeSeriesPoint {
   date: string;
@@ -67,7 +68,14 @@ function formatValue(value: number, prefix = "", suffix = "") {
 }
 
 export default function MonarchChart(props: ChartProps) {
+  const { theme } = useTheme();
   const height = props.height ?? 240;
+  const tooltipContentStyle = {
+    background: theme === "dark" ? "rgba(255,255,255,0.96)" : "rgba(255,249,242,0.96)",
+    border: `1px solid ${theme === "dark" ? "#9BDBF3" : "#FFBC80"}`,
+    borderRadius: "10px",
+    fontSize: 12,
+  };
 
   if (props.type === "area") {
     return (
@@ -100,10 +108,7 @@ export default function MonarchChart(props: ChartProps) {
           />
           <Tooltip
             contentStyle={{
-              background: "rgba(255,249,242,0.96)",
-              border: "1px solid #FFBC80",
-              borderRadius: "10px",
-              fontSize: 12,
+              ...tooltipContentStyle,
               boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
             }}
             labelFormatter={formatDate}
@@ -156,12 +161,7 @@ export default function MonarchChart(props: ChartProps) {
             width={48}
           />
           <Tooltip
-            contentStyle={{
-              background: "rgba(255,249,242,0.96)",
-              border: "1px solid #FFBC80",
-              borderRadius: "10px",
-              fontSize: 12,
-            }}
+            contentStyle={tooltipContentStyle}
           />
           <Bar dataKey="value" fill="#FFBC80" radius={[4, 4, 0, 0]} />
           {props.data[0]?.value2 !== undefined && (
@@ -191,12 +191,7 @@ export default function MonarchChart(props: ChartProps) {
             width={48}
           />
           <Tooltip
-            contentStyle={{
-              background: "rgba(255,249,242,0.96)",
-              border: "1px solid #FFBC80",
-              borderRadius: "10px",
-              fontSize: 12,
-            }}
+            contentStyle={tooltipContentStyle}
             labelFormatter={formatDate}
           />
           <Line
@@ -241,12 +236,7 @@ export default function MonarchChart(props: ChartProps) {
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{
-              background: "rgba(255,249,242,0.96)",
-              border: "1px solid #FFBC80",
-              borderRadius: "10px",
-              fontSize: 12,
-            }}
+            contentStyle={tooltipContentStyle}
           />
         </PieChart>
       </ResponsiveContainer>

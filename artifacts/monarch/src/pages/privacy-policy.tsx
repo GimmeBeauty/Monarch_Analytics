@@ -156,20 +156,20 @@ export default function PrivacyPolicy() {
   const logoSrc = theme === "dark" ? "/monarch-logo.jpg" : "/monarch-logo-light.jpg";
 
   return (
-    <div className="min-h-screen bg-[#FFF9F2] dark:bg-[#120d06] flex flex-col">
+    <div className="min-h-screen bg-[#FFF9F2] dark:bg-[#FFFFFF] flex flex-col">
       {/* Top nav */}
-      <div className="border-b border-[#FFBC80]/30 dark:border-[#FFBC80]/20 px-8 py-4 bg-[#FFF9F2]/80 dark:bg-[#1a1208]/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b border-[#FFBC80]/30 dark:border-[#BFA1E3]/20 px-8 py-4 bg-[#FFF9F2]/80 dark:bg-[#FFFFFF]/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
           <button
             onClick={() => window.history.back()}
-            className="flex items-center gap-2 text-sm text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:text-[#3A3A3A] dark:hover:text-[#FFF9F2] transition-colors font-medium"
+            className="flex items-center gap-2 text-sm text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors font-medium"
           >
             <ArrowLeft size={16} />Back
           </button>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             <img src={logoSrc} alt="Monarch" className="w-7 h-7 rounded-md object-cover object-center" />
-            <span className="font-black text-sm tracking-widest text-[#3A3A3A] dark:text-[#FFF9F2]">MONARCH</span>
+            <span className="font-black text-sm tracking-widest text-[#3A3A3A] dark:text-[#003349]">MONARCH</span>
           </div>
         </div>
       </div>
@@ -177,11 +177,11 @@ export default function PrivacyPolicy() {
       {/* Content */}
       <div className="flex-1 max-w-2xl mx-auto w-full px-8 py-12">
         <div className="mb-10">
-          <h1 className="text-3xl font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">Privacy Policy</h1>
-          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+          <h1 className="text-3xl font-bold text-[#3A3A3A] dark:text-[#003349] mb-2">Privacy Policy</h1>
+          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#003349]/40">
             Effective date: April 17, 2026 · Durham Brands
           </p>
-          <p className="text-sm text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 mt-4 leading-relaxed">
+          <p className="text-sm text-[#3A3A3A]/65 dark:text-[#003349]/55 mt-4 leading-relaxed">
             Durham Brands ("we", "us", or "our") operates the MONARCH analytics platform at monarch.durhambrands.com ("Service"). This Privacy Policy explains how we collect, use, store, and share information about you when you use the Service.
           </p>
         </div>
@@ -189,14 +189,14 @@ export default function PrivacyPolicy() {
         <div className="space-y-8">
           {SECTIONS.map((section) => (
             <div key={section.title}>
-              <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-4 pb-2 border-b border-[#FFBC80]/20">
+              <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349] mb-4 pb-2 border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
                 {section.title}
               </h2>
               <div className="space-y-4">
                 {section.body.map((item) => (
                   <div key={item.heading}>
-                    <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">{item.heading}</h3>
-                    <p className="text-sm text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 leading-relaxed">{item.text}</p>
+                    <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-1">{item.heading}</h3>
+                    <p className="text-sm text-[#3A3A3A]/65 dark:text-[#003349]/55 leading-relaxed">{item.text}</p>
                   </div>
                 ))}
               </div>

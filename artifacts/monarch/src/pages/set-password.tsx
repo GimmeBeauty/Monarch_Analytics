@@ -84,20 +84,20 @@ export default function SetPassword() {
     <AuthShell>
       {stage === "loading" && (
         <div className="text-center py-8">
-          <div className="w-6 h-6 border-2 border-[#FFBC80]/40 border-t-[#FFBC80] rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Verifying your invitation…</p>
+          <div className="w-6 h-6 border-2 border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 border-t-[#FFBC80] dark:border-t-[#BFA1E3] rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#003349]/40">Verifying your invitation…</p>
         </div>
       )}
 
       {stage === "invalid" && (
         <div className="text-center py-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-100 flex items-center justify-center mx-auto mb-3">
             <span className="text-red-500 text-lg">✕</span>
           </div>
-          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-2">
+          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349] mb-2">
             Link invalid or expired
           </h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-5">
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-5">
             This invitation link is no longer valid. It may have already been used or expired after 24 hours. Contact your admin for a new invite.
           </p>
           <button
@@ -112,10 +112,10 @@ export default function SetPassword() {
       {stage === "success" && (
         <div className="text-center py-4">
           <CheckCircle2 size={36} className="text-green-500 mx-auto mb-3" />
-          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
+          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349] mb-1">
             Account activated!
           </h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">
             Redirecting you to the dashboard…
           </p>
         </div>
@@ -123,11 +123,11 @@ export default function SetPassword() {
 
       {stage === "form" && (
         <>
-          <h2 className="text-lg font-bold text-[#3A3A3A] dark:text-[#FFF9F2] mb-1">
+          <h2 className="text-lg font-bold text-[#3A3A3A] dark:text-[#003349] mb-1">
             Set your password
           </h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-6">
-            Creating account for <span className="font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{email}</span>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-6">
+            Creating account for <span className="font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60">{email}</span>
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

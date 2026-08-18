@@ -10,6 +10,7 @@ import {
 import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { ChannelMMM, SaturationStatus, Recommendation, Confidence } from "@/lib/spendData";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
+import { useTheme } from "@/context/ThemeContext";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,16 +24,16 @@ function fmtRoas(v: number): string { return `${v.toFixed(2)}x`; }
 function fmtPct(v: number): string { return `${v.toFixed(1)}%`; }
 
 const SAT_CONFIG: Record<SaturationStatus, { label: string; bg: string; text: string }> = {
-  "under-invested": { label: "Under-invested", bg: "bg-blue-100 dark:bg-blue-900/30",   text: "text-blue-700 dark:text-blue-300" },
-  "efficient":      { label: "Efficient",       bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-700 dark:text-emerald-300" },
-  "saturated":      { label: "Saturated",       bg: "bg-amber-100 dark:bg-amber-900/30",  text: "text-amber-700 dark:text-amber-300" },
-  "over-invested":  { label: "Over-invested",   bg: "bg-red-100 dark:bg-red-900/30",     text: "text-red-700 dark:text-red-300" },
+  "under-invested": { label: "Under-invested", bg: "bg-blue-100 dark:bg-blue-100",   text: "text-blue-700 dark:text-blue-700" },
+  "efficient":      { label: "Efficient",       bg: "bg-emerald-100 dark:bg-emerald-100", text: "text-emerald-700 dark:text-emerald-700" },
+  "saturated":      { label: "Saturated",       bg: "bg-amber-100 dark:bg-amber-100",  text: "text-amber-700 dark:text-amber-700" },
+  "over-invested":  { label: "Over-invested",   bg: "bg-red-100 dark:bg-red-100",     text: "text-red-700 dark:text-red-700" },
 };
 
 const REC_CONFIG: Record<Recommendation, { icon: React.FC<{className?: string}>; text: string; color: string }> = {
-  increase: { icon: TrendingUp,   text: "Increase",  color: "text-emerald-600 dark:text-emerald-400" },
-  decrease: { icon: TrendingDown, text: "Decrease",  color: "text-red-500 dark:text-red-400" },
-  maintain: { icon: Minus,        text: "Maintain",  color: "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40" },
+  increase: { icon: TrendingUp,   text: "Increase",  color: "text-emerald-600 dark:text-emerald-700" },
+  decrease: { icon: TrendingDown, text: "Decrease",  color: "text-red-500 dark:text-red-600" },
+  maintain: { icon: Minus,        text: "Maintain",  color: "text-[#3A3A3A]/50 dark:text-[#003349]/40" },
 };
 
 const CONF_CONFIG: Record<Confidence, { dots: number; color: string; label: string }> = {
@@ -45,7 +46,7 @@ const CONF_CONFIG: Record<Confidence, { dots: number; color: string; label: stri
 
 function ChipLabel({ label, tooltip }: { label: string; tooltip?: string }) {
   return (
-    <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wide flex items-center gap-0.5">
+    <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wide flex items-center gap-0.5">
       {label}
       {tooltip && <MetricTooltip content={tooltip} />}
     </p>
@@ -58,20 +59,22 @@ function SatCurveTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   return (
-    <div className="rounded-lg border border-[#FFBC80]/30 bg-white/97 dark:bg-[#1a1208]/97 shadow-md px-2.5 py-2 text-[11px]">
-      <div className="text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mb-1">{fmtCurrency(d.spend)} spend</div>
-      <div className="font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{fmtCurrency(d.revenue)} revenue</div>
-      <div className="text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{fmtRoas(d.marginalRoas)} mROAS</div>
+    <div className="rounded-lg border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white/97 dark:bg-[#FFFFFF]/97 shadow-md px-2.5 py-2 text-[11px]">
+      <div className="text-[#3A3A3A]/50 dark:text-[#003349]/40 mb-1">{fmtCurrency(d.spend)} spend</div>
+      <div className="font-semibold text-[#3A3A3A] dark:text-[#003349]">{fmtCurrency(d.revenue)} revenue</div>
+      <div className="text-[#3A3A3A]/50 dark:text-[#003349]/40">{fmtRoas(d.marginalRoas)} mROAS</div>
     </div>
   );
 }
 
 function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
+  const { theme } = useTheme();
+  const accent = theme === "dark" ? "#BFA1E3" : "#FFBC80";
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1">
       {/* Chart */}
       <div>
-        <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">
+        <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-2">
           Response Curve — Revenue vs Spend
         </p>
         <ResponsiveContainer width="100%" height={140}>
@@ -81,12 +84,12 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
             <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={50}
               tickFormatter={(v: number) => fmtCurrency(v)} />
             <Tooltip content={<SatCurveTooltip />} />
-            <ReferenceLine x={channel.spend} stroke="#FFBC80" strokeDasharray="4 2" strokeWidth={1.5}
-              label={{ value: "Current", position: "top", fontSize: 10, fill: "#FFBC80" }} />
+            <ReferenceLine x={channel.spend} stroke={accent} strokeDasharray="4 2" strokeWidth={1.5}
+              label={{ value: "Current", position: "top", fontSize: 10, fill: accent }} />
             <ReferenceLine x={channel.recommendedSpend} stroke="#10B981" strokeDasharray="4 2" strokeWidth={1.5}
               label={{ value: "Rec.", position: "insideTopRight", fontSize: 10, fill: "#10B981" }} />
-            <Line type="monotone" dataKey="revenue" stroke="#FFBC80" strokeWidth={2}
-              dot={false} activeDot={{ r: 3, fill: "#FFBC80", strokeWidth: 0 }} />
+            <Line type="monotone" dataKey="revenue" stroke={accent} strokeWidth={2}
+              dot={false} activeDot={{ r: 3, fill: accent, strokeWidth: 0 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -94,7 +97,7 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
       {/* Model details */}
       <div className="space-y-3">
         <div>
-          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Model Quality <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">(Est.)</span></p>
+          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-2">Model Quality <span className="text-[10px] font-normal text-amber-600 dark:text-amber-700">(Est.)</span></p>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: "R²",         value: channel.rSquared.toFixed(3),                                             tooltip: "Estimated coefficient of determination — proportion of revenue variance this model explains. Based on industry benchmarks for this channel type, not fitted to Durham Brands data. Will reflect a real fit once holdout data is ingested." },
@@ -102,16 +105,16 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
               { label: "P-Value",    value: channel.pValue < 0.001 ? "<0.001" : channel.pValue.toFixed(3),           tooltip: "Estimated statistical significance of this channel's revenue contribution. Based on industry benchmarks — not derived from a holdout experiment on Durham Brands' campaigns. Treat as directional until real lift data is ingested." },
               { label: "Confidence", value: CONF_CONFIG[channel.confidence].label,                                   tooltip: "Model confidence tier derived from the estimated p-value and R² benchmarks above. High/Medium/Low reflects benchmark assumptions, not measured coefficient stability. Will be recalibrated when holdout experiment results are available." },
             ].map(({ label, value, tooltip }) => (
-              <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 px-2.5 py-2">
+              <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#003349]/5 px-2.5 py-2">
                 <ChipLabel label={label} tooltip={tooltip} />
-                <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{value}</p>
+                <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349] tabular-nums">{value}</p>
               </div>
             ))}
           </div>
         </div>
 
         <div>
-          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-2">Adstock & Lag <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">(Est.)</span></p>
+          <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-2">Adstock & Lag <span className="text-[10px] font-normal text-amber-600 dark:text-amber-700">(Est.)</span></p>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: "Decay",      value: fmtPct(channel.adstockDecay * 100) + "/wk",  tooltip: "Estimated weekly adstock decay — how quickly ad effects fade after a campaign ends. Based on industry benchmarks for this channel type, not measured from Durham Brands' own data." },
@@ -119,23 +122,23 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
               { label: "Eff. Spend", value: fmtCurrency(channel.effectiveSpend),          tooltip: "Adstock-adjusted effective spend — nominal spend scaled up by the estimated decay rate to reflect carryover pressure from prior periods." },
               { label: "mROAS",      value: fmtRoas(channel.marginalRoas),                tooltip: "Model-estimated Marginal ROAS at current spend — the return on the last dollar invested in this channel. Derived from the Hill saturation curve using benchmark gamma and saturation parameters." },
             ].map(({ label, value, tooltip }) => (
-              <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#FFF9F2]/5 px-2.5 py-2">
+              <div key={label} className="rounded-lg bg-[#3A3A3A]/4 dark:bg-[#003349]/5 px-2.5 py-2">
                 <ChipLabel label={label} tooltip={tooltip} />
-                <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{value}</p>
+                <p className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349] tabular-nums">{value}</p>
               </div>
             ))}
           </div>
         </div>
 
         {channel.haloRevenue > 0 && (
-          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 px-3 py-2">
+          <div className="rounded-lg border border-blue-200 dark:border-blue-300/40 bg-blue-50 dark:bg-blue-100 px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
-              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-700">
                 Halo effect: {fmtCurrency(channel.haloRevenue)}
               </p>
               <MetricTooltip content="Indirect revenue lift on adjacent channels (e.g. branded search) that can be attributed to this channel's advertising driving awareness." />
             </div>
-            <p className="text-[11px] text-blue-600/70 dark:text-blue-400/60">
+            <p className="text-[11px] text-blue-600/70 dark:text-blue-700/60">
               Indirect revenue on {channel.haloChannels.join(", ")}
             </p>
           </div>
@@ -144,8 +147,8 @@ function SaturationCurveChart({ channel }: { channel: ChannelMMM }) {
 
       {/* Recommendation reasoning */}
       <div className="lg:col-span-2">
-        <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mb-1.5">Recommendation rationale</p>
-        <p className="text-xs text-[#3A3A3A]/65 dark:text-[#FFF9F2]/55 leading-relaxed bg-[#3A3A3A]/3 dark:bg-[#FFF9F2]/3 rounded-lg p-3">
+        <p className="text-xs font-medium text-[#3A3A3A]/55 dark:text-[#003349]/45 mb-1.5">Recommendation rationale</p>
+        <p className="text-xs text-[#3A3A3A]/65 dark:text-[#003349]/55 leading-relaxed bg-[#3A3A3A]/3 dark:bg-[#003349]/3 rounded-lg p-3">
           {channel.recommendationReason}
         </p>
       </div>
@@ -168,10 +171,10 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
   return (
     <>
       <tr
-        className="border-b border-[#FFBC80]/10 hover:bg-[#FFBC80]/4 dark:hover:bg-[#FFBC80]/5 transition-colors"
+        className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/5 transition-colors"
       >
         {/* Channel */}
-        <td className="py-3 px-4 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">
+        <td className="py-3 px-4 font-medium text-[#3A3A3A] dark:text-[#003349]">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: channel.color }} />
             <span className="text-sm">{channel.channelLabel}</span>
@@ -182,30 +185,30 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
         <td className="py-3 px-3">
           <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
             channel.channelFamily === "rmn"
-              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-              : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+              ? "bg-amber-100 dark:bg-amber-100 text-amber-700 dark:text-amber-700"
+              : "bg-blue-100 dark:bg-blue-100 text-blue-700 dark:text-blue-700"
           }`}>
             {channel.channelFamily === "rmn" ? "Retail Media" : "Core Digital"}
           </span>
         </td>
 
         {/* Spend */}
-        <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#FFF9F2]/65">
+        <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#003349]/65">
           {fmtCurrency(channel.spend)}
         </td>
 
         {/* Revenue */}
-        <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#FFF9F2]/65">
+        <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#003349]/65">
           {fmtCurrency(channel.attributedRevenue)}
         </td>
 
         {/* Incremental Revenue */}
-        <td className="py-3 px-3 text-right tabular-nums text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+        <td className="py-3 px-3 text-right tabular-nums text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">
           {fmtCurrency(channel.incrementalRevenue)}
         </td>
 
         {/* ROAS */}
-        <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#FFF9F2]/65">
+        <td className="py-3 px-3 text-right tabular-nums text-sm text-[#3A3A3A]/75 dark:text-[#003349]/65">
           {fmtRoas(channel.roas)}
         </td>
 
@@ -213,12 +216,12 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
         <td className="py-3 px-3 text-right">
           <div className="flex flex-col items-end">
             <div className="flex items-center gap-1">
-              <span className="text-[9px] font-medium text-amber-500 dark:text-amber-400">Est.</span>
-              <span className="text-sm font-semibold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">
+              <span className="text-[9px] font-medium text-amber-500 dark:text-amber-700">Est.</span>
+              <span className="text-sm font-semibold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
                 {fmtRoas(channel.iroas)}
               </span>
             </div>
-            <span className="text-[10px] tabular-nums text-[#3A3A3A]/35 dark:text-[#FFF9F2]/25">
+            <span className="text-[10px] tabular-nums text-[#3A3A3A]/35 dark:text-[#003349]/25">
               [{fmtRoas(channel.iroasLow)}–{fmtRoas(channel.iroasHigh)}]
             </span>
           </div>
@@ -228,10 +231,10 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
         <td className="py-3 px-3 text-right tabular-nums text-sm">
           <span className={
             channel.marginalRoas > channel.roas * 0.8
-              ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+              ? "text-emerald-600 dark:text-emerald-700 font-semibold"
               : channel.marginalRoas < channel.roas * 0.4
-              ? "text-red-500 dark:text-red-400 font-semibold"
-              : "text-amber-600 dark:text-amber-400"
+              ? "text-red-500 dark:text-red-700 font-semibold"
+              : "text-amber-600 dark:text-amber-700"
           }>
             {fmtRoas(channel.marginalRoas)}
           </span>
@@ -261,9 +264,9 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
         <td className="py-3 px-3">
           <div className="flex items-center gap-1">
             {[1, 2, 3].map((dot) => (
-              <div key={dot} className={`w-1.5 h-1.5 rounded-full ${dot <= confCfg.dots ? confCfg.color : "bg-[#3A3A3A]/15 dark:bg-[#FFF9F2]/15"}`} />
+              <div key={dot} className={`w-1.5 h-1.5 rounded-full ${dot <= confCfg.dots ? confCfg.color : "bg-[#3A3A3A]/15 dark:bg-[#003349]/15"}`} />
             ))}
-            <span className="text-[11px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 ml-1">{confCfg.label}</span>
+            <span className="text-[11px] text-[#3A3A3A]/45 dark:text-[#003349]/35 ml-1">{confCfg.label}</span>
           </div>
         </td>
 
@@ -275,8 +278,8 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
             aria-label={expanded ? "Collapse row" : "Expand row"}
           >
             {expanded
-              ? <ChevronUp className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" />
-              : <ChevronDown className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30" />
+              ? <ChevronUp className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#003349]/30" />
+              : <ChevronDown className="w-4 h-4 text-[#3A3A3A]/40 dark:text-[#003349]/30" />
             }
           </button>
         </td>
@@ -284,7 +287,7 @@ function TableRow({ channel }: { channel: ChannelMMM }) {
 
       {/* Expanded detail row */}
       {expanded && (
-        <tr className="border-b border-[#FFBC80]/10 bg-[#FFBC80]/3 dark:bg-[#FFBC80]/4">
+        <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/3 dark:bg-[#BFA1E3]/4">
           <td colSpan={12} className="px-4 py-4">
             <SaturationCurveChart channel={channel} />
           </td>
@@ -305,7 +308,7 @@ type SortKey = "spend" | "iroas" | "marginalRoas" | "saturationLevelPct" | "incr
 // Column header with optional tooltip (non-sortable columns)
 function HeaderLabel({ label, tooltip }: { label: string; tooltip?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+    <span className="inline-flex items-center gap-1 text-[#3A3A3A]/40 dark:text-[#003349]/30">
       {label}
       {tooltip && <MetricTooltip content={tooltip} />}
     </span>
@@ -335,8 +338,8 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
     return (
       <button
         onClick={() => handleSort(k)}
-        className={`flex items-center gap-0.5 hover:text-[#3A3A3A]/80 dark:hover:text-[#FFF9F2]/70 transition-colors ${
-          active ? "text-[#FFBC80]" : "text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30"
+        className={`flex items-center gap-0.5 hover:text-[#3A3A3A]/80 dark:hover:text-[#003349]/70 transition-colors ${
+          active ? "text-[#FFBC80] dark:text-[#BFA1E3]" : "text-[#3A3A3A]/40 dark:text-[#003349]/30"
         }`}
       >
         {label}
@@ -349,8 +352,8 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
   return (
     <div className="rounded-2xl monarch-card">
       <div className="px-5 pt-5 pb-3">
-        <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Channel Deep Dive</h3>
-        <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+        <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Channel Deep Dive</h3>
+        <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
           Full MMM metrics — click the chevron to expand saturation curve and model details
         </p>
       </div>
@@ -358,7 +361,7 @@ export default function ChannelDeepDive({ channels }: ChannelDeepDiveProps) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[900px]">
           <thead>
-            <tr className="border-b border-[#FFBC80]/20">
+            <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
               {[
                 { label: "Channel",        th: "px-4 pb-2 text-left" },
                 { label: "Type",           th: "px-3 pb-2 text-left" },

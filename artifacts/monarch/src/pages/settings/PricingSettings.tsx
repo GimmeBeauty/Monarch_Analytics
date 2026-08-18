@@ -30,19 +30,19 @@ function fmtSyncTime(iso: string) {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  synced:  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  delayed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  synced:  "bg-green-100 text-green-700 dark:bg-green-100 dark:text-green-700",
+  pending: "bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700",
+  delayed: "bg-red-100 text-red-700 dark:bg-red-100 dark:text-red-700",
 };
 
 // ─── Section Wrapper ──────────────────────────────────────────────────────────
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="p-5 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
+    <div className="p-5 rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30">
       <div className="mb-4">
-        <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider">{title}</p>
-        {subtitle && <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">{subtitle}</p>}
+        <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider">{title}</p>
+        {subtitle && <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -60,7 +60,7 @@ function ModeCard({
       className={`relative flex-1 text-left p-4 rounded-xl border-2 transition-all ${
         selected
           ? "border-amber-400 bg-amber-400/8 dark:bg-amber-400/6"
-          : "border-[#FFBC80]/30 hover:border-[#FFBC80]/60 bg-white dark:bg-[#231a0e]"
+          : "border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 bg-white dark:bg-[#FFFFFF]"
       }`}
     >
       {selected && (
@@ -68,10 +68,10 @@ function ModeCard({
           <Check size={11} className="text-white" />
         </span>
       )}
-      <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{label}</p>
-      <p className="text-xs text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 mt-1 leading-relaxed">{description}</p>
+      <p className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">{label}</p>
+      <p className="text-xs text-[#3A3A3A]/55 dark:text-[#003349]/45 mt-1 leading-relaxed">{description}</p>
       {badge && (
-        <span className="inline-block mt-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+        <span className="inline-block mt-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700">
           {badge}
         </span>
       )}
@@ -103,8 +103,8 @@ export default function PricingSettings() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Pricing & Valuation</h2>
-        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+        <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Pricing & Valuation</h2>
+        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
           Control how revenue is valued across the platform — MSRP (consumer price) or Wholesale (NetSuite cost).
         </p>
       </div>
@@ -129,9 +129,9 @@ export default function PricingSettings() {
         </div>
 
         {mode === "wholesale" && (
-          <div className="mt-4 flex items-start gap-2.5 p-3.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/40">
-            <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-            <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+          <div className="mt-4 flex items-start gap-2.5 p-3.5 rounded-lg bg-amber-50 dark:bg-amber-100 border border-amber-200/60 dark:border-amber-300/40">
+            <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-700" />
+            <p className="text-xs text-amber-800 dark:text-amber-700 leading-relaxed">
               <span className="font-semibold">Wholesale mode active.</span> Revenue figures across Overview, Traffic, Spend, Performance, and Attribution now reflect wholesale cost. Shopify always displays actual DTC revenue regardless of this setting.
             </p>
           </div>
@@ -143,10 +143,10 @@ export default function PricingSettings() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-[#FFBC80]/20">
-                <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Store</th>
-                <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Type</th>
-                <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Wholesale Rate</th>
+              <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+                <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Store</th>
+                <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Type</th>
+                <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Wholesale Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -154,23 +154,23 @@ export default function PricingSettings() {
                 const rate = WHOLESALE_RATES[store.id] ?? 1.0;
                 const isEligible = WHOLESALE_ELIGIBLE_STORE_IDS.has(store.id);
                 return (
-                  <tr key={store.id} className="border-b border-[#FFBC80]/10 last:border-0">
+                  <tr key={store.id} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: store.color }} />
-                        <span className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{store.label}</span>
+                        <span className="font-medium text-[#3A3A3A] dark:text-[#003349]">{store.label}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 pr-4 text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">
+                    <td className="py-2.5 pr-4 text-[#3A3A3A]/55 dark:text-[#003349]/45">
                       {store.id === "shopify" ? "DTC" : "Retail"}
                     </td>
                     <td className="py-2.5 text-right">
                       {store.id === "shopify" ? (
-                        <span className="text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">Always 100%</span>
+                        <span className="text-[#3A3A3A]/45 dark:text-[#003349]/35">Always 100%</span>
                       ) : isEligible ? (
-                        <span className="font-semibold text-amber-700 dark:text-amber-400">{fmtPct(rate)}</span>
+                        <span className="font-semibold text-amber-700 dark:text-amber-700">{fmtPct(rate)}</span>
                       ) : (
-                        <span className="text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">—</span>
+                        <span className="text-[#3A3A3A]/45 dark:text-[#003349]/35">—</span>
                       )}
                     </td>
                   </tr>
@@ -186,12 +186,12 @@ export default function PricingSettings() {
         {netsuiteLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-12 rounded-lg bg-[#FFBC80]/8 animate-pulse" />
+              <div key={i} className="h-12 rounded-lg bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
             ))}
           </div>
         ) : netsuiteData && !netsuiteData.isEmpty ? (
           <>
-            <div className="flex items-center gap-2 mb-3 text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+            <div className="flex items-center gap-2 mb-3 text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">
               <RefreshCw size={11} />
               <span>Last sync: {netsuiteData.lastSync ? netsuiteData.lastSync.slice(0, 10) : "—"}</span>
             </div>
@@ -199,18 +199,18 @@ export default function PricingSettings() {
               {netsuiteData.byStore.map((rec) => {
                 const store = STORES.find(s => s.label.toLowerCase() === rec.storeName.toLowerCase() || s.id === rec.storeName.toLowerCase().replace(/\s+/g, ""));
                 return (
-                  <div key={rec.storeName} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#1a1208]/60 border border-[#FFBC80]/15">
+                  <div key={rec.storeName} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#FFFFFF]/60 border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
                     <div className="flex items-center gap-2.5">
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: store?.color ?? "#9CA3AF" }} />
                       <div>
-                        <span className="font-medium text-xs text-[#3A3A3A] dark:text-[#FFF9F2]">{rec.storeName}</span>
-                        <span className="ml-2 text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{rec.storeType}</span>
+                        <span className="font-medium text-xs text-[#3A3A3A] dark:text-[#003349]">{rec.storeName}</span>
+                        <span className="ml-2 text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35">{rec.storeType}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 text-right">
                       <div>
-                        <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">{fmtCurrency(rec.revenue)}</p>
-                        <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35">{rec.units.toLocaleString()} units · last {rec.lastDate}</p>
+                        <p className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349]">{fmtCurrency(rec.revenue)}</p>
+                        <p className="text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35">{rec.units.toLocaleString()} units · last {rec.lastDate}</p>
                       </div>
                       <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${STATUS_COLORS[rec.status]}`}>
                         {rec.status === "delayed" && <Clock size={9} className="inline mr-1" />}
@@ -223,7 +223,7 @@ export default function PricingSettings() {
             </div>
           </>
         ) : (
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 py-3 text-center">
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 py-3 text-center">
             No NetSuite data found.
           </p>
         )}
@@ -233,7 +233,7 @@ export default function PricingSettings() {
       <Section title="NetSuite Store Mapping" subtitle="Maps NetSuite entity names to platform store IDs.">
         <button
           onClick={() => setStoreMappingOpen(o => !o)}
-          className="flex items-center justify-between w-full text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
+          className="flex items-center justify-between w-full text-xs font-medium text-[#3A3A3A] dark:text-[#003349] hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
         >
           <span className="flex items-center gap-1.5"><Store size={13} />{DEFAULT_STORE_MAPPINGS.length} mappings configured</span>
           {storeMappingOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -243,26 +243,26 @@ export default function PricingSettings() {
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-[#FFBC80]/20">
-                  <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">NetSuite Entity</th>
-                  <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Platform Store</th>
-                  <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Status</th>
+                <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+                  <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">NetSuite Entity</th>
+                  <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Platform Store</th>
+                  <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {DEFAULT_STORE_MAPPINGS.map((m) => {
                   const store = STORES.find(s => s.id === m.platformStoreId);
                   return (
-                    <tr key={m.id} className="border-b border-[#FFBC80]/10 last:border-0">
-                      <td className="py-2 pr-4 font-mono text-[11px] text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{m.netSuiteEntity}</td>
+                    <tr key={m.id} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
+                      <td className="py-2 pr-4 font-mono text-[11px] text-[#3A3A3A]/70 dark:text-[#003349]/60">{m.netSuiteEntity}</td>
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1.5">
                           {store && <div className="w-1.5 h-1.5 rounded-full" style={{ background: store.color }} />}
-                          <span className="text-[#3A3A3A] dark:text-[#FFF9F2]">{store?.label ?? m.platformStoreId}</span>
+                          <span className="text-[#3A3A3A] dark:text-[#003349]">{store?.label ?? m.platformStoreId}</span>
                         </div>
                       </td>
                       <td className="py-2 text-right">
-                        <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${m.confirmed ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"}`}>
+                        <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${m.confirmed ? "bg-green-100 text-green-700 dark:bg-green-100 dark:text-green-700" : "bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700"}`}>
                           {m.confirmed ? "Confirmed" : "Unconfirmed"}
                         </span>
                       </td>
@@ -279,7 +279,7 @@ export default function PricingSettings() {
       <Section title="Product SKU Mapping" subtitle="Maps NetSuite SKUs to platform SKUs with wholesale and MSRP prices.">
         <button
           onClick={() => setProductMappingOpen(o => !o)}
-          className="flex items-center justify-between w-full text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
+          className="flex items-center justify-between w-full text-xs font-medium text-[#3A3A3A] dark:text-[#003349] hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
         >
           <span className="flex items-center gap-1.5"><Package size={13} />{DEFAULT_PRODUCT_MAPPINGS.length} products mapped</span>
           {productMappingOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -289,27 +289,27 @@ export default function PricingSettings() {
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-[#FFBC80]/20">
-                  <th className="text-left py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Product</th>
-                  <th className="text-left py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">NS SKU → Platform</th>
-                  <th className="text-right py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Wholesale</th>
-                  <th className="text-right py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">MSRP</th>
-                  <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45">Status</th>
+                <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+                  <th className="text-left py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Product</th>
+                  <th className="text-left py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">NS SKU → Platform</th>
+                  <th className="text-right py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Wholesale</th>
+                  <th className="text-right py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">MSRP</th>
+                  <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {DEFAULT_PRODUCT_MAPPINGS.map((p) => (
-                  <tr key={p.id} className="border-b border-[#FFBC80]/10 last:border-0">
-                    <td className="py-2 pr-3 text-[#3A3A3A] dark:text-[#FFF9F2] max-w-[180px]">
+                  <tr key={p.id} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
+                    <td className="py-2 pr-3 text-[#3A3A3A] dark:text-[#003349] max-w-[180px]">
                       <span className="block truncate" title={p.productName}>{p.productName}</span>
                     </td>
-                    <td className="py-2 pr-3 font-mono text-[11px] text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                    <td className="py-2 pr-3 font-mono text-[11px] text-[#3A3A3A]/60 dark:text-[#003349]/50">
                       {p.netSuiteSku} → {p.platformSku}
                     </td>
-                    <td className="py-2 pr-3 text-right font-medium text-amber-700 dark:text-amber-400">${p.wholesalePrice.toFixed(2)}</td>
-                    <td className="py-2 pr-3 text-right text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">${p.msrpPrice.toFixed(2)}</td>
+                    <td className="py-2 pr-3 text-right font-medium text-amber-700 dark:text-amber-700">${p.wholesalePrice.toFixed(2)}</td>
+                    <td className="py-2 pr-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60">${p.msrpPrice.toFixed(2)}</td>
                     <td className="py-2 text-right">
-                      <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${p.confirmed ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"}`}>
+                      <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${p.confirmed ? "bg-green-100 text-green-700 dark:bg-green-100 dark:text-green-700" : "bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700"}`}>
                         {p.confirmed ? "Confirmed" : "Review"}
                       </span>
                     </td>

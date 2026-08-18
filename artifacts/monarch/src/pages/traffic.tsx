@@ -634,8 +634,8 @@ export default function Traffic() {
         )}
 
         {isEmpty && !error && (
-          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
-            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
               No data available — check your Snowflake connection and date range.
             </p>
           </div>
@@ -645,16 +645,16 @@ export default function Traffic() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+                <div key={i} className="h-20 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
               ))}
             </div>
-            <div className="h-64 rounded-xl bg-[#FFBC80]/8 animate-pulse" />
+            <div className="h-64 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
           </div>
         )}
 
         {data && includesCircana && circanaSummaryData?.isStale && !circanaBannerDismissed && (
-          <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-xl border border-amber-400/40 bg-amber-50/60 dark:bg-amber-900/20 dark:border-amber-500/30 text-sm">
-            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+          <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-xl border border-amber-400/40 bg-amber-50/60 dark:bg-amber-100 dark:border-amber-500/30 text-sm">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-700">
               <span className="text-base">⚠</span>
               <span>
                 <span className="font-semibold">Circana data not available for this date range.</span>
@@ -665,7 +665,7 @@ export default function Traffic() {
             </div>
             <button
               onClick={dismissCircanaBanner}
-              className="shrink-0 text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 font-medium leading-none"
+              className="shrink-0 text-amber-600 dark:text-amber-700 hover:text-amber-900 dark:hover:text-amber-200 font-medium leading-none"
               aria-label="Dismiss"
             >
               ✕

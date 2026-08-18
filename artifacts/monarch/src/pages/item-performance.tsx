@@ -27,6 +27,10 @@ import {
 } from "lucide-react";
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import ErrorState from "@/components/ErrorState";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
+
+type Theme = "light" | "dark";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -123,14 +127,16 @@ const RETAILER_OPTIONS = [
   { value: 227,  label: "Meijer" },
 ];
 
-const TT_STYLE = {
-  background:   "rgba(255,249,242,0.97)",
-  border:       "1px solid #FFBC80",
-  borderRadius: "10px",
-  fontSize:     12,
-  boxShadow:    "0 4px 20px rgba(0,0,0,0.08)",
-  padding:      "8px 12px",
-};
+function ttStyle(theme: Theme) {
+  return {
+    background:   "rgba(255,249,242,0.97)",
+    border:       `1px solid ${theme === "dark" ? "#BFA1E3" : "#FFBC80"}`,
+    borderRadius: "10px",
+    fontSize:     12,
+    boxShadow:    "0 4px 20px rgba(0,0,0,0.08)",
+    padding:      "8px 12px",
+  };
+}
 
 const SKU_TABS = [
   { value: "all",           label: "All SKUs" },
@@ -181,6 +187,7 @@ function DataSourceBadges({ sources }: { sources: string[] }) {
 // ─── Sparkline ────────────────────────────────────────────────────────────────
 
 function Sparkline({ data }: { data: WeekPoint[] }) {
+  const { theme } = useTheme();
   if (!data || data.length < 2) {
     return <span className="text-[#3A3A3A]/30 text-xs">—</span>;
   }
@@ -190,7 +197,7 @@ function Sparkline({ data }: { data: WeekPoint[] }) {
         <Line
           type="monotone"
           dataKey="revenue"
-          stroke="#FFBC80"
+          stroke={theme === "dark" ? "#BFA1E3" : "#FFBC80"}
           strokeWidth={1.5}
           dot={false}
           isAnimationActive={false}
@@ -213,10 +220,10 @@ function dpswColor(vsAvg: number): string {
 
 function SkeletonRow() {
   return (
-    <tr className="border-b border-[#FFBC80]/10">
+    <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
       {Array.from({ length: 10 }).map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-3 rounded bg-[#FFBC80]/20 animate-pulse" style={{ width: `${40 + (i * 7) % 40}%` }} />
+          <div className="h-3 rounded bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 animate-pulse" style={{ width: `${40 + (i * 7) % 40}%` }} />
         </td>
       ))}
     </tr>
@@ -235,17 +242,18 @@ interface KpiCardProps {
 }
 
 function KpiCard({ title, value, sub, note, highlight, onClick }: KpiCardProps) {
+  const { theme } = useTheme();
   return (
     <div
-      className={`rounded-xl p-4 bg-white dark:bg-[#1a1208] shadow-sm border border-[#FFBC80]/20 ${onClick ? "cursor-pointer hover:border-[#FFBC80]/60 hover:shadow-md transition-all" : ""}`}
-      style={highlight ? { background: "linear-gradient(135deg, rgba(255,188,128,0.12), rgba(255,226,154,0.12))" } : {}}
+      className={`rounded-xl p-4 bg-white dark:bg-[#FFFFFF] shadow-sm border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 ${onClick ? "cursor-pointer hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 hover:shadow-md transition-all" : ""}`}
+      style={highlight ? { background: theme === "dark" ? "linear-gradient(135deg, rgba(191,161,227,0.12), rgba(155,219,243,0.12))" : "linear-gradient(135deg, rgba(255,188,128,0.12), rgba(255,226,154,0.12))" } : {}}
       onClick={onClick}
     >
-      <div className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 uppercase tracking-wider mb-1">{title}</div>
-      <div className="text-xl font-bold text-[#3A3A3A] dark:text-[#FFF9F2] leading-tight">{value}</div>
-      {sub  && <div className="text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 mt-0.5 truncate">{sub}</div>}
+      <div className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase tracking-wider mb-1">{title}</div>
+      <div className="text-xl font-bold text-[#3A3A3A] dark:text-[#003349] leading-tight">{value}</div>
+      {sub  && <div className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50 mt-0.5 truncate">{sub}</div>}
       {note && <div className="text-[10px] text-[#3A3A3A]/40 mt-1">{note}</div>}
-      {onClick && <div className="text-[10px] text-[#FFBC80] mt-1.5">View top 10 →</div>}
+      {onClick && <div className="text-[10px] text-[#FFBC80] dark:text-[#BFA1E3] mt-1.5">View top 10 →</div>}
     </div>
   );
 }
@@ -253,6 +261,8 @@ function KpiCard({ title, value, sub, note, highlight, onClick }: KpiCardProps) 
 // ─── SKU Detail Drawer ────────────────────────────────────────────────────────
 
 function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => void; numWeeks: number }) {
+  const { theme } = useTheme();
+  const accent = theme === "dark" ? "#BFA1E3" : "#FFBC80";
   const [drawerTab, setDrawerTab] = useState<"retailers" | "trend" | "distribution">("retailers");
 
   const retailAvgDpsw = useMemo(() => {
@@ -264,18 +274,18 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/20" onClick={onClose} />
-      <div className="w-[520px] bg-[#FFF9F2] dark:bg-[#1a1208] shadow-2xl flex flex-col h-full overflow-hidden border-l border-[#FFBC80]/30">
+      <div className="w-[520px] bg-[#FFF9F2] dark:bg-[#FFFFFF] shadow-2xl flex flex-col h-full overflow-hidden border-l border-[#FFBC80]/30 dark:border-[#9BDBF3]/30">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#FFBC80]/20 flex items-start justify-between shrink-0">
+        <div className="px-6 py-4 border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 flex items-start justify-between shrink-0">
           <div>
-            <div className="font-bold text-[#3A3A3A] dark:text-[#FFF9F2] text-base">{sku.productName}</div>
-            <div className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+            <div className="font-bold text-[#3A3A3A] dark:text-[#003349] text-base">{sku.productName}</div>
+            <div className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
               SKU: {sku.sku}{sku.upc ? ` · UPC: ${sku.upc}` : ""}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-[#FFBC80]/15 text-[#3A3A3A]/50 hover:text-[#3A3A3A] transition-colors mt-0.5"
+            className="p-1.5 rounded-lg hover:bg-[#FFBC80]/15 dark:hover:bg-[#EFBAE1]/15 text-[#3A3A3A]/50 hover:text-[#3A3A3A] transition-colors mt-0.5"
           >
             <X size={16} />
           </button>
@@ -289,10 +299,10 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
               onClick={() => setDrawerTab(tab)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
                 drawerTab === tab
-                  ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                  : "text-[#3A3A3A]/50 hover:bg-[#FFBC80]/10"
+                  ? "text-[#3A3A3A] dark:text-[#FFFFFF]"
+                  : "text-[#3A3A3A]/50 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
               }`}
-              style={drawerTab === tab ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+              style={drawerTab === tab ? { background: brandGradient(theme) } : {}}
             >
               {tab === "retailers" ? "By Retailer" : tab === "trend" ? "Trend" : "Distribution"}
             </button>
@@ -315,18 +325,18 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,58,58,0.06)" />
                     <XAxis dataKey="name" tick={{ fontSize: 10, fill: "rgba(58,58,58,0.45)" }} />
                     <YAxis tick={{ fontSize: 10, fill: "rgba(58,58,58,0.45)" }} />
-                    <Tooltip contentStyle={TT_STYLE} formatter={(v: number) => [`$${v.toFixed(2)}`, "DPSW"]} />
-                    <ReferenceLine y={retailAvgDpsw} stroke="#FFBC80" strokeDasharray="4 2" label={{ value: "Retail Avg", fontSize: 9, fill: "#FFBC80" }} />
-                    <Bar dataKey="dpsw" fill="#FFBC80" radius={[4, 4, 0, 0]} />
+                    <Tooltip contentStyle={ttStyle(theme)} formatter={(v: number) => [`$${v.toFixed(2)}`, "DPSW"]} />
+                    <ReferenceLine y={retailAvgDpsw} stroke={accent} strokeDasharray="4 2" label={{ value: "Retail Avg", fontSize: 9, fill: accent }} />
+                    <Bar dataKey="dpsw" fill={accent} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
 
               {/* Table */}
-              <div className="overflow-x-auto rounded-lg border border-[#FFBC80]/15">
+              <div className="overflow-x-auto rounded-lg border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-[#FFBC80]/10">
+                    <tr className="bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10">
                       <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Retailer</th>
                       <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Item #</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Revenue</th>
@@ -338,8 +348,8 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                   </thead>
                   <tbody>
                     {sku.byRetailer.map(r => (
-                      <tr key={r.entityId} className="border-t border-[#FFBC80]/10 hover:bg-[#FFBC80]/5">
-                        <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{r.name}</td>
+                      <tr key={r.entityId} className="border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5">
+                        <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#003349]">{r.name}</td>
                         <td className="px-3 py-2 text-[#3A3A3A]/50 text-[10px] font-mono">{r.itemNumber || "—"}</td>
                         <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtCurrency(r.revenue)}</td>
                         <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtUnits(r.units)}</td>
@@ -370,20 +380,20 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,58,58,0.06)" />
                     <XAxis dataKey="week" tick={{ fontSize: 9, fill: "rgba(58,58,58,0.45)" }} />
                     <YAxis tick={{ fontSize: 10, fill: "rgba(58,58,58,0.45)" }} tickFormatter={v => `$${(v / 1000).toFixed(0)}K`} />
-                    <Tooltip contentStyle={TT_STYLE} formatter={(v: number) => [fmtCurrency(v), "Revenue"]} />
+                    <Tooltip contentStyle={ttStyle(theme)} formatter={(v: number) => [fmtCurrency(v), "Revenue"]} />
                     <Line
                       type="monotone"
                       dataKey="revenue"
-                      stroke="#FFBC80"
+                      stroke={accent}
                       strokeWidth={2}
-                      dot={{ r: 3, fill: "#FFBC80" }}
+                      dot={{ r: 3, fill: accent }}
                       strokeDasharray="5 3"
                     />
                   </LineChart>
                 </ResponsiveContainer>
               )}
               <div className="mt-3 flex items-center gap-1.5 text-[10px] text-[#3A3A3A]/40">
-                <span className="inline-block w-6 border-t-2 border-dashed border-[#FFBC80]" />
+                <span className="inline-block w-6 border-t-2 border-dashed border-[#FFBC80] dark:border-[#BFA1E3]" />
                 Sell-in (NetSuite) — shipments to retailer
               </div>
             </div>
@@ -393,10 +403,10 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
           {drawerTab === "distribution" && (
             <div>
               <div className="text-xs text-[#3A3A3A]/50 mb-3">Retailer distribution for this SKU in the selected period</div>
-              <div className="overflow-x-auto rounded-lg border border-[#FFBC80]/15">
+              <div className="overflow-x-auto rounded-lg border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-[#FFBC80]/10">
+                    <tr className="bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10">
                       <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Retailer</th>
                       <th className="px-3 py-2 text-center font-semibold text-[#3A3A3A]/60">Carrying?</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">DPSW</th>
@@ -408,8 +418,8 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                       const r = sku.byRetailer.find(br => br.entityId === opt.value);
                       const carrying = r && r.revenue > 0;
                       return (
-                        <tr key={opt.value} className="border-t border-[#FFBC80]/10 hover:bg-[#FFBC80]/5">
-                          <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{opt.label}</td>
+                        <tr key={opt.value} className="border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5">
+                          <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#003349]">{opt.label}</td>
                           <td className="px-3 py-2 text-center">
                             {carrying ? (
                               <span className="text-emerald-600 font-semibold">✓</span>
@@ -469,15 +479,15 @@ function SummaryModal({ type, skus, retailAvgDpsw, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-[#FFF9F2] dark:bg-[#1a1208] rounded-2xl shadow-2xl border border-[#FFBC80]/30 w-full max-w-lg mx-4 overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#FFBC80]/15 flex items-center justify-between">
-          <h3 className="font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">{cfg.title}</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#FFBC80]/15 text-[#3A3A3A]/50 hover:text-[#3A3A3A]"><X size={16} /></button>
+      <div className="relative bg-[#FFF9F2] dark:bg-[#FFFFFF] rounded-2xl shadow-2xl border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 w-full max-w-lg mx-4 overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 flex items-center justify-between">
+          <h3 className="font-bold text-[#3A3A3A] dark:text-[#003349]">{cfg.title}</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#FFBC80]/15 dark:hover:bg-[#EFBAE1]/15 text-[#3A3A3A]/50 hover:text-[#3A3A3A]"><X size={16} /></button>
         </div>
         <div className="overflow-y-auto max-h-[420px]">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-[#FFF9F2] dark:bg-[#1a1208]">
-              <tr className="border-b border-[#FFBC80]/10">
+            <thead className="sticky top-0 bg-[#FFF9F2] dark:bg-[#FFFFFF]">
+              <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10">
                 <th className="px-4 py-2 text-left text-xs font-semibold text-[#3A3A3A]/50">#</th>
                 <th className="px-4 py-2 text-left text-xs font-semibold text-[#3A3A3A]/50">SKU</th>
                 <th className="px-4 py-2 text-right text-xs font-semibold text-[#3A3A3A]/50">{cfg.col}</th>
@@ -485,13 +495,13 @@ function SummaryModal({ type, skus, retailAvgDpsw, onClose }: {
             </thead>
             <tbody>
               {items.map((s, i) => (
-                <tr key={s.sku} className="border-b border-[#FFBC80]/08 hover:bg-[#FFBC80]/5">
+                <tr key={s.sku} className="border-b border-[#FFBC80]/08 dark:border-[#9BDBF3]/08 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5">
                   <td className="px-4 py-2.5 text-xs text-[#3A3A3A]/40">{i + 1}</td>
                   <td className="px-4 py-2.5">
-                    <div className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2] text-xs leading-tight">{s.productName}</div>
+                    <div className="font-medium text-[#3A3A3A] dark:text-[#003349] text-xs leading-tight">{s.productName}</div>
                     <div className="text-[10px] text-[#3A3A3A]/40">{s.sku}</div>
                   </td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] tabular-nums">{cfg.val(s)}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-[#3A3A3A] dark:text-[#003349] tabular-nums">{cfg.val(s)}</td>
                 </tr>
               ))}
               {items.length === 0 && (
@@ -587,6 +597,8 @@ function downloadExcel(skus: SkuRow[], filename: string) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ItemPerformance() {
+  const { theme } = useTheme();
+  const accent = theme === "dark" ? "#BFA1E3" : "#FFBC80";
   const [period,       setPeriod]       = useState<string>("4w");
   const [dateMode,     setDateMode]     = useState<"period" | "custom">("period");
   const [customStart,  setCustomStart]  = useState("");
@@ -682,8 +694,8 @@ export default function ItemPerformance() {
   const SortIcon = ({ col }: { col: string }) => {
     if (sortCol !== col) return <Minus size={10} className="text-[#3A3A3A]/20" />;
     return sortDir === "desc"
-      ? <TrendingDown size={10} className="text-[#FFBC80]" />
-      : <TrendingUp   size={10} className="text-[#FFBC80]" />;
+      ? <TrendingDown size={10} className="text-[#FFBC80] dark:text-[#BFA1E3]" />
+      : <TrendingUp   size={10} className="text-[#FFBC80] dark:text-[#BFA1E3]" />;
   };
 
   const retailAvgDpsw = useMemo(() => {
@@ -714,52 +726,52 @@ export default function ItemPerformance() {
         <div className="relative">
           <button
             onClick={() => { setPeriodOpen(o => !o); setRetailerOpen(false); }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:border-[#FFBC80]/60 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF] text-sm font-medium text-[#3A3A3A] dark:text-[#003349] hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 transition-colors"
           >
             <span className="max-w-[160px] truncate">{periodLabelStr}</span>
             <ChevronDown size={14} className={`shrink-0 transition-transform ${periodOpen ? "rotate-180" : ""}`} />
           </button>
           {periodOpen && (
-            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[220px] max-h-[400px] overflow-y-auto">
+            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 rounded-xl shadow-xl py-1 min-w-[220px] max-h-[400px] overflow-y-auto">
               <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider">Rolling Period</div>
               {PERIOD_OPTIONS.filter(o => o.group === "rolling").map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => { setPeriod(opt.value); setDateMode("period"); setPeriodOpen(false); }}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "period" && period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors ${dateMode === "period" && period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#003349]" : "text-[#3A3A3A]/70 dark:text-[#003349]/60"}`}
                 >
                   {opt.label}
                 </button>
               ))}
-              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Annual</div>
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 mt-1">Annual</div>
               {PERIOD_OPTIONS.filter(o => o.group === "annual").map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => { setPeriod(opt.value); setDateMode("period"); setPeriodOpen(false); }}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${dateMode === "period" && period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors ${dateMode === "period" && period === opt.value ? "font-semibold text-[#3A3A3A] dark:text-[#003349]" : "text-[#3A3A3A]/70 dark:text-[#003349]/60"}`}
                 >
                   {opt.label}
                 </button>
               ))}
-              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 mt-1">Custom Range</div>
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-[#3A3A3A]/40 uppercase tracking-wider border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 mt-1">Custom Range</div>
               <div className="px-3 pb-3 flex flex-col gap-1.5">
                 <input
                   type="date"
                   value={customStart}
                   onChange={e => { setCustomStart(e.target.value); setDateMode("custom"); }}
-                  className="w-full px-2 py-1 text-xs rounded border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2]"
+                  className="w-full px-2 py-1 text-xs rounded border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349]"
                 />
                 <input
                   type="date"
                   value={customEnd}
                   onChange={e => { setCustomEnd(e.target.value); setDateMode("custom"); }}
-                  className="w-full px-2 py-1 text-xs rounded border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2]"
+                  className="w-full px-2 py-1 text-xs rounded border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349]"
                 />
                 {customStart && customEnd && (
                   <button
                     onClick={() => { setDateMode("custom"); setPeriodOpen(false); }}
-                    className="w-full px-2 py-1 text-xs rounded font-medium text-[#3A3A3A] dark:text-[#1a1208]"
-                    style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+                    className="w-full px-2 py-1 text-xs rounded font-medium text-[#3A3A3A] dark:text-[#FFFFFF]"
+                    style={{ background: brandGradient(theme) }}
                   >
                     Apply Range
                   </button>
@@ -773,16 +785,16 @@ export default function ItemPerformance() {
         <div className="relative">
           <button
             onClick={() => { setRetailerOpen(o => !o); setPeriodOpen(false); }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A] dark:text-[#FFF9F2] hover:border-[#FFBC80]/60 transition-colors max-w-[220px] truncate"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-white dark:bg-[#FFFFFF] text-sm font-medium text-[#3A3A3A] dark:text-[#003349] hover:border-[#FFBC80]/60 dark:hover:border-[#9BDBF3]/60 transition-colors max-w-[220px] truncate"
           >
             <span className="truncate">{retailerLabel}</span>
             <ChevronDown size={14} className={`shrink-0 transition-transform ${retailerOpen ? "rotate-180" : ""}`} />
           </button>
           {retailerOpen && (
-            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#1a1208] border border-[#FFBC80]/30 rounded-xl shadow-xl py-1 min-w-[180px]">
+            <div className="absolute top-full mt-1 left-0 z-30 bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 rounded-xl shadow-xl py-1 min-w-[180px]">
               <button
                 onClick={() => setRetailers([])}
-                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors ${retailers.length === 0 ? "font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}`}
+                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors ${retailers.length === 0 ? "font-semibold text-[#3A3A3A] dark:text-[#003349]" : "text-[#3A3A3A]/70 dark:text-[#003349]/60"}`}
               >
                 All Retailers
               </button>
@@ -794,12 +806,12 @@ export default function ItemPerformance() {
                     onClick={() => setRetailers(prev =>
                       checked ? prev.filter(v => v !== opt.value) : [...prev, opt.value]
                     )}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 transition-colors flex items-center gap-2"
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors flex items-center gap-2"
                   >
-                    <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "border-[#FFBC80] bg-[#FFBC80]" : "border-[#3A3A3A]/30"}`}>
+                    <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "border-[#FFBC80] dark:border-[#BFA1E3] bg-[#FFBC80] dark:bg-[#BFA1E3]" : "border-[#3A3A3A]/30"}`}>
                       {checked && <span className="text-[8px] font-bold text-[#3A3A3A]">✓</span>}
                     </span>
-                    <span className={checked ? "font-medium text-[#3A3A3A] dark:text-[#FFF9F2]" : "text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60"}>
+                    <span className={checked ? "font-medium text-[#3A3A3A] dark:text-[#003349]" : "text-[#3A3A3A]/70 dark:text-[#003349]/60"}>
                       {opt.label}
                     </span>
                   </button>
@@ -810,7 +822,7 @@ export default function ItemPerformance() {
         </div>
 
         {/* Data Source toggle */}
-        <div className="flex rounded-lg border border-[#FFBC80]/30 overflow-hidden bg-white dark:bg-[#1a1208]">
+        <div className="flex rounded-lg border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 overflow-hidden bg-white dark:bg-[#FFFFFF]">
           {[
             { value: "all",    label: "Best Available" },
             { value: "sellin", label: "Sell-In" },
@@ -821,10 +833,10 @@ export default function ItemPerformance() {
               onClick={() => setDataSource(opt.value)}
               className={`px-3 py-2 text-xs font-medium transition-all ${
                 dataSource === opt.value
-                  ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                  : "text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 hover:bg-[#FFBC80]/10"
+                  ? "text-[#3A3A3A] dark:text-[#FFFFFF]"
+                  : "text-[#3A3A3A]/55 dark:text-[#003349]/45 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
               }`}
-              style={dataSource === opt.value ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+              style={dataSource === opt.value ? { background: brandGradient(theme) } : {}}
             >
               {opt.label}
             </button>
@@ -842,7 +854,7 @@ export default function ItemPerformance() {
                 downloadExcel(data.skus, `item-performance-${ts}.xlsx`);
               }
             }}
-            className="ml-auto flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/40 bg-white dark:bg-[#1a1208] text-sm font-medium text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 hover:border-[#FFBC80]/70 hover:text-[#3A3A3A] transition-colors"
+            className="ml-auto flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 bg-white dark:bg-[#FFFFFF] text-sm font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60 hover:border-[#FFBC80]/70 dark:hover:border-[#9BDBF3]/70 hover:text-[#3A3A3A] transition-colors"
           >
             <Download size={14} />
             Export
@@ -852,7 +864,7 @@ export default function ItemPerformance() {
 
       {/* ── Sell-In Banner ───────────────────────────────────────────────── */}
       {includesSellIn && (
-        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/30 text-xs text-amber-800 dark:text-amber-300">
+        <div className="mb-4 flex items-start gap-2 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-100 border border-amber-200/60 dark:border-amber-300/30 text-xs text-amber-800 dark:text-amber-700">
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <span>
             <strong>Sell-in vs. sell-through:</strong> NetSuite data reflects shipments to retailers, not consumer purchases.
@@ -865,10 +877,10 @@ export default function ItemPerformance() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-xl p-4 bg-white dark:bg-[#1a1208] shadow-sm border border-[#FFBC80]/20 animate-pulse">
-              <div className="h-3 w-24 bg-[#FFBC80]/20 rounded mb-2" />
-              <div className="h-6 w-32 bg-[#FFBC80]/20 rounded mb-1" />
-              <div className="h-3 w-20 bg-[#FFBC80]/15 rounded" />
+            <div key={i} className="rounded-xl p-4 bg-white dark:bg-[#FFFFFF] shadow-sm border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 animate-pulse">
+              <div className="h-3 w-24 bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 rounded mb-2" />
+              <div className="h-6 w-32 bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 rounded mb-1" />
+              <div className="h-3 w-20 bg-[#FFBC80]/15 dark:bg-[#EFBAE1]/15 rounded" />
             </div>
           ))
         ) : isError ? (
@@ -914,17 +926,17 @@ export default function ItemPerformance() {
       </div>
 
       {/* ── SKU Performance Table ─────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-[#1a1208] rounded-xl border border-[#FFBC80]/20 shadow-sm mb-6">
+      <div className="bg-white dark:bg-[#FFFFFF] rounded-xl border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 shadow-sm mb-6">
         {/* Table header */}
-        <div className="px-5 pt-5 pb-3 border-b border-[#FFBC80]/15">
+        <div className="px-5 pt-5 pb-3 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">SKU Performance</h2>
-              <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5 flex items-center gap-1">
+              <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">SKU Performance</h2>
+              <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5 flex items-center gap-1">
                 Dollars per store per week across all retail channels
                 <UITooltip>
                   <TooltipTrigger asChild>
-                    <Info size={12} className="cursor-help text-[#3A3A3A]/30 hover:text-[#FFBC80] transition-colors" />
+                    <Info size={12} className="cursor-help text-[#3A3A3A]/30 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3] transition-colors" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[240px]">
                     DPSW = Total Revenue ÷ Store Count ÷ Weeks in period.
@@ -934,7 +946,7 @@ export default function ItemPerformance() {
                 </UITooltip>
               </p>
             </div>
-            <div className="text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 text-right shrink-0">
+            <div className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 text-right shrink-0">
               {data?.periodLabel ?? periodLabelStr}
               <br />
               <span className="text-[10px]">{sortedSkus.length} SKU{sortedSkus.length !== 1 ? "s" : ""}</span>
@@ -949,10 +961,10 @@ export default function ItemPerformance() {
                 onClick={() => setSkuFilter(tab.value)}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                   skuFilter === tab.value
-                    ? "text-[#3A3A3A] dark:text-[#1a1208]"
-                    : "text-[#3A3A3A]/50 hover:bg-[#FFBC80]/10"
+                    ? "text-[#3A3A3A] dark:text-[#FFFFFF]"
+                    : "text-[#3A3A3A]/50 hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
                 }`}
-                style={skuFilter === tab.value ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={skuFilter === tab.value ? { background: brandGradient(theme) } : {}}
               >
                 {tab.label}
               </button>
@@ -961,7 +973,7 @@ export default function ItemPerformance() {
         </div>
 
         {/* Store counts note */}
-        <div className="px-5 py-2 text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 border-b border-[#FFBC80]/10 flex items-center gap-1">
+        <div className="px-5 py-2 text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 flex items-center gap-1">
           <Info size={10} />
           Store counts are estimates used for DPSW calculations. Store-level data will be used automatically when available.
         </div>
@@ -970,29 +982,29 @@ export default function ItemPerformance() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#FFBC80]/10 bg-[#FFF9F2]/50 dark:bg-[#120d06]/30">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Product · SKU</th>
+              <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFF9F2]/50 dark:bg-[#FFFFFF]/30">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Product · SKU</th>
                 <th
-                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("totalRevenue")}
                 >
                   <span className="inline-flex items-center gap-1 justify-end">Revenue <SortIcon col="totalRevenue" /></span>
                 </th>
                 <th
-                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("totalUnits")}
                 >
                   <span className="inline-flex items-center gap-1 justify-end">Units <SortIcon col="totalUnits" /></span>
                 </th>
                 <th
-                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("avgDpsw")}
                 >
                   <span className="inline-flex items-center gap-1 justify-end">
                     Avg DPSW
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
                       <TooltipContent>Weighted avg dollars per store per week across all retailers carrying this SKU</TooltipContent>
                     </UITooltip>
@@ -1000,59 +1012,59 @@ export default function ItemPerformance() {
                   </span>
                 </th>
                 <th
-                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("targetDpsw")}
                 >
                   <span className="inline-flex items-center gap-1 justify-end">
                     Target DPSW
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
                       <TooltipContent>Dollars per store per week at Target specifically (entity 229). Uses Target store count and sell-in units to retailer.</TooltipContent>
                     </UITooltip>
                     <SortIcon col="targetDpsw" />
                   </span>
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">
                   <span className="inline-flex items-center gap-1 justify-end">
                     vs Benchmark
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
                       <TooltipContent>Revenue-weighted velocity benchmark adjusted for retailer format (drug/grocery/mass). Positive = above expected pace.</TooltipContent>
                     </UITooltip>
                   </span>
                 </th>
                 <th
-                  className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
+                  className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("retailers")}
                 >
                   <span className="inline-flex items-center gap-1">
                     # Retailers
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
                       <TooltipContent>Number of retail chains carrying this SKU in the selected period.</TooltipContent>
                     </UITooltip>
                     <SortIcon col="retailers" />
                   </span>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">
                   <span className="inline-flex items-center gap-1 justify-center">
                     Data
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80]" />
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
                       <TooltipContent>S = Sell-In (NetSuite shipments to retailer). P = Sell-Through (consumer POS scans from Target, Walmart, Circana).</TooltipContent>
                     </UITooltip>
                   </span>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Trend</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Retailer Item #</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Trend</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Retailer Item #</th>
               </tr>
             </thead>
             <tbody>
@@ -1078,31 +1090,31 @@ export default function ItemPerformance() {
                 sortedSkus.map(sku => (
                   <tr
                     key={sku.sku}
-                    className="border-b border-[#FFBC80]/08 hover:bg-[#FFBC80]/5 cursor-pointer transition-colors"
+                    className="border-b border-[#FFBC80]/08 dark:border-[#9BDBF3]/08 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 cursor-pointer transition-colors"
                     onClick={() => setDrawerSku(sku)}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-[#3A3A3A] dark:text-[#FFF9F2] text-sm leading-tight">{sku.productName}</div>
+                      <div className="font-medium text-[#3A3A3A] dark:text-[#003349] text-sm leading-tight">{sku.productName}</div>
                       <div className="text-[10px] text-[#3A3A3A]/45 mt-0.5">{sku.sku}</div>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#FFF9F2]/70 tabular-nums">
+                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
                       {fmtCurrency(dataSource === "pos" && sku.posTotalRevenue != null ? sku.posTotalRevenue : sku.totalRevenue)}
                       {dataSource !== "pos" && includesSellIn && (
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <Info size={10} className="inline ml-1 text-[#3A3A3A]/25 hover:text-[#FFBC80] cursor-help" />
+                            <Info size={10} className="inline ml-1 text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3] cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>Sell-in data — reflects shipments to retailer, not consumer purchases.</TooltipContent>
                         </UITooltip>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 tabular-nums">
+                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">
                       {fmtUnits(dataSource === "pos" && sku.posTotalUnits != null ? sku.posTotalUnits : sku.totalUnits)}
                     </td>
                     <td className={`px-4 py-3 text-right text-sm tabular-nums ${dpswColor(sku.vsRetailAvg)}`}>
                       {fmtDpsw(sku.avgDpsw)}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                    <td className="px-4 py-3 text-right text-sm tabular-nums text-[#3A3A3A]/70 dark:text-[#003349]/60">
                       {sku.targetDpsw > 0 ? fmtDpsw(sku.targetDpsw) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right"><DeltaBadge value={sku.vsTargetBenchmark} /></td>
@@ -1115,7 +1127,7 @@ export default function ItemPerformance() {
                         <Sparkline data={sku.weeklyTrend} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-left text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 font-mono">
+                    <td className="px-4 py-3 text-left text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 font-mono">
                       {getPrimaryItemNumber(sku, retailers)}
                     </td>
                   </tr>
@@ -1128,21 +1140,21 @@ export default function ItemPerformance() {
 
       {/* ── Retailer Velocity Overview ───────────────────────────────────── */}
       {data?.retailers && data.retailers.length > 0 && (
-        <div className="bg-white dark:bg-[#1a1208] rounded-xl border border-[#FFBC80]/20 shadow-sm">
-          <div className="px-5 pt-5 pb-3 border-b border-[#FFBC80]/15">
-            <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Retailer Velocity Overview</h2>
-            <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">Aggregate performance across all SKUs by retailer</p>
+        <div className="bg-white dark:bg-[#FFFFFF] rounded-xl border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 shadow-sm">
+          <div className="px-5 pt-5 pb-3 border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+            <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Retailer Velocity Overview</h2>
+            <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">Aggregate performance across all SKUs by retailer</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#FFBC80]/10 bg-[#FFF9F2]/50 dark:bg-[#120d06]/30">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Retailer</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Total Revenue</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Total Units</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40"># SKUs</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Avg DPSW (all SKUs)</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">Data Source</th>
+                <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFF9F2]/50 dark:bg-[#FFFFFF]/30">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Retailer</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Total Revenue</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Total Units</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40"># SKUs</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Avg DPSW (all SKUs)</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Data Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -1150,11 +1162,11 @@ export default function ItemPerformance() {
                   const allDpswVals = data.retailers.filter(r => r.avgDpsw != null).map(r => r.avgDpsw as number);
                   const crossAvg = allDpswVals.length ? allDpswVals.reduce((s, v) => s + v, 0) / allDpswVals.length : 0;
                   return data.retailers.map(r => (
-                    <tr key={r.entityId} className="border-b border-[#FFBC80]/08 hover:bg-[#FFBC80]/5 transition-colors">
-                      <td className="px-4 py-3 font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{r.name}</td>
-                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#FFF9F2]/70 tabular-nums">{fmtCurrency(r.totalRevenue)}</td>
-                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60 tabular-nums">{fmtUnits(r.totalUnits)}</td>
-                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">{r.skuCount}</td>
+                    <tr key={r.entityId} className="border-b border-[#FFBC80]/08 dark:border-[#9BDBF3]/08 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 transition-colors">
+                      <td className="px-4 py-3 font-medium text-[#3A3A3A] dark:text-[#003349]">{r.name}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">{fmtCurrency(r.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">{fmtUnits(r.totalUnits)}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60">{r.skuCount}</td>
                       <td className={`px-4 py-3 text-right tabular-nums ${r.avgDpsw != null ? dpswColor((r.avgDpsw ?? 0) - crossAvg) : "text-[#3A3A3A]/40"}`}>
                         {fmtDpsw(r.avgDpsw)}
                       </td>

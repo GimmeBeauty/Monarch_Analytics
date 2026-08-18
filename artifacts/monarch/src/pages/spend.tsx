@@ -121,8 +121,8 @@ export default function Spend() {
         )}
 
         {!error && isEmpty && (
-          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 bg-[#FFBC80]/4 text-center">
-            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
               No data available — check your Snowflake connection and date range.
             </p>
           </div>
@@ -130,11 +130,11 @@ export default function Spend() {
 
         {!error && data && (
           <>
-            <div className="px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-700/40 text-xs text-emerald-700 dark:text-emerald-400">
+            <div className="px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-300/40 text-xs text-emerald-700 dark:text-emerald-700">
               Spend and attributed revenue sourced from Snowflake — ROAS and MER reflect real data.
             </div>
 
-            <div className="px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-700/40 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <div className="px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-100 border border-amber-200/70 dark:border-amber-300/40 text-xs text-amber-800 dark:text-amber-700 flex items-start gap-2">
               <span className="shrink-0 mt-0.5">⚠</span>
               <span>
                 <strong>Model estimates:</strong> iROAS, incrementality, saturation, mROAS, confidence, R², MAPE, adstock, halo, and reallocation upside are calculated using industry-benchmark parameters per channel type — not fitted to Durham Brands&apos; own data. They are directional guidance. Hover any <strong className="underline decoration-dotted">(?)</strong> tooltip for details. These will automatically upgrade to real statistics once holdout experiment data is ingested.

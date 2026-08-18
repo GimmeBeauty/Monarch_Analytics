@@ -4,6 +4,8 @@ import {
 } from "lucide-react";
 import { useTeam, Role, TeamMember } from "@/context/TeamContext";
 import { API_BASE } from "@/lib/apiBase";
+import { useTheme } from "@/context/ThemeContext";
+import { brandGradient } from "@/lib/brandGradient";
 
 // ─── Role metadata ────────────────────────────────────────────────────────────
 
@@ -17,22 +19,22 @@ const ROLE_META: Record<Role, {
   owner: {
     label: "Owner",
     icon: Crown,
-    color: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-100/70 dark:bg-amber-900/30",
+    color: "text-amber-600 dark:text-amber-700",
+    bg: "bg-amber-100/70 dark:bg-amber-100",
     desc: "Master admin. Can transfer ownership.",
   },
   admin: {
     label: "Admin",
     icon: Shield,
-    color: "text-blue-600 dark:text-blue-400",
-    bg: "bg-blue-100/70 dark:bg-blue-900/30",
+    color: "text-blue-600 dark:text-blue-700",
+    bg: "bg-blue-100/70 dark:bg-blue-100",
     desc: "Can view and edit all settings.",
   },
   user: {
     label: "User",
     icon: User,
-    color: "text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50",
-    bg: "bg-[#FFBC80]/15 dark:bg-[#FFBC80]/10",
+    color: "text-[#3A3A3A]/60 dark:text-[#003349]/50",
+    bg: "bg-[#FFBC80]/15 dark:bg-[#BFA1E3]/10",
     desc: "Can view settings but cannot make changes.",
   },
 };
@@ -51,6 +53,7 @@ function RoleBadge({ role }: { role: Role }) {
 }
 
 function MemberAvatar({ name, email, avatarUrl }: { name: string | null; email: string; avatarUrl?: string | null }) {
+  const { theme } = useTheme();
   const display = name ?? email;
   const initials = display.split(/[\s@]/).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
@@ -66,7 +69,7 @@ function MemberAvatar({ name, email, avatarUrl }: { name: string | null; email: 
   return (
     <div
       className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[#3A3A3A] text-sm shrink-0"
-      style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+      style={{ background: brandGradient(theme) }}
     >
       {initials}
     </div>
@@ -76,7 +79,7 @@ function MemberAvatar({ name, email, avatarUrl }: { name: string | null; email: 
 function StatusPill({ status }: { status: string }) {
   if (status === "active") return null;
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-100/60 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 font-medium">
+    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-100/60 dark:bg-yellow-100 text-yellow-700 dark:text-yellow-700 font-medium">
       <Clock size={9} />
       {status === "invited" ? "Invited" : "Pending"}
     </span>
@@ -113,24 +116,24 @@ function MemberRow({
   };
 
   return (
-    <div className="rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/20 overflow-hidden">
+    <div className="rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 overflow-hidden">
       {/* Main row */}
       <div className="flex items-center gap-3 py-3 px-4">
         <MemberAvatar name={member.name} email={member.email} avatarUrl={member.avatarUrl} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] truncate">
+            <span className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] truncate">
               {display}
             </span>
             {isCurrentUser && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBC80]/20 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/40 font-medium">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A]/60 dark:text-[#003349]/40 font-medium">
                 You
               </span>
             )}
             <StatusPill status={member.status} />
           </div>
-          <span className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 truncate block mt-0.5">
+          <span className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 truncate block mt-0.5">
             {member.email}
           </span>
         </div>
@@ -142,7 +145,7 @@ function MemberRow({
             <button
               onClick={() => setConfirming(true)}
               title="Remove member"
-              className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#FFF9F2]/25 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#003349]/25 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
               <X size={14} />
             </button>
@@ -152,14 +155,14 @@ function MemberRow({
 
       {/* Confirmation drawer */}
       {confirming && (
-        <div className="px-4 py-3 border-t border-red-100 dark:border-red-900/30 bg-red-50/60 dark:bg-red-900/10">
+        <div className="px-4 py-3 border-t border-red-100 dark:border-red-300/30 bg-red-50/60 dark:bg-red-100">
           <div className="flex items-start gap-2.5">
             <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+              <p className="text-xs font-semibold text-red-600 dark:text-red-700">
                 Remove {display}?
               </p>
-              <p className="text-[11px] text-red-500/80 dark:text-red-400/70 mt-0.5">
+              <p className="text-[11px] text-red-500/80 dark:text-red-700/70 mt-0.5">
                 This permanently deletes their account. This cannot be undone.
               </p>
               {error && (
@@ -178,7 +181,7 @@ function MemberRow({
               <button
                 onClick={() => { setConfirming(false); setError(""); }}
                 disabled={deleting}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50 hover:bg-red-100/60 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50 hover:bg-red-100/60 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
               >
                 No, cancel
               </button>
@@ -193,6 +196,7 @@ function MemberRow({
 // ─── Invite form (owners + admins only) ──────────────────────────────────────
 
 function InviteForm({ onSuccess }: { onSuccess: (email: string, role: "admin" | "user") => void }) {
+  const { theme } = useTheme();
   const { members } = useTeam();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "user">("user");
@@ -241,26 +245,26 @@ function InviteForm({ onSuccess }: { onSuccess: (email: string, role: "admin" | 
   };
 
   return (
-    <div className="p-5 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
-      <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-4">
+    <div className="p-5 rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30">
+      <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-4">
         Invite Member
       </p>
       <div className="flex gap-2 flex-wrap">
         {/* Email input */}
         <div className="flex-1 min-w-[180px] relative">
-          <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3A3A3A]/35 dark:text-[#FFF9F2]/30" />
+          <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3A3A3A]/35 dark:text-[#003349]/30" />
           <input
             type="email"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setError(""); }}
             onKeyDown={(e) => e.key === "Enter" && handleInvite()}
             placeholder="teammate@company.com"
-            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#1a1208] text-[#3A3A3A] dark:text-[#FFF9F2] border border-[#FFBC80]/50 focus:border-[#FFBC80] outline-none transition-colors"
+            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none transition-colors"
           />
         </div>
 
         {/* Role toggle */}
-        <div className="flex rounded-lg border border-[#FFBC80]/50 overflow-hidden text-xs font-semibold shrink-0">
+        <div className="flex rounded-lg border border-[#FFBC80]/50 dark:border-[#9BDBF3]/50 overflow-hidden text-xs font-semibold shrink-0">
           {(["admin", "user"] as const).map((r) => {
             const meta = ROLE_META[r];
             const Icon = meta.icon;
@@ -271,9 +275,9 @@ function InviteForm({ onSuccess }: { onSuccess: (email: string, role: "admin" | 
                 className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${
                   role === r
                     ? "text-[#3A3A3A]"
-                    : "text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 bg-[#FFF9F2] dark:bg-[#1a1208] hover:bg-[#FFBC80]/10"
+                    : "text-[#3A3A3A]/50 dark:text-[#003349]/40 bg-[#FFF9F2] dark:bg-[#FFFFFF] hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10"
                 }`}
-                style={role === r ? { background: "linear-gradient(135deg, #FFBC80, #FFE29A)" } : {}}
+                style={role === r ? { background: brandGradient(theme) } : {}}
               >
                 <Icon size={12} strokeWidth={2.5} />
                 {meta.label}
@@ -287,7 +291,7 @@ function InviteForm({ onSuccess }: { onSuccess: (email: string, role: "admin" | 
           onClick={handleInvite}
           disabled={sending}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-          style={{ background: "linear-gradient(135deg, #FFBC80, #FFE29A)" }}
+          style={{ background: brandGradient(theme) }}
         >
           {sending
             ? <Loader2 size={14} className="animate-spin" />
@@ -299,7 +303,7 @@ function InviteForm({ onSuccess }: { onSuccess: (email: string, role: "admin" | 
       </div>
 
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-      <p className="mt-2 text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+      <p className="mt-2 text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">
         An invitation email will be sent. They'll appear as{" "}
         <span className="font-medium">Invited</span> until they accept.
       </p>
@@ -322,23 +326,23 @@ export default function TeamSettings() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#FFF9F2]">Team</h2>
-          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40 mt-0.5">
+          <h2 className="text-base font-bold text-[#3A3A3A] dark:text-[#003349]">Team</h2>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">
             Manage your team members and their access levels.
           </p>
         </div>
         <button
           onClick={() => refetch()}
           title="Refresh team list"
-          className="p-2 rounded-lg text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 hover:text-[#FFBC80] hover:bg-[#FFBC80]/10 transition-colors"
+          className="p-2 rounded-lg text-[#3A3A3A]/40 dark:text-[#003349]/30 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3] hover:bg-[#FFBC80]/10 dark:hover:bg-[#EFBAE1]/10 transition-colors"
         >
           <RefreshCw size={14} />
         </button>
       </div>
 
       {/* Role legend */}
-      <div className="p-4 rounded-xl bg-white dark:bg-[#231a0e] border border-[#FFBC80]/30">
-        <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-3">
+      <div className="p-4 rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30">
+        <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-3">
           Access Levels
         </p>
         <div className="space-y-2">
@@ -351,10 +355,10 @@ export default function TeamSettings() {
                   <Icon size={12} className={meta.color} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">
+                  <span className="text-xs font-semibold text-[#3A3A3A] dark:text-[#003349]">
                     {meta.label}
                   </span>
-                  <span className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 ml-1.5">
+                  <span className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 ml-1.5">
                     {meta.desc}
                   </span>
                 </div>
@@ -371,7 +375,7 @@ export default function TeamSettings() {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="flex items-center justify-center py-10 text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">
+        <div className="flex items-center justify-center py-10 text-[#3A3A3A]/40 dark:text-[#003349]/30">
           <Loader2 size={18} className="animate-spin mr-2" />
           <span className="text-sm">Loading team…</span>
         </div>
@@ -380,7 +384,7 @@ export default function TeamSettings() {
       {/* Active members */}
       {!loading && activeMembers.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-2">
+          <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-2">
             Members · {activeMembers.length}
           </p>
           <div className="space-y-2">
@@ -399,7 +403,7 @@ export default function TeamSettings() {
       {/* Invited / pending */}
       {!loading && pendingMembers.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#FFF9F2]/45 uppercase tracking-wider mb-2">
+          <p className="text-xs font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45 uppercase tracking-wider mb-2">
             Awaiting Acceptance · {pendingMembers.length}
           </p>
           <div className="space-y-2">
@@ -417,7 +421,7 @@ export default function TeamSettings() {
 
       {/* Empty state */}
       {!loading && members.length === 0 && (
-        <p className="text-sm text-center text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 py-6">
+        <p className="text-sm text-center text-[#3A3A3A]/40 dark:text-[#003349]/30 py-6">
           No team members found.
         </p>
       )}

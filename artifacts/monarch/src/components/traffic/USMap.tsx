@@ -91,8 +91,8 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
 
         {/* ── Header ── */}
         <div className="px-5 pt-5 pb-3">
-          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2]">Geographic Revenue Distribution</h2>
-          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+          <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Geographic Revenue Distribution</h2>
+          <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
             {selectedStateData
               ? `${selectedStateData.name} · ${fmtRevenue(selectedStateData.revenue)} revenue (${selectedStateData.contribution.toFixed(1)}% of total)`
               : "Click any state to drill down"}
@@ -105,7 +105,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
             projection="geoAlbersUsa"
             projectionConfig={{ scale: 1000 }}
             style={{ width: "100%", height: "auto" }}
-            className="rounded-xl bg-[#EAF2F8]/60 dark:bg-[#0a0d12]/60"
+            className="rounded-xl bg-[#EAF2F8]/60 dark:bg-[#FFFFFF]/60"
           >
               <Geographies geography={statesTopojson as object}>
                 {({ geographies }: { geographies: import("react-simple-maps").Geography[] }) =>
@@ -196,7 +196,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
             if (!sr) return null;
             return (
               <div
-                className="fixed z-50 pointer-events-none px-3 py-2 rounded-lg shadow-lg text-xs bg-[#1a1208] text-[#FFF9F2] border border-[#FFBC80]/30"
+                className="fixed z-50 pointer-events-none px-3 py-2 rounded-lg shadow-lg text-xs bg-[#1a1208] text-[#FFF9F2] border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30"
                 style={{ left: tooltip.x + 14, top: tooltip.y - 10, minWidth: 168 }}
               >
                 <div className="font-semibold mb-1.5">{sr.name}</div>
@@ -219,11 +219,11 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
 
         {/* ── Legend ── */}
         <div className="px-5 pb-4 flex items-center gap-1 flex-wrap">
-          <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 mr-2 font-medium uppercase tracking-wider">Revenue</span>
+          <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 mr-2 font-medium uppercase tracking-wider">Revenue</span>
           {BAND_LABELS.map((label, i) => (
             <div key={i} className="flex items-center gap-1 mr-2">
               <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: BAND_FILL[i] }} />
-              <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#FFF9F2]/40">{label}</span>
+              <span className="text-[10px] text-[#3A3A3A]/50 dark:text-[#003349]/40">{label}</span>
             </div>
           ))}
         </div>
@@ -233,20 +233,20 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
       {!selectedState && stateRevenue.length > 0 && (
         <div className="rounded-2xl overflow-hidden monarch-card">
           <div className="px-5 pt-4 pb-3">
-            <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-[#FFBC80]" />
+            <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#FFBC80] dark:text-[#9BDBF3]" />
               State Revenue Summary
             </h3>
-            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+            <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
               {stateRevenue.length} states · click a row to drill down
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[400px]">
               <thead>
-                <tr className="border-b border-[#FFBC80]/15 bg-[#FFBC80]/5">
+                <tr className="border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 bg-[#FFBC80]/5 dark:bg-[#EFBAE1]/5">
                   {["State", "Revenue", "Units", "Stores"].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -257,19 +257,19 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                   <tr
                     key={sr.code}
                     onClick={() => handleStateClick(sr.code)}
-                    className="border-b border-[#FFBC80]/8 cursor-pointer transition-colors hover:bg-[#FFBC80]/5"
+                    className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 cursor-pointer transition-colors hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5"
                   >
                     <td className="px-3 py-2.5">
-                      <span className="text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{sr.name}</span>
-                      <span className="ml-1.5 text-[10px] font-mono text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30">{sr.code}</span>
+                      <span className="text-xs font-medium text-[#3A3A3A] dark:text-[#003349]">{sr.name}</span>
+                      <span className="ml-1.5 text-[10px] font-mono text-[#3A3A3A]/40 dark:text-[#003349]/30">{sr.code}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">
+                    <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
                       {fmtRevenue(sr.revenue)}
                     </td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#003349]/60">
                       {Math.round(sr.units).toLocaleString()}
                     </td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/60 dark:text-[#003349]/50">
                       {sr.storeCount > 0 ? sr.storeCount : "—"}
                     </td>
                   </tr>
@@ -285,11 +285,11 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
         <div className="rounded-2xl overflow-hidden monarch-card">
           <div className="px-5 pt-4 pb-3 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#FFF9F2] flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-[#FFBC80]" />
+              <h3 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-[#FFBC80] dark:text-[#9BDBF3]" />
                 Store Locations — {selectedStateData.name}
               </h3>
-              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 mt-0.5">
+              <p className="text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 mt-0.5">
                 {selectedStateLocs.length} location{selectedStateLocs.length !== 1 ? "s" : ""} ·{" "}
                 State revenue {fmtRevenue(selectedStateData.revenue)} ({selectedStateData.contribution.toFixed(1)}% of total)
               </p>
@@ -297,15 +297,15 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
           </div>
 
           {selectedStateLocs.length === 0 ? (
-            <div className="px-5 pb-6 text-xs text-[#3A3A3A]/40 dark:text-[#FFF9F2]/30 italic">
+            <div className="px-5 pb-6 text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30 italic">
               No tracked store locations in this state for the selected filters.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px]">
                 <thead>
-                  <tr className="border-b border-[#FFBC80]/15 bg-[#FFBC80]/5">
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                  <tr className="border-b border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 bg-[#FFBC80]/5 dark:bg-[#EFBAE1]/5">
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider whitespace-nowrap">
                       Store Location
                     </th>
                     {(["Store Name", "Sales", "Units"] as const).map(col => {
@@ -324,7 +324,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                           }}
                           className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer select-none group"
                         >
-                          <span className={active ? "text-[#FFBC80]" : "text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 group-hover:text-[#3A3A3A]/70 dark:group-hover:text-[#FFF9F2]/60"}>
+                          <span className={active ? "text-[#FFBC80] dark:text-[#9BDBF3]" : "text-[#3A3A3A]/45 dark:text-[#003349]/35 group-hover:text-[#3A3A3A]/70 dark:group-hover:text-[#003349]/60"}>
                             {col}
                           </span>
                           <span className="ml-1 inline-block">
@@ -337,7 +337,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                       );
                     })}
                     {["Address","City","State","Zip Code"].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#FFF9F2]/35 uppercase tracking-wider whitespace-nowrap">
+                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>
                     ))}
@@ -350,8 +350,8 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                       <tr
                         key={loc.id}
                         onClick={() => setSelectedPin(isActive ? null : loc.id)}
-                        className={`border-b border-[#FFBC80]/8 cursor-pointer transition-colors hover:bg-[#FFBC80]/5 ${
-                          isActive ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                        className={`border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 cursor-pointer transition-colors hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 ${
+                          isActive ? "bg-blue-50 dark:bg-blue-100" : ""
                         }`}
                       >
                         {/* Store Location (number + pin indicator) */}
@@ -360,7 +360,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
                               isActive
                                 ? "bg-blue-500 text-white"
-                                : "bg-[#FFBC80]/20 text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50"
+                                : "bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A]/60 dark:text-[#003349]/50"
                             }`}>
                               {idx + 1}
                             </div>
@@ -373,25 +373,25 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: loc.storeColor }} />
-                            <span className="text-xs font-medium text-[#3A3A3A] dark:text-[#FFF9F2]">{loc.storeName}</span>
+                            <span className="text-xs font-medium text-[#3A3A3A] dark:text-[#003349]">{loc.storeName}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#3A3A3A] dark:text-[#FFF9F2]">
+                        <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
                           {loc.formattedSales}
                         </td>
-                        <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                        <td className="px-3 py-2.5 text-xs tabular-nums text-[#3A3A3A]/70 dark:text-[#003349]/60">
                           {Math.round(loc.units ?? 0).toLocaleString()}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                        <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50">
                           {loc.address}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/70 dark:text-[#FFF9F2]/60">
+                        <td className="px-3 py-2.5 text-xs text-[#3A3A3A]/70 dark:text-[#003349]/60">
                           {loc.city}
                         </td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                        <td className="px-3 py-2.5 text-xs font-mono text-[#3A3A3A]/60 dark:text-[#003349]/50">
                           {loc.stateCode}
                         </td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-[#3A3A3A]/60 dark:text-[#FFF9F2]/50">
+                        <td className="px-3 py-2.5 text-xs font-mono text-[#3A3A3A]/60 dark:text-[#003349]/50">
                           {loc.zipCode}
                         </td>
                       </tr>
