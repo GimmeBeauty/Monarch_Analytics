@@ -2937,10 +2937,10 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
           SELECT DATE_TRUNC('month', summary_date) AS m, revenue AS rev, units_sold AS units
           FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}`);
     if (includeTarget) msrpParts.push(`
-          SELECT DATE_TRUNC('month', summary_date), sale_amount, sale_quantity
+          SELECT DATE_TRUNC('month', summary_date) AS m, sale_amount AS rev, sale_quantity AS units
           FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}`);
     if (includeWalmart) msrpParts.push(`
-          SELECT DATE_TRUNC('month', week_date), revenue, units_sold
+          SELECT DATE_TRUNC('month', week_date) AS m, revenue AS rev, units_sold AS units
           FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${year}`);
     const msrpUnion = msrpParts.length > 0
       ? msrpParts.join(" UNION ALL ")
@@ -3154,10 +3154,10 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
             SELECT DATE_TRUNC('${trunc}', summary_date) AS p, revenue AS rev
             FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
       if (incTarget) parts.push(`
-            SELECT DATE_TRUNC('${trunc}', summary_date), sale_amount
+            SELECT DATE_TRUNC('${trunc}', summary_date) AS p, sale_amount AS rev
             FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
       if (incWalmart) parts.push(`
-            SELECT DATE_TRUNC('${trunc}', week_date), revenue
+            SELECT DATE_TRUNC('${trunc}', week_date) AS p, revenue AS rev
             FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${y}`);
       const union = parts.length > 0
         ? parts.join(" UNION ALL ")
