@@ -39,11 +39,13 @@ interface GoalBucket   { month: number; goal: number }
 interface ForecastSummary {
   year: number;
   ytdRevenue: number;
-  projectedRevenue: number;
+  projectedRevenue: number | null;
+  modelStatus: "ready" | "partial" | "insufficient_history";
+  modelMessage: string;
   adSpendAvailable: boolean;
-  projectedSpend: number;
-  projectedUnits: number;
-  asp: number;
+  projectedSpend: number | null;
+  projectedUnits: number | null;
+  asp: number | null;
   mtdRevenue: number;
   currentMonth: number;
   currentMonthLabel: string;
@@ -57,9 +59,9 @@ interface ForecastSummary {
 interface ChartPoint {
   period: string;
   actual?: number;
-  projected: number;
-  lower: number;
-  upper: number;
+  projected: number | null;
+  lower: number | null;
+  upper: number | null;
   priorYear?: number;
 }
 
@@ -67,6 +69,9 @@ interface ForecastChartResp {
   year: number;
   granularity: string;
   series: ChartPoint[];
+  modelStatus: "ready" | "partial" | "insufficient_history";
+  modelMessage: string;
+  missingPeriods: string[];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -145,14 +150,14 @@ export default function Forecast() {
 
   // Scenario calculations
   const scenarios = useMemo(() => {
-    if (!s) return null;
+    if (!s || s.projectedRevenue == null) return null;
     const base       = s.annualGoal > 0 ? s.annualGoal : (s.totalMonthlyGoal > 0 ? s.totalMonthlyGoal : s.projectedRevenue);
     const goalBase   = s.totalMonthlyGoal > 0 ? s.totalMonthlyGoal : base;
-    const spendRatio = s.projectedRevenue > 0 ? s.projectedSpend / s.projectedRevenue : 0.25;
+    const spendRatio = s.projectedSpend != null && s.projectedRevenue > 0 ? s.projectedSpend / s.projectedRevenue : null;
     const build = (rev: number) => ({
       revenue: Math.round(rev),
-      spend:   Math.round(rev * spendRatio),
-      roas:    spendRatio > 0 ? Math.round((1 / spendRatio) * 100) / 100 : 0,
+      spend:   spendRatio == null ? null : Math.round(rev * spendRatio),
+      roas:    spendRatio != null && spendRatio > 0 ? Math.round((1 / spendRatio) * 100) / 100 : null,
     });
     return [
       { label: "Conservative", ...build(base * 0.90) },
@@ -165,20 +170,22 @@ export default function Forecast() {
   const kpiCards = s ? [
     {
       label: "Projected Revenue",
-      value: fmt$(s.projectedRevenue),
-      sub:   `Full year ${selectedYear}`,
+      value: s.projectedRevenue == null ? "—" : fmt$(s.projectedRevenue),
+      sub:   s.projectedRevenue == null ? "Historical model unavailable" : `Full year ${selectedYear}`,
       color: "",
     },
     {
       label: "Projected Spend",
-      value: s.adSpendAvailable ? fmt$(s.projectedSpend) : "—",
-      sub:   s.adSpendAvailable ? "Ad spend forecast" : "No ad channels for this store",
+      value: s.projectedSpend == null ? "—" : fmt$(s.projectedSpend),
+      sub:   s.projectedSpend == null
+        ? (s.adSpendAvailable ? "Ad spend history is insufficient" : "No ad spend history available")
+        : "Ad spend forecast",
       color: "",
     },
     {
       label: "Projected Units",
-      value: fmtNum(s.projectedUnits),
-      sub:   `$${s.asp.toFixed(2)} ASP`,
+      value: s.projectedUnits == null ? "—" : fmtNum(s.projectedUnits),
+      sub:   s.asp == null ? "ASP unavailable" : `$${s.asp.toFixed(2)} modeled ASP`,
       color: "",
     },
     {
@@ -238,6 +245,16 @@ export default function Forecast() {
         </div>
       ) : (
         <div className="space-y-6">
+          {summary && summary.modelStatus !== "ready" && (
+            <div className="rounded-xl border border-amber-300/50 bg-amber-50/70 dark:border-amber-700/40 dark:bg-amber-900/10 px-4 py-3">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                Forecast model needs more history
+              </p>
+              <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-200/70">
+                {summary.modelMessage}
+              </p>
+            </div>
+          )}
 
           {/* ── 5 KPI Cards ── */}
           <div className="flex items-center justify-between mb-1">
@@ -424,6 +441,16 @@ export default function Forecast() {
                   </p>
                 )}
               </div>
+              {chartResp && chartResp.modelStatus !== "ready" && (
+                <div className="mb-3 rounded-lg border border-amber-300/40 bg-amber-50/60 dark:border-amber-700/30 dark:bg-amber-900/10 px-3 py-2">
+                  <p className="text-xs text-amber-800/80 dark:text-amber-200/75">{chartResp.modelMessage}</p>
+                  {chartResp.missingPeriods.length > 0 && (
+                    <p className="mt-1 text-[11px] text-amber-700/65 dark:text-amber-200/60">
+                      Missing modeled periods: {chartResp.missingPeriods.join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4">
                 {scenarios.map((sc, i) => (
                   <div
@@ -456,15 +483,15 @@ export default function Forecast() {
                     } flex justify-between`}>
                       <div>
                         <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/60" : "text-[#3A3A3A]/45 dark:text-[#003349]/35"}`}>Spend</p>
-                        <p className={`text-sm font-semibold tabular-nums ${
+                       <p className={`text-sm font-semibold tabular-nums ${
                           i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#003349]"
-                        }`}>{fmt$(sc.spend)}</p>
+                        }`}>{sc.spend == null ? "—" : fmt$(sc.spend)}</p>
                       </div>
                       <div className="text-right">
                         <p className={`text-xs ${i === 1 ? "text-[#3A3A3A]/60" : "text-[#3A3A3A]/45 dark:text-[#003349]/35"}`}>ROAS</p>
                         <p className={`text-sm font-semibold tabular-nums ${
                           i === 1 ? "text-[#3A3A3A]" : "text-[#3A3A3A] dark:text-[#003349]"
-                        }`}>{sc.roas}x</p>
+                        }`}>{sc.roas == null ? "—" : `${sc.roas}x`}</p>
                       </div>
                     </div>
                   </div>

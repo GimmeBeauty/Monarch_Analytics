@@ -3,6 +3,7 @@ import { db, integrationsTable, storeForecastsTable, forecastYearsTable } from "
 import { eq } from "drizzle-orm";
 import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
+import { buildSeasonalTrendModel, isoWeek, isoWeekStart, type ForecastObservation } from "../lib/forecast-model.js";
 
 const router = Router();
 
@@ -2915,6 +2916,8 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdEnd   = isCurrentYear ? today.toISOString().slice(0, 10) : `${year}-12-31`;
     const ytdStart = `${year}-01-01`;
     const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
+    const historyStartYear = Math.max(2020, year - 3);
+    const historyStart = `${historyStartYear}-01-01`;
 
     // ── Wholesale store filter ──────────────────────────────────────────────
     const wholesaleStoreIds = isAllStores
@@ -2932,34 +2935,37 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const includeWalmart = isAllStores || requestedStoreIds.includes("walmart");
 
     // Build MSRP monthly union — at least one SELECT must be present
-    const msrpParts: string[] = [];
-    if (includeShopify) msrpParts.push(`
-          SELECT DATE_TRUNC('month', summary_date) AS m, revenue AS rev, units_sold AS units
-          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}`);
-    if (includeTarget) msrpParts.push(`
-          SELECT DATE_TRUNC('month', summary_date) AS m, sale_amount AS rev, sale_quantity AS units
-          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${year}`);
-    if (includeWalmart) msrpParts.push(`
-          SELECT DATE_TRUNC('month', week_date) AS m, revenue AS rev, units_sold AS units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${year}`);
-    const msrpUnion = msrpParts.length > 0
-      ? msrpParts.join(" UNION ALL ")
-      : `SELECT NULL AS m, 0 AS rev, 0 AS units WHERE 1=0`;
+    const msrpHistoryParts: string[] = [];
+    if (includeShopify) msrpHistoryParts.push(`
+          SELECT YEAR(summary_date) AS yr, MONTH(summary_date) AS mo, revenue AS rev, units_sold AS units
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${historyStart}' AND '${ytdEnd}'`);
+    if (includeTarget) msrpHistoryParts.push(`
+          SELECT YEAR(summary_date) AS yr, MONTH(summary_date) AS mo, sale_amount AS rev, sale_quantity AS units
+          FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${historyStart}' AND '${ytdEnd}'`);
+    if (includeWalmart) msrpHistoryParts.push(`
+          SELECT YEAR(week_date) AS yr, MONTH(week_date) AS mo, revenue AS rev, units_sold AS units
+          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+          WHERE week_date BETWEEN '${historyStart}' AND '${ytdEnd}'`);
+    const msrpHistoryUnion = msrpHistoryParts.length > 0
+      ? msrpHistoryParts.join(" UNION ALL ")
+      : `SELECT NULL AS yr, NULL AS mo, 0 AS rev, 0 AS units WHERE 1=0`;
 
     const monthlyQuery = isWholesale
       ? `
         WITH src AS (
-          SELECT DATE_TRUNC('month', TRANDATE) AS m, REVENUE AS rev, UNITS AS units
+          SELECT YEAR(TRANDATE) AS yr, MONTH(TRANDATE) AS mo, REVENUE AS rev, UNITS AS units
           FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
-          WHERE YEAR(TRANDATE) = ${year} ${netsuiteStoreClause}
+          WHERE TRANDATE BETWEEN '${historyStart}' AND '${ytdEnd}' ${netsuiteStoreClause}
         )
-        SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
-        FROM src GROUP BY m ORDER BY m
+        SELECT yr AS YR, mo AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
+        FROM src GROUP BY yr, mo ORDER BY yr, mo
       `
       : `
-        WITH src AS (${msrpUnion})
-        SELECT MONTH(m) AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
-        FROM src GROUP BY m ORDER BY m
+        WITH src AS (${msrpHistoryUnion})
+        SELECT yr AS YR, mo AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
+        FROM src GROUP BY yr, mo ORDER BY yr, mo
       `;
 
     // ── Goal column & store filter ──────────────────────────────────────────
@@ -2973,11 +2979,11 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
 
     // ── Ad spend: query only sources for selected stores ────────────────────
     const adSpendSources = filterAdSources(requestedStoreIds);
-    const ytdAdSpendPromise = Promise.all(
-      adSpendSources.map(src => queryAdSource(src, ytdStart, ytdEnd))
-    ).then(perSource => perSource.flat().reduce((sum, row) => sum + row.spend, 0));
+    const adHistoryPromise = Promise.all(
+      adSpendSources.map(src => queryAdSource(src, historyStart, ytdEnd))
+    ).then(perSource => perSource.flat());
 
-    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, ytdAdSpend, goalRows, annualRows] = await Promise.all([
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, adHistory, goalRows, annualRows] = await Promise.all([
       isWholesale || !includeShopify ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
                COALESCE(SUM(units_sold), 0) AS UNITS
@@ -3004,7 +3010,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
           ${netsuiteStoreClause}
       `) : Promise.resolve([]),
       querySnowflake(monthlyQuery),
-      ytdAdSpendPromise,
+      adHistoryPromise,
       querySnowflake(`
         SELECT month, COALESCE(SUM(${goalCol}), 0) AS total_goal
         FROM ${DB_NAME}.COMMERCE.FORECAST_SETTINGS
@@ -3041,30 +3047,123 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const ytdUnits = isWholesale
       ? pick(r0(netsuiteRows), "UNITS")
       : pick(r0(shopifyRows), "UNITS") + pick(r0(targetRows), "UNITS") + pick(r0(walmartRows), "UNITS");
-    const ytdSpend = ytdAdSpend;
-
-    const dayOfYear = isCurrentYear
-      ? Math.floor((today.getTime() - new Date(`${year}-01-01`).getTime()) / 86_400_000) + 1
-      : 365;
-    const mult = isCurrentYear && dayOfYear > 0 ? 365 / dayOfYear : 1;
-
-    const projectedRevenue = Math.round(ytdRevenue * mult);
-    const projectedSpend   = Math.round(ytdSpend   * mult);
-    const asp              = ytdUnits > 0 ? ytdRevenue / ytdUnits : 15.99;
-    const projectedUnits   = Math.round(projectedRevenue / asp);
-
     // Monthly actuals breakdown
     const monthlyActualsMap: Record<number, number> = {};
+    const monthlyUnitsMap: Record<number, number> = {};
+    const revenueHistory: ForecastObservation[] = [];
+    const unitsHistory: ForecastObservation[] = [];
     for (const row of monthlyRaw as Record<string, unknown>[]) {
+      const yr  = Math.round(pick(row, "YR"));
       const mo  = Math.round(pick(row, "MO"));
       const rev = pick(row, "REVENUE");
-      if (mo >= 1 && mo <= 12) monthlyActualsMap[mo] = Math.round((monthlyActualsMap[mo] ?? 0) + rev);
+      const units = pick(row, "UNITS");
+      if (yr >= historyStartYear && mo >= 1 && mo <= 12) {
+        revenueHistory.push({ year: yr, bucket: mo, value: rev });
+        unitsHistory.push({ year: yr, bucket: mo, value: units });
+        if (yr === year) {
+          monthlyActualsMap[mo] = Math.round((monthlyActualsMap[mo] ?? 0) + rev);
+          monthlyUnitsMap[mo] = Math.round((monthlyUnitsMap[mo] ?? 0) + units);
+        }
+      }
     }
     const monthlyActuals = Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
       revenue: monthlyActualsMap[i + 1] ?? 0,
     }));
     const mtdRevenue = monthlyActualsMap[currentMonth] ?? 0;
+
+    const revenueModel = buildSeasonalTrendModel(revenueHistory.filter(row => row.year < year), year, Array.from({ length: 12 }, (_, i) => i + 1));
+    const unitsModel = buildSeasonalTrendModel(unitsHistory.filter(row => row.year < year), year, Array.from({ length: 12 }, (_, i) => i + 1));
+    // Classify each month relative to today:
+    //  - past year  → every month is a completed actual
+    //  - current year → months before the current month are completed actuals;
+    //    the current (incomplete) month and later months are modeled
+    //  - future year → no month has actuals yet, so every month is modeled
+    const isPastYear = year < today.getFullYear();
+    const actualRevenueMonths = isPastYear
+      ? Array.from({ length: 12 }, (_, i) => i + 1)
+      : isCurrentYear
+        ? Array.from({ length: 12 }, (_, i) => i + 1).filter(month => month < currentMonth)
+        : [];
+    const futureMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+      .filter(month => !actualRevenueMonths.includes(month));
+    const actualRevenueTotal = actualRevenueMonths.reduce((sum, month) => sum + (monthlyActualsMap[month] ?? 0), 0);
+    const modeledFutureRevenue = futureMonths.map(month => {
+      const value = revenueModel.points.get(month)?.value ?? null;
+      return value == null ? null : Math.max(value, month === currentMonth ? mtdRevenue : 0);
+    });
+    const modeledFutureUnits = futureMonths.map(month => {
+      const value = unitsModel.points.get(month)?.value ?? null;
+      return value == null ? null : Math.max(value, month === currentMonth ? (monthlyUnitsMap[month] ?? 0) : 0);
+    });
+    // For any year that has modeled (future/incomplete) months, every modeled
+    // month must produce a value or the annual total is not trustworthy.
+    const hasCompleteRevenueModel = modeledFutureRevenue.every(value => value != null);
+    const hasCompleteUnitsModel = modeledFutureUnits.every(value => value != null);
+    const sumModeled = (values: Array<number | null>): number | null =>
+      values.every(value => value != null)
+        ? values.reduce((sum, value) => sum + (value ?? 0), 0)
+        : null;
+    const futureRevenueTotal = sumModeled(modeledFutureRevenue);
+    const futureUnitsTotal = sumModeled(modeledFutureUnits);
+    const projectedRevenue = hasCompleteRevenueModel
+      ? Math.round((actualRevenueTotal + (futureRevenueTotal ?? 0)) * 100) / 100
+      : null;
+    const actualUnitsTotal = actualRevenueMonths.reduce((sum, month) => sum + (monthlyUnitsMap[month] ?? 0), 0);
+    const projectedUnits = hasCompleteUnitsModel
+      ? Math.round(actualUnitsTotal + (futureUnitsTotal ?? 0))
+      : null;
+    // Ad spend arrives as one row PER DAY. The seasonal model buckets by month,
+    // so daily rows must first be summed into a single monthly total per
+    // year/month — otherwise the model fits (and forecasts) daily-scale spend
+    // and understates a month's spend by roughly the number of active days.
+    const adSpendByMonth: Record<string, number> = {};
+    const spendByYearMonth = new Map<string, number>();
+    for (const row of adHistory) {
+      const date = new Date(`${row.date}T00:00:00Z`);
+      if (Number.isNaN(date.getTime())) continue;
+      const rowYear = date.getUTCFullYear();
+      const rowMonth = date.getUTCMonth() + 1;
+      const ymKey = `${rowYear}-${rowMonth}`;
+      spendByYearMonth.set(ymKey, (spendByYearMonth.get(ymKey) ?? 0) + row.spend);
+      if (rowYear === year) {
+        const key = String(rowMonth);
+        adSpendByMonth[key] = (adSpendByMonth[key] ?? 0) + row.spend;
+      }
+    }
+    const spendHistory: ForecastObservation[] = [...spendByYearMonth.entries()].map(([ymKey, total]) => {
+      const [obsYear, obsMonth] = ymKey.split("-").map(Number);
+      return { year: obsYear!, bucket: obsMonth!, value: total };
+    });
+    const spendModel = buildSeasonalTrendModel(spendHistory.filter(row => row.year < year), year, Array.from({ length: 12 }, (_, i) => i + 1));
+    const modeledFutureSpend = futureMonths.map(month => {
+      const value = spendModel.points.get(month)?.value ?? null;
+      return value == null ? null : Math.max(value, month === currentMonth ? (adSpendByMonth[String(month)] ?? 0) : 0);
+    });
+    const hasSpendData = spendHistory.some(row => row.value > 0);
+    const hasCompleteSpendModel = modeledFutureSpend.every(value => value != null);
+    const futureSpendTotal = sumModeled(modeledFutureSpend);
+    const projectedSpend = hasSpendData && hasCompleteSpendModel
+      ? Math.round((Object.entries(adSpendByMonth)
+        .filter(([month]) => actualRevenueMonths.includes(Number(month)))
+        .reduce((sum, [, value]) => sum + value, 0)
+        + (futureSpendTotal ?? 0)) * 100) / 100
+      : null;
+    const asp = projectedRevenue != null && projectedUnits != null && projectedUnits > 0
+      ? projectedRevenue / projectedUnits
+      : null;
+    // A fully-completed (past) year needs no projection at all — its annual
+    // total is entirely actuals, so the model status is "ready" regardless of
+    // historical depth. Otherwise a projection requires prior-year history.
+    const needsModeling = futureMonths.length > 0;
+    const hasAnyHistory = revenueHistory.some(row => row.year < year && row.value > 0);
+    const modelStatus = !needsModeling
+      ? "ready"
+      : !hasAnyHistory
+        ? "insufficient_history"
+        : hasCompleteRevenueModel && hasCompleteUnitsModel && (!hasSpendData || hasCompleteSpendModel)
+          ? "ready"
+          : "partial";
 
     // Monthly goals from Snowflake FORECAST_SETTINGS
     const goalMap: Record<number, number> = {};
@@ -3086,10 +3185,16 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       year,
       ytdRevenue,
       projectedRevenue,
-      adSpendAvailable: adSpendSources.length > 0,
+      modelStatus,
+      modelMessage: modelStatus === "ready"
+        ? "Projection uses observed month-level trends and seasonality from prior years."
+        : modelStatus === "partial"
+          ? "Some future periods do not have enough historical observations to model."
+          : "Not enough historical revenue is available to produce a projection.",
+      adSpendAvailable: hasSpendData,
       projectedSpend,
       projectedUnits,
-      asp: Math.round(asp * 100) / 100,
+      asp: asp == null ? null : Math.round(asp * 100) / 100,
       mtdRevenue: Math.round(mtdRevenue * 100) / 100,
       currentMonth,
       currentMonthLabel: `${MONTHS_SHORT[currentMonth - 1]} ${year}`,
@@ -3141,37 +3246,42 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
     const buildQuery = (y: number): string => {
       if (isWholesale) {
         return `
-          WITH src AS (
-            SELECT DATE_TRUNC('${trunc}', TRANDATE) AS p, REVENUE AS rev
+          WITH src (period_start, revenue) AS (
+            SELECT DATE_TRUNC('${trunc}', TRANDATE), REVENUE
             FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
             WHERE YEAR(TRANDATE) = ${y} ${chartNsClause}
           )
-          SELECT p AS PERIOD_START, SUM(rev) AS REVENUE FROM src GROUP BY p ORDER BY p
+          SELECT period_start AS PERIOD_START, SUM(revenue) AS REVENUE
+          FROM src
+          GROUP BY period_start
+          ORDER BY period_start
         `;
       }
       const parts: string[] = [];
       if (incShopify) parts.push(`
-            SELECT DATE_TRUNC('${trunc}', summary_date) AS p, revenue AS rev
+            SELECT DATE_TRUNC('${trunc}', summary_date) AS period_start, revenue
             FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
       if (incTarget) parts.push(`
-            SELECT DATE_TRUNC('${trunc}', summary_date) AS p, sale_amount AS rev
+            SELECT DATE_TRUNC('${trunc}', summary_date) AS period_start, sale_amount AS revenue
             FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
       if (incWalmart) parts.push(`
-            SELECT DATE_TRUNC('${trunc}', week_date) AS p, revenue AS rev
+            SELECT DATE_TRUNC('${trunc}', week_date) AS period_start, revenue
             FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${y}`);
       const union = parts.length > 0
         ? parts.join(" UNION ALL ")
-        : `SELECT NULL AS p, 0 AS rev WHERE 1=0`;
+        : `SELECT NULL AS period_start, 0 AS revenue WHERE 1=0`;
       return `
         WITH src AS (${union})
-        SELECT p AS PERIOD_START, SUM(rev) AS REVENUE FROM src GROUP BY p ORDER BY p
+        SELECT period_start AS PERIOD_START, SUM(revenue) AS REVENUE
+        FROM src
+        GROUP BY period_start
+        ORDER BY period_start
       `;
     };
 
-    const [actualsRaw, priorRaw] = await Promise.all([
-      querySnowflake(buildQuery(year)),
-      withPriorYear ? querySnowflake(buildQuery(priorYear)) : Promise.resolve([]),
-    ]);
+    const historyYears = Array.from({ length: Math.min(4, year - Math.max(2020, year - 3) + 1) }, (_, index) => year - index);
+    const historyRows = await Promise.all(historyYears.map(historyYear => querySnowflake(buildQuery(historyYear))));
+    const priorRaw = withPriorYear ? (historyRows[1] ?? []) : [];
 
     const pick = (row: unknown, ...keys: string[]): number => {
       const r = row as Record<string, unknown>;
@@ -3188,75 +3298,101 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
     };
 
     const actualsMap = new Map<string, number>();
-    for (const row of actualsRaw as Record<string, unknown>[]) {
-      actualsMap.set(toKey(row["PERIOD_START"] ?? row["period_start"]), Math.round(pick(row, "REVENUE")));
+    const revenueHistory: ForecastObservation[] = [];
+    for (let index = 0; index < historyRows.length; index++) {
+      const historyYear = historyYears[index]!;
+      for (const row of (historyRows[index] ?? []) as Record<string, unknown>[]) {
+        const periodKey = toKey(row["PERIOD_START"] ?? row["period_start"]);
+        const revenue = pick(row, "REVENUE");
+        if (historyYear === year) actualsMap.set(periodKey, Math.round(revenue));
+        const periodDate = new Date(`${periodKey}T00:00:00Z`);
+        const bucket = granularity === "month"
+          ? periodDate.getUTCMonth() + 1
+          : isoWeek(periodDate);
+        revenueHistory.push({ year: historyYear, bucket, value: revenue });
+      }
     }
     const priorMap = new Map<string, number>();
     for (const row of priorRaw as Record<string, unknown>[]) {
       priorMap.set(toKey(row["PERIOD_START"] ?? row["period_start"]), Math.round(pick(row, "REVENUE")));
     }
 
-    const knownVals = [...actualsMap.values()].filter(v => v > 0);
-    const avgPerPeriod = knownVals.length > 0
-      ? Math.round(knownVals.reduce((a, b) => a + b, 0) / knownVals.length)
-      : 50_000;
+    const bucketCount = granularity === "month" ? 12 : 54;
+    const revenueModel = buildSeasonalTrendModel(
+      revenueHistory.filter(observation => observation.year < year),
+      year,
+      Array.from({ length: bucketCount }, (_, index) => index + 1),
+    );
+    const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
 
-    // Month-based seasonal index (Jan=0 … Dec=11)
-    const SEASONAL = [0.85, 0.82, 0.95, 0.97, 1.00, 1.02, 0.98, 1.05, 1.10, 1.08, 1.20, 1.30];
-    const todayKey = today.toISOString().slice(0, 10);
-
-    interface PeriodMeta { label: string; periodKey: string; priorKey: string; monthIdx: number }
+    // Each period carries its own seasonal `bucket` (month or ISO week) so that
+    // the value looked up in the model matches exactly how the historical
+    // observation was bucketed above. `periodStartMs`/`periodEndMs` describe the
+    // period's real calendar span, which is what decides completed vs. in-flight.
+    interface PeriodMeta {
+      label: string;
+      periodKey: string;
+      priorKey: string;
+      bucket: number;
+      periodStartMs: number;
+      periodEndMs: number;
+    }
     const periods: PeriodMeta[] = [];
 
     if (granularity === "month") {
       for (let m = 0; m < 12; m++) {
+        const startMs = Date.UTC(year, m, 1);
+        const endMs = Date.UTC(year, m + 1, 1) - 86_400_000;
         periods.push({
-          label:     new Date(year, m, 1).toLocaleDateString("en-US", { month: "short" }),
-          periodKey: new Date(year, m, 1).toISOString().slice(0, 10),
-          priorKey:  new Date(priorYear, m, 1).toISOString().slice(0, 10),
-          monthIdx:  m,
+          label:         new Date(Date.UTC(year, m, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }),
+          periodKey:     new Date(startMs).toISOString().slice(0, 10),
+          priorKey:      new Date(Date.UTC(priorYear, m, 1)).toISOString().slice(0, 10),
+          bucket:        m + 1,
+          periodStartMs: startMs,
+          periodEndMs:   endMs,
         });
       }
     } else {
-      // Snowflake DATE_TRUNC('week') defaults to Monday-start (ISO).
-      // Align period keys by starting from the Monday on or before Jan 1.
-      const jan1Ms  = Date.UTC(year, 0, 1);
-      const jan1Dow = new Date(jan1Ms).getUTCDay(); // 0=Sun,1=Mon…6=Sat
-      const daysBack = jan1Dow === 0 ? 6 : jan1Dow - 1;
-      const firstWeekStart = jan1Ms - daysBack * 86_400_000;
-
-      for (let w = 0; w < 54; w++) {
-        const wStartMs = firstWeekStart + w * 7 * 86_400_000;
-        const d   = new Date(wStartMs);
-        const end = new Date(wStartMs + 6 * 86_400_000);
-        // Stop once the week-start is in next year
-        if (d.getUTCFullYear() > year) break;
-        // Skip weeks entirely in the prior year (e.g. if firstWeekStart lands in Dec of priorYear
-        // and the week doesn't overlap this year at all — shouldn't happen but be safe)
-        if (end.getUTCFullYear() < year) continue;
-        const pd = new Date(d); pd.setUTCFullYear(priorYear);
+      // Generate ISO weeks (Monday-start) that fall in the target year, matching
+      // Snowflake DATE_TRUNC('week') and the isoWeek() bucketing used for history.
+      const seen = new Set<number>();
+      for (let w = 1; w <= 53; w++) {
+        const start = isoWeekStart(year, w);
+        const startMs = start.getTime();
+        const endMs = startMs + 6 * 86_400_000;
+        // Keep weeks whose Monday belongs to this calendar year.
+        if (start.getUTCFullYear() !== year) continue;
+        const bucket = isoWeek(start);
+        if (seen.has(bucket)) continue;
+        seen.add(bucket);
+        const priorStart = isoWeekStart(priorYear, w);
         periods.push({
-          label:     `W${w + 1}`,
-          periodKey: d.toISOString().slice(0, 10),
-          priorKey:  pd.toISOString().slice(0, 10),
-          monthIdx:  d.getUTCMonth(),
+          label:         `W${w}`,
+          periodKey:     start.toISOString().slice(0, 10),
+          priorKey:      priorStart.toISOString().slice(0, 10),
+          bucket,
+          periodStartMs: startMs,
+          periodEndMs:   endMs,
         });
       }
     }
 
-    const series = periods.map(({ label, periodKey, priorKey, monthIdx }) => {
-      const isPast   = periodKey <= todayKey;
+    const series = periods.map(({ label, periodKey, priorKey, bucket, periodStartMs, periodEndMs }) => {
+      // A period is a completed actual only once it has fully elapsed. The
+      // in-flight period (start reached but not yet ended) is shown as modeled
+      // so partial data does not read as a finished low period.
+      const isCompleted = periodEndMs < todayMs;
       const actual   = actualsMap.get(periodKey);
-      const seasonal = SEASONAL[monthIdx] ?? 1.0;
-      const projected = Math.round(avgPerPeriod * seasonal);
-      const base = isPast && actual != null && actual > 0 ? actual : projected;
+      const modelPoint = revenueModel.points.get(bucket);
+      const showModel = !isCompleted;
       const pt: Record<string, unknown> = {
         period:    label,
-        projected,
-        lower:     Math.round(base * 0.85),
-        upper:     Math.round(base * 1.15),
+        projected: showModel ? modelPoint?.value ?? null : null,
+        lower:     showModel ? modelPoint?.lower ?? null : null,
+        upper:     showModel ? modelPoint?.upper ?? null : null,
       };
-      if (isPast && actual != null) pt["actual"] = actual;
+      // Preserve to-date actuals for completed and in-flight periods alike.
+      if (actual != null && periodStartMs <= todayMs) pt["actual"] = actual;
       if (withPriorYear) {
         const pv = priorMap.get(priorKey);
         if (pv != null) pt["priorYear"] = pv;
@@ -3264,7 +3400,23 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
       return pt;
     });
 
-    return res.json({ year, granularity, series });
+    const missingPeriods = periods
+      .filter(({ periodEndMs }) => periodEndMs >= todayMs)
+      .filter(({ bucket }) => revenueModel.points.get(bucket)?.value == null)
+      .map(period => period.label);
+    const hasHistory = revenueHistory.some(observation => observation.year < year && observation.value > 0);
+    return res.json({
+      year,
+      granularity,
+      series,
+      modelStatus: !hasHistory ? "insufficient_history" : missingPeriods.length > 0 ? "partial" : "ready",
+      modelMessage: !hasHistory
+        ? "Not enough historical revenue is available to produce a projection."
+        : missingPeriods.length > 0
+          ? "Some future periods do not have enough historical observations to model."
+          : "Projection uses observed period-level trends and seasonality from prior years.",
+      missingPeriods,
+    });
   } catch (e) {
     req.log.error({ err: e }, "[data/forecast/chart]");
     return res.status(500).json({ error: "Failed to load forecast chart data" });
