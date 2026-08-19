@@ -6,37 +6,28 @@ import { brandGradient } from "@/lib/brandGradient";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-const STORAGE_KEY = "monarch-forecast-settings";
-
 interface StoreRow { id: number; name: string; type: string; }
 interface YearRow { id: number; year: number; }
 
 type MonthData = { retail: string; wholesale: string; };
 type Grid = Record<number, MonthData>; // month 1–12
 
-interface ForecastStore {
-  stores: StoreRow[];
-  years: YearRow[];
-  forecasts: Record<string, Grid>; // key: `${storeId}-${year}`
-  annualGoals: Record<number, number>; // key: year
-}
-
-const DEFAULT_STORES: StoreRow[] = [
-  { id: 1, name: "Amazon", type: "retail" },
-  { id: 2, name: "CVS", type: "retail" },
-  { id: 3, name: "Kroger", type: "retail" },
-  { id: 4, name: "Publix", type: "retail" },
-  { id: 5, name: "Shopify", type: "shopify" },
-  { id: 6, name: "Target", type: "retail" },
-  { id: 7, name: "Ulta Beauty", type: "retail" },
-  { id: 8, name: "Walgreens", type: "retail" },
-  { id: 9, name: "Walmart", type: "retail" },
+// Seed values used only to populate the shared store/year list on first run
+// (when the database has none yet). Once seeded, every user reads the same
+// server-side list via /api/forecast/stores and /api/forecast/years.
+const DEFAULT_STORES: { name: string; type: string }[] = [
+  { name: "Amazon", type: "retail" },
+  { name: "CVS", type: "retail" },
+  { name: "Kroger", type: "retail" },
+  { name: "Publix", type: "retail" },
+  { name: "Shopify", type: "shopify" },
+  { name: "Target", type: "retail" },
+  { name: "Ulta Beauty", type: "retail" },
+  { name: "Walgreens", type: "retail" },
+  { name: "Walmart", type: "retail" },
 ];
 
-const DEFAULT_YEARS: YearRow[] = [
-  { id: 1, year: 2025 },
-  { id: 2, year: 2026 },
-];
+const DEFAULT_YEARS = [2025, 2026];
 
 function emptyGrid(): Grid {
   const g: Grid = {};
@@ -44,24 +35,56 @@ function emptyGrid(): Grid {
   return g;
 }
 
-function loadData(): ForecastStore {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return { stores: DEFAULT_STORES, years: DEFAULT_YEARS, forecasts: {}, annualGoals: {} };
+// Fetches the shared store list from the database; if it's empty (first run),
+// seeds it with the defaults so every user starts from the same list.
+async function fetchOrSeedStores(): Promise<StoreRow[]> {
+  const res = await fetch(`${API_BASE}/api/forecast/stores`, { credentials: "include" });
+  if (!res.ok) throw new Error(`Failed to load stores (HTTP ${res.status})`);
+  let rows: StoreRow[] = await res.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    await Promise.allSettled(
+      DEFAULT_STORES.map(s => fetch(`${API_BASE}/api/forecast/stores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(s),
+      }))
+    );
+    const res2 = await fetch(`${API_BASE}/api/forecast/stores`, { credentials: "include" });
+    rows = res2.ok ? await res2.json() : [];
+  }
+  return rows;
 }
 
-function saveData(data: ForecastStore) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+// Same pattern for forecast years.
+async function fetchOrSeedYears(): Promise<YearRow[]> {
+  const res = await fetch(`${API_BASE}/api/forecast/years`, { credentials: "include" });
+  if (!res.ok) throw new Error(`Failed to load years (HTTP ${res.status})`);
+  let rows: YearRow[] = await res.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    await Promise.allSettled(
+      DEFAULT_YEARS.map(year => fetch(`${API_BASE}/api/forecast/years`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ year }),
+      }))
+    );
+    const res2 = await fetch(`${API_BASE}/api/forecast/years`, { credentials: "include" });
+    rows = res2.ok ? await res2.json() : [];
+  }
+  return rows.sort((a, b) => a.year - b.year);
 }
 
 export default function ForecastSettings({ readOnly = false }: { readOnly?: boolean }) {
   const { theme } = useTheme();
-  const [data, setData] = useState<ForecastStore>(() => loadData());
+  const [stores, setStores] = useState<StoreRow[]>([]);
+  const [years, setYears] = useState<YearRow[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [selectedStore, setSelectedStore] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [grid, setGrid] = useState<Grid>(emptyGrid());
+  const [gridLoading, setGridLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,22 +94,48 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
   const [showAddStore, setShowAddStore] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
   const [newStoreType, setNewStoreType] = useState("retail");
+  const [addingStore, setAddingStore] = useState(false);
 
   // Add year state
   const [showAddYear, setShowAddYear] = useState(false);
   const [newYear, setNewYear] = useState("");
+  const [addingYear, setAddingYear] = useState(false);
 
-  // Init selection
+  // Load the shared store/year list from the server on mount. This list is
+  // the same for every user — no per-browser fallback, so any load failure
+  // is surfaced instead of silently substituting local-only defaults.
   useEffect(() => {
-    if (!selectedStore && data.stores.length) setSelectedStore(data.stores[0].id);
-    if (!selectedYear && data.years.length) setSelectedYear(data.years[data.years.length - 1].year);
-  }, [data.stores, data.years]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [storeRows, yearRows] = await Promise.all([fetchOrSeedStores(), fetchOrSeedYears()]);
+        if (cancelled) return;
+        setStores(storeRows);
+        setYears(yearRows);
+      } catch {
+        if (cancelled) return;
+        setError("Couldn't load the shared store/year list. Retry or check your connection — changes can't be saved until this loads.");
+      } finally {
+        if (!cancelled) setListLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  // Load grid and annual goal when store or year changes — API first, localStorage fallback
+  // Init selection once lists arrive
+  useEffect(() => {
+    if (!selectedStore && stores.length) setSelectedStore(stores[0].id);
+    if (!selectedYear && years.length) setSelectedYear(years[years.length - 1].year);
+  }, [stores, years]);
+
+  // Load grid and annual goal when store or year changes. Goals live only in
+  // the shared database — a failed load surfaces an error instead of
+  // silently falling back to this browser's local data.
   const loadGrid = useCallback(() => {
     if (!selectedStore || !selectedYear) return;
 
-    const storeName = data.stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
+    const storeName = stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
+    setGridLoading(true);
 
     fetch(`${API_BASE}/api/data/forecast/settings?year=${selectedYear}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
@@ -109,18 +158,19 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
           setGrid(emptyGrid());
           setAnnualGoalInput("");
         }
+        setError(null);
       })
       .catch(() => {
-        // Fallback to localStorage
-        const key = `${selectedStore}-${selectedYear}`;
-        setGrid(data.forecasts[key] ? { ...data.forecasts[key] } : emptyGrid());
-        setAnnualGoalInput(String(data.annualGoals?.[selectedYear] ?? ""));
-      });
-  }, [selectedStore, selectedYear, data.stores, data.forecasts, data.annualGoals]);
+        setGrid(emptyGrid());
+        setAnnualGoalInput("");
+        setError("Couldn't load saved goals for this store/year. Retry — showing a blank grid so it isn't mistaken for zero goals.");
+      })
+      .finally(() => setGridLoading(false));
+  }, [selectedStore, selectedYear, stores]);
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
-  const isShopify = data.stores.find((s) => s.id === selectedStore)?.type === "shopify";
+  const isShopify = stores.find((s) => s.id === selectedStore)?.type === "shopify";
 
   const setCell = (month: number, field: "retail" | "wholesale", value: string) => {
     setGrid((g) => ({ ...g, [month]: { ...g[month], [field]: value } }));
@@ -143,7 +193,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     setError(null);
     setSaving(true);
 
-    const storeName     = data.stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
+    const storeName     = stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
     const annualGoalVal = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
 
     // Build monthly POST payloads
@@ -173,28 +223,16 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
           }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
         )
       );
+      setSavedOk(true);
+      setTimeout(() => setSavedOk(false), 2500);
     } catch {
-      // Fallback: persist to localStorage so data isn't lost
-      const key = `${selectedStore}-${selectedYear}`;
-      const savedGrid: Grid = {};
-      for (let m = 1; m <= 12; m++) {
-        savedGrid[m] = {
-          retail:    grid[m].retail.replace(/,/g, ""),
-          wholesale: isShopify ? "" : grid[m].wholesale.replace(/,/g, ""),
-        };
-      }
-      const updated = {
-        ...data,
-        forecasts:   { ...data.forecasts,   [key]:         savedGrid      },
-        annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: annualGoalVal },
-      };
-      setData(updated);
-      saveData(updated);
+      // Goals are shared via the database only — surface the failure instead
+      // of silently stashing it in this browser's localStorage, where other
+      // users would never see it.
+      setError("Failed to save — these goals were NOT stored and other users will not see them. Please retry.");
     }
 
     setSaving(false);
-    setSavedOk(true);
-    setTimeout(() => setSavedOk(false), 2500);
   };
 
   const handleAnnualGoalBlur = () => {
@@ -202,57 +240,86 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
     const val = parseFloat(annualGoalInput.replace(/,/g, "")) || 0;
     setAnnualGoalInput(val > 0 ? val.toLocaleString("en-US") : "");
 
-    const storeName = data.stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
+    const storeName = stores.find(s => s.id === selectedStore)?.name ?? String(selectedStore);
 
-    // Fire-and-forget POST; fallback to localStorage on failure
     fetch(`${API_BASE}/api/data/forecast/settings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ year: selectedYear, storeId: storeName, month: 0, retailGoal: 0, wholesaleGoal: 0, annualGoal: val, updatedBy: "user" }),
+    }).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
     }).catch(() => {
-      const updated = { ...data, annualGoals: { ...(data.annualGoals ?? {}), [selectedYear]: val } };
-      setData(updated);
-      saveData(updated);
+      setError("Failed to save the annual goal — it was NOT stored and other users will not see it. Please retry.");
     });
   };
 
-  const handleAddStore = () => {
+  const handleAddStore = async () => {
     if (!newStoreName.trim()) return;
-    const nextId = data.stores.length ? Math.max(...data.stores.map((s) => s.id)) + 1 : 1;
-    const s: StoreRow = { id: nextId, name: newStoreName.trim(), type: newStoreType };
-    const updated = { ...data, stores: [...data.stores, s] };
-    setData(updated);
-    saveData(updated);
-    setSelectedStore(s.id);
-    setNewStoreName("");
-    setShowAddStore(false);
-  };
-
-  const handleDeleteStore = (id: number) => {
-    const updated = { ...data, stores: data.stores.filter((s) => s.id !== id) };
-    setData(updated);
-    saveData(updated);
-    if (selectedStore === id) {
-      setSelectedStore(updated.stores.length ? updated.stores[0].id : null);
+    setAddingStore(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/forecast/stores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: newStoreName.trim(), type: newStoreType }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const created: StoreRow = await res.json();
+      setStores(prev => [...prev, created]);
+      setSelectedStore(created.id);
+      setNewStoreName("");
+      setShowAddStore(false);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add store — it was not saved for other users.");
+    } finally {
+      setAddingStore(false);
     }
   };
 
-  const handleAddYear = () => {
+  // No backend delete endpoint exists for stores yet, so this only hides the
+  // store from this browser's view — it still exists for other users.
+  const handleDeleteStore = (id: number) => {
+    setStores(prev => prev.filter((s) => s.id !== id));
+    if (selectedStore === id) {
+      setSelectedStore(stores.length > 1 ? stores.find(s => s.id !== id)!.id : null);
+    }
+  };
+
+  const handleAddYear = async () => {
     const y = parseInt(newYear, 10);
     if (!y) return;
-    if (data.years.some((yr) => yr.year === y)) {
+    if (years.some((yr) => yr.year === y)) {
       setError(`Year ${y} already exists.`);
       return;
     }
-    const nextId = data.years.length ? Math.max(...data.years.map((yr) => yr.id)) + 1 : 1;
-    const yr: YearRow = { id: nextId, year: y };
-    const updated = { ...data, years: [...data.years, yr].sort((a, b) => a.year - b.year) };
-    setData(updated);
-    saveData(updated);
-    setSelectedYear(yr.year);
-    setNewYear("");
-    setShowAddYear(false);
+    setAddingYear(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/forecast/years`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ year: y }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const created: YearRow = await res.json();
+      setYears(prev => [...prev, created].sort((a, b) => a.year - b.year));
+      setSelectedYear(created.year);
+      setNewYear("");
+      setShowAddYear(false);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add year — it was not saved for other users.");
+    } finally {
+      setAddingYear(false);
+    }
   };
 
   const inputCls = "w-full px-2 py-1.5 rounded-lg text-xs bg-[#FFF9F2] dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none transition-colors text-right";
@@ -332,7 +399,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
               onChange={(e) => setSelectedStore(Number(e.target.value))}
               className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none cursor-pointer"
             >
-              {data.stores.map((s) => (
+              {stores.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
@@ -351,7 +418,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
               onChange={(e) => setSelectedYear(Number(e.target.value))}
               className="w-full appearance-none px-3 py-2 pr-8 rounded-lg text-sm bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 focus:border-[#FFBC80] dark:focus:border-[#9BDBF3] outline-none cursor-pointer"
             >
-              {data.years.map((y) => (
+              {years.map((y) => (
                 <option key={y.id} value={y.year}>{y.year}</option>
               ))}
             </select>
@@ -420,10 +487,10 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
                 <option value="shopify">Shopify (DTC)</option>
               </select>
             </div>
-            <button onClick={handleAddStore} disabled={!newStoreName.trim()}
+            <button onClick={handleAddStore} disabled={!newStoreName.trim() || addingStore}
               className="px-4 py-1.5 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-85 transition-opacity disabled:opacity-40"
               style={{ background: brandGradient(theme) }}>
-              Add Store
+              {addingStore ? "Adding…" : "Add Store"}
             </button>
             <button onClick={() => setShowAddStore(false)} className="text-xs text-[#3A3A3A]/40 hover:text-[#3A3A3A] dark:text-[#003349]/40 px-1">✕</button>
           </div>
@@ -431,9 +498,9 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
       )}
 
       {/* Store list with delete */}
-      {data.stores.length > 0 && (
+      {stores.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {data.stores.map((s) => (
+          {stores.map((s) => (
             <div
               key={s.id}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-all cursor-pointer ${
@@ -468,7 +535,11 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
           {!isShopify && <span className="text-right">Wholesale Price</span>}
         </div>
 
-        {data.stores.length === 0 ? (
+        {listLoading ? (
+          <div className="py-10 text-center text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">
+            Loading shared store list…
+          </div>
+        ) : stores.length === 0 ? (
           <div className="py-10 text-center text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">
             Add a store to get started.
           </div>
@@ -527,7 +598,7 @@ export default function ForecastSettings({ readOnly = false }: { readOnly?: bool
         </p>
         <button
           onClick={handleSave}
-          disabled={saving || data.stores.length === 0}
+          disabled={saving || stores.length === 0}
           className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-[#3A3A3A] hover:opacity-90 transition-all disabled:opacity-50"
           style={{ background: brandGradient(theme) }}
         >

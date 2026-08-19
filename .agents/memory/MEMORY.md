@@ -2,3 +2,5 @@
 - [React Query error vs empty-data anti-pattern](query-error-vs-empty.md) — a queryFn that swallows non-ok responses into `{isEmpty:true}` makes real failures indistinguishable from "no data"; always throw and let the UI branch on `error`.
 - [Monarch owner login credential mismatch](monarch-owner-credential.md) — replit.md documents a stale owner password; real one is seeded in api-server bootstrap code.
 - [Monarch organic/direct revenue definition](monarch-organic-revenue.md) — organic revenue = Shopify orders with no UTM-tagged landing_site; replaced the old fixed 35% baseline, no fallback ratio should be reintroduced.
+- [Snowflake UNION ALL alias trap](snowflake-union-alias-trap.md) — every branch of a UNION ALL must alias columns identically; an unaliased branch only fails when a filter excludes the aliased branch, making it hard to catch in casual testing.
+- [Monarch forecast data model split](monarch-forecast-data-split.md) — goal dollar values live in Snowflake (shared), store/year metadata lives in Postgres (shared), never re-add a localStorage fallback for either.

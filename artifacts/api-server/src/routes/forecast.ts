@@ -24,7 +24,7 @@ router.post("/stores", async (req, res) => {
   try {
     const { name, type = "retail" } = req.body;
     if (!name?.trim()) {
-      res.status(400).json({ error: "Store name is required" });
+      return res.status(400).json({ error: "Store name is required" });
     }
     const [store] = await db
       .insert(storesTable)
@@ -33,7 +33,7 @@ router.post("/stores", async (req, res) => {
     res.status(201).json(store);
   } catch (err: any) {
     if (err?.code === "23505") {
-      res.status(409).json({ error: "A store with that name already exists" });
+      return res.status(409).json({ error: "A store with that name already exists" });
     }
     res.status(500).json({ error: "Failed to create store" });
   }
@@ -60,7 +60,7 @@ router.post("/years", async (req, res) => {
     const { year } = req.body;
     const yearNum = parseInt(year, 10);
     if (!yearNum || yearNum < 2020 || yearNum > 2100) {
-      res.status(400).json({ error: "A valid year is required (2020–2100)" });
+      return res.status(400).json({ error: "A valid year is required (2020–2100)" });
     }
     const [created] = await db
       .insert(forecastYearsTable)
@@ -69,7 +69,7 @@ router.post("/years", async (req, res) => {
     res.status(201).json(created);
   } catch (err: any) {
     if (err?.code === "23505") {
-      res.status(409).json({ error: "That year already exists" });
+      return res.status(409).json({ error: "That year already exists" });
     }
     res.status(500).json({ error: "Failed to create year" });
   }
