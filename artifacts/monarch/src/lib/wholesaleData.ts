@@ -63,61 +63,6 @@ export function getBlendedWholesaleMultiplier(
   return totalWeight > 0 ? weightedRate / totalWeight : 1.0;
 }
 
-// ─── Store Mapping (NetSuite → Platform) ─────────────────────────────────────
-
-export interface StoreMapping {
-  id: string;
-  netSuiteEntity: string;    // Raw name as it appears in NetSuite exports
-  platformStoreId: string;   // Our internal store ID
-  confirmed: boolean;
-}
-
-/** Default store mappings — handles naming inconsistencies from NetSuite. */
-export const DEFAULT_STORE_MAPPINGS: StoreMapping[] = [
-  { id: "sm-1", netSuiteEntity: "WALMART INC",          platformStoreId: "walmart",   confirmed: true  },
-  { id: "sm-2", netSuiteEntity: "WALMART STORES, INC.", platformStoreId: "walmart",   confirmed: true  },
-  { id: "sm-3", netSuiteEntity: "TARGET CORP",          platformStoreId: "target",    confirmed: true  },
-  { id: "sm-4", netSuiteEntity: "TARGET CORPORATION",   platformStoreId: "target",    confirmed: true  },
-  { id: "sm-5", netSuiteEntity: "KROGER CO.",           platformStoreId: "kroger",    confirmed: true  },
-  { id: "sm-6", netSuiteEntity: "THE KROGER CO.",       platformStoreId: "kroger",    confirmed: true  },
-  { id: "sm-7", netSuiteEntity: "CVS HEALTH",           platformStoreId: "cvs",       confirmed: true  },
-  { id: "sm-8", netSuiteEntity: "CVS PHARMACY",         platformStoreId: "cvs",       confirmed: true  },
-  { id: "sm-9", netSuiteEntity: "PUBLIX SUPER MARKETS", platformStoreId: "publix",    confirmed: true  },
-  { id: "sm-10",netSuiteEntity: "PUBLIX",               platformStoreId: "publix",    confirmed: true  },
-  { id: "sm-11",netSuiteEntity: "ULTA BEAUTY",          platformStoreId: "ulta",      confirmed: true  },
-  { id: "sm-12",netSuiteEntity: "ULTA SALON",           platformStoreId: "ulta",      confirmed: false },
-  { id: "sm-13",netSuiteEntity: "WALGREENS BOOTS",      platformStoreId: "walgreens", confirmed: true  },
-  { id: "sm-14",netSuiteEntity: "WALGREEN CO.",         platformStoreId: "walgreens", confirmed: true  },
-  { id: "sm-15",netSuiteEntity: "AMAZON.COM SERVICES",  platformStoreId: "amazon",    confirmed: true  },
-  { id: "sm-16",netSuiteEntity: "PATTERN INC.",         platformStoreId: "amazon",    confirmed: true  },
-];
-
-// ─── Product Mapping (NetSuite SKU → Platform SKU) ────────────────────────────
-
-export interface ProductMapping {
-  id: string;
-  netSuiteSku: string;
-  platformSku: string;
-  productName: string;
-  wholesalePrice: number;
-  msrpPrice: number;
-  storeIds: string[];       // which stores carry this mapping
-  confirmed: boolean;
-}
-
-export const DEFAULT_PRODUCT_MAPPINGS: ProductMapping[] = [
-  { id: "pm-01", netSuiteSku: "NS-SKU-001", platformSku: "p01", productName: "Daily Defense SPF 30 Moisturizer",  wholesalePrice: 13.50, msrpPrice: 28.99, storeIds: ["amazon","walmart","target","kroger","cvs","publix","ulta","walgreens"], confirmed: true  },
-  { id: "pm-02", netSuiteSku: "NS-SKU-002", platformSku: "p02", productName: "Vitamin C Brightening Serum 30ml",  wholesalePrice: 22.00, msrpPrice: 46.00, storeIds: ["amazon","target","cvs","ulta"],                                           confirmed: true  },
-  { id: "pm-03", netSuiteSku: "NS-SKU-003", platformSku: "p03", productName: "Hyaluronic Acid Plumping Cream",    wholesalePrice: 16.00, msrpPrice: 34.50, storeIds: ["amazon","walmart","target","kroger","publix"],                              confirmed: true  },
-  { id: "pm-04", netSuiteSku: "NS-SKU-004", platformSku: "p04", productName: "Retinol Night Renewal Treatment",   wholesalePrice: 25.00, msrpPrice: 52.00, storeIds: ["amazon","ulta"],                                                            confirmed: true  },
-  { id: "pm-05", netSuiteSku: "NS-SKU-005", platformSku: "p05", productName: "Peptide Eye Repair Gel",            wholesalePrice: 18.00, msrpPrice: 38.00, storeIds: ["amazon","target","cvs","ulta"],                                             confirmed: true  },
-  { id: "pm-06", netSuiteSku: "NS-SKU-006", platformSku: "p06", productName: "Gentle Micellar Cleansing Balm",    wholesalePrice: 10.00, msrpPrice: 22.00, storeIds: ["amazon","walmart","target","cvs","ulta","walgreens"],                        confirmed: true  },
-  { id: "pm-07", netSuiteSku: "NS-SKU-007", platformSku: "p07", productName: "Calming Rose Toning Mist 100ml",    wholesalePrice:  8.50, msrpPrice: 18.50, storeIds: ["amazon","walmart","target","ulta"],                                         confirmed: true  },
-  { id: "pm-08", netSuiteSku: "NS-SKU-008", platformSku: "p08", productName: "Niacinamide 10% Pore Minimizer",    wholesalePrice: 11.00, msrpPrice: 24.00, storeIds: ["amazon","walmart","target","cvs","ulta"],                                    confirmed: false },
-  { id: "pm-09", netSuiteSku: "NS-SKU-009", platformSku: "p09", productName: "Mineral Sunscreen SPF 50+",         wholesalePrice:  9.50, msrpPrice: 19.99, storeIds: ["amazon","walmart","target","kroger","cvs","publix","ulta","walgreens"],      confirmed: true  },
-  { id: "pm-10", netSuiteSku: "NS-SKU-010", platformSku: "p10", productName: "Vitamin D3 + K2 Softgels 5000 IU", wholesalePrice: 11.00, msrpPrice: 22.99, storeIds: ["amazon","walmart","kroger","cvs","publix","walgreens"],                      confirmed: true  },
-];
-
 // ─── NetSuite API Types ───────────────────────────────────────────────────────
 
 export interface NetSuiteStoreSummary {

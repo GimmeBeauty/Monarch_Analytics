@@ -50,8 +50,8 @@ interface SkuRow {
   upc: string;
   totalRevenue: number;
   totalUnits: number;
-  posTotalRevenue?: number;
-  posTotalUnits?: number;
+  sellInRevenue?: number;
+  sellInUnits?: number;
   avgDpsw: number;
   targetDpsw: number;
   vsTargetBenchmark: number;
@@ -1098,8 +1098,8 @@ export default function ItemPerformance() {
                       <div className="text-[10px] text-[#3A3A3A]/45 mt-0.5">{sku.sku}</div>
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
-                      {fmtCurrency(dataSource === "pos" && sku.posTotalRevenue != null ? sku.posTotalRevenue : sku.totalRevenue)}
-                      {dataSource !== "pos" && includesSellIn && (
+                      {fmtCurrency(sku.totalRevenue)}
+                      {dataSource === "sellin" && (
                         <UITooltip>
                           <TooltipTrigger asChild>
                             <Info size={10} className="inline ml-1 text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3] cursor-help" />
@@ -1109,7 +1109,7 @@ export default function ItemPerformance() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">
-                      {fmtUnits(dataSource === "pos" && sku.posTotalUnits != null ? sku.posTotalUnits : sku.totalUnits)}
+                      {fmtUnits(sku.totalUnits)}
                     </td>
                     <td className={`px-4 py-3 text-right text-sm tabular-nums ${dpswColor(sku.vsRetailAvg)}`}>
                       {fmtDpsw(sku.avgDpsw)}

@@ -1,22 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Tag, Store, Package, RefreshCw, Clock, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, Tag, Store, RefreshCw, Clock, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { usePricingMode } from "@/context/PricingModeContext";
-import {
-  WHOLESALE_RATES,
-  WHOLESALE_ELIGIBLE_STORE_IDS,
-  DEFAULT_STORE_MAPPINGS,
-  DEFAULT_PRODUCT_MAPPINGS,
-} from "@/lib/wholesaleData";
 import type { NetSuiteSalesResponse } from "@/lib/wholesaleData";
 import { STORES } from "@/lib/storeData";
 import { API_BASE } from "@/lib/apiBase";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtPct(rate: number) {
-  return `${Math.round(rate * 100)}%`;
-}
 
 function fmtCurrency(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
@@ -27,6 +17,14 @@ function fmtCurrency(v: number) {
 function fmtSyncTime(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+/** Resolves a raw NetSuite entity name to a known platform store, if one matches. */
+function matchStore(netSuiteEntityName: string) {
+  const normalized = netSuiteEntityName.toLowerCase();
+  return STORES.find(
+    (s) => s.label.toLowerCase() === normalized || s.id === normalized.replace(/\s+/g, "")
+  );
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -84,7 +82,6 @@ function ModeCard({
 export default function PricingSettings() {
   const { mode, setMode } = usePricingMode();
   const [storeMappingOpen, setStoreMappingOpen] = useState(false);
-  const [productMappingOpen, setProductMappingOpen] = useState(false);
 
   const { data: netsuiteData, isLoading: netsuiteLoading } = useQuery<NetSuiteSalesResponse>({
     queryKey: ["netsuite-sync-status"],
@@ -138,49 +135,6 @@ export default function PricingSettings() {
         )}
       </Section>
 
-      {/* ── Store Coverage & Rates ───────────────────────────────────────── */}
-      <Section title="Store Wholesale Rates" subtitle="Per-store wholesale rates as a fraction of MSRP. Shopify is always 100% (actual DTC revenue).">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
-                <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Store</th>
-                <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Type</th>
-                <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Wholesale Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {STORES.map((store) => {
-                const rate = WHOLESALE_RATES[store.id] ?? 1.0;
-                const isEligible = WHOLESALE_ELIGIBLE_STORE_IDS.has(store.id);
-                return (
-                  <tr key={store.id} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
-                    <td className="py-2.5 pr-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: store.color }} />
-                        <span className="font-medium text-[#3A3A3A] dark:text-[#003349]">{store.label}</span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 pr-4 text-[#3A3A3A]/55 dark:text-[#003349]/45">
-                      {store.id === "shopify" ? "DTC" : "Retail"}
-                    </td>
-                    <td className="py-2.5 text-right">
-                      {store.id === "shopify" ? (
-                        <span className="text-[#3A3A3A]/45 dark:text-[#003349]/35">Always 100%</span>
-                      ) : isEligible ? (
-                        <span className="font-semibold text-amber-700 dark:text-amber-700">{fmtPct(rate)}</span>
-                      ) : (
-                        <span className="text-[#3A3A3A]/45 dark:text-[#003349]/35">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Section>
-
       {/* ── NetSuite Sync Status ─────────────────────────────────────────── */}
       <Section title="NetSuite Data Sync" subtitle="Latest ingestion status by store. Wholesale revenue data flows from NetSuite into the platform.">
         {netsuiteLoading ? (
@@ -197,7 +151,7 @@ export default function PricingSettings() {
             </div>
             <div className="space-y-2">
               {netsuiteData.byStore.map((rec) => {
-                const store = STORES.find(s => s.label.toLowerCase() === rec.storeName.toLowerCase() || s.id === rec.storeName.toLowerCase().replace(/\s+/g, ""));
+                const store = matchStore(rec.storeName);
                 return (
                   <div key={rec.storeName} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFF9F2]/60 dark:bg-[#FFFFFF]/60 border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
                     <div className="flex items-center gap-2.5">
@@ -230,94 +184,63 @@ export default function PricingSettings() {
       </Section>
 
       {/* ── Store Name Mapping ───────────────────────────────────────────── */}
-      <Section title="NetSuite Store Mapping" subtitle="Maps NetSuite entity names to platform store IDs.">
+      <Section title="NetSuite Store Mapping" subtitle="Resolves each NetSuite entity currently syncing revenue to a connected platform store.">
         <button
           onClick={() => setStoreMappingOpen(o => !o)}
           className="flex items-center justify-between w-full text-xs font-medium text-[#3A3A3A] dark:text-[#003349] hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
         >
-          <span className="flex items-center gap-1.5"><Store size={13} />{DEFAULT_STORE_MAPPINGS.length} mappings configured</span>
+          <span className="flex items-center gap-1.5">
+            <Store size={13} />
+            {netsuiteData && !netsuiteData.isEmpty ? `${netsuiteData.byStore.length} entities synced` : "No synced entities"}
+          </span>
           {storeMappingOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
 
         {storeMappingOpen && (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
-                  <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">NetSuite Entity</th>
-                  <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Platform Store</th>
-                  <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEFAULT_STORE_MAPPINGS.map((m) => {
-                  const store = STORES.find(s => s.id === m.platformStoreId);
-                  return (
-                    <tr key={m.id} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
-                      <td className="py-2 pr-4 font-mono text-[11px] text-[#3A3A3A]/70 dark:text-[#003349]/60">{m.netSuiteEntity}</td>
-                      <td className="py-2 pr-4">
-                        <div className="flex items-center gap-1.5">
-                          {store && <div className="w-1.5 h-1.5 rounded-full" style={{ background: store.color }} />}
-                          <span className="text-[#3A3A3A] dark:text-[#003349]">{store?.label ?? m.platformStoreId}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 text-right">
-                        <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${m.confirmed ? "bg-green-100 text-green-700 dark:bg-green-100 dark:text-green-700" : "bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700"}`}>
-                          {m.confirmed ? "Confirmed" : "Unconfirmed"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-
-      {/* ── Product Mapping ──────────────────────────────────────────────── */}
-      <Section title="Product SKU Mapping" subtitle="Maps NetSuite SKUs to platform SKUs with wholesale and MSRP prices.">
-        <button
-          onClick={() => setProductMappingOpen(o => !o)}
-          className="flex items-center justify-between w-full text-xs font-medium text-[#3A3A3A] dark:text-[#003349] hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
-        >
-          <span className="flex items-center gap-1.5"><Package size={13} />{DEFAULT_PRODUCT_MAPPINGS.length} products mapped</span>
-          {productMappingOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
-
-        {productMappingOpen && (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
-                  <th className="text-left py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Product</th>
-                  <th className="text-left py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">NS SKU → Platform</th>
-                  <th className="text-right py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Wholesale</th>
-                  <th className="text-right py-2 pr-3 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">MSRP</th>
-                  <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEFAULT_PRODUCT_MAPPINGS.map((p) => (
-                  <tr key={p.id} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
-                    <td className="py-2 pr-3 text-[#3A3A3A] dark:text-[#003349] max-w-[180px]">
-                      <span className="block truncate" title={p.productName}>{p.productName}</span>
-                    </td>
-                    <td className="py-2 pr-3 font-mono text-[11px] text-[#3A3A3A]/60 dark:text-[#003349]/50">
-                      {p.netSuiteSku} → {p.platformSku}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-medium text-amber-700 dark:text-amber-700">${p.wholesalePrice.toFixed(2)}</td>
-                    <td className="py-2 pr-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60">${p.msrpPrice.toFixed(2)}</td>
-                    <td className="py-2 text-right">
-                      <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${p.confirmed ? "bg-green-100 text-green-700 dark:bg-green-100 dark:text-green-700" : "bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700"}`}>
-                        {p.confirmed ? "Confirmed" : "Review"}
-                      </span>
-                    </td>
+          netsuiteLoading ? (
+            <div className="mt-3 space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-9 rounded-lg bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
+              ))}
+            </div>
+          ) : netsuiteData && !netsuiteData.isEmpty ? (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#FFBC80]/20 dark:border-[#9BDBF3]/20">
+                    <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">NetSuite Entity</th>
+                    <th className="text-left py-2 pr-4 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Platform Store</th>
+                    <th className="text-right py-2 font-semibold text-[#3A3A3A]/55 dark:text-[#003349]/45">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {netsuiteData.byStore.map((rec) => {
+                    const store = matchStore(rec.storeName);
+                    return (
+                      <tr key={rec.storeName} className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 last:border-0">
+                        <td className="py-2 pr-4 font-mono text-[11px] text-[#3A3A3A]/70 dark:text-[#003349]/60">{rec.storeName}</td>
+                        <td className="py-2 pr-4">
+                          <div className="flex items-center gap-1.5">
+                            {store && <div className="w-1.5 h-1.5 rounded-full" style={{ background: store.color }} />}
+                            <span className="text-[#3A3A3A] dark:text-[#003349]">{store?.label ?? "—"}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 text-right">
+                          <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${store ? "bg-green-100 text-green-700 dark:bg-green-100 dark:text-green-700" : "bg-amber-100 text-amber-700 dark:bg-amber-100 dark:text-amber-700"}`}>
+                            {store ? "Mapped" : "Unmapped"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-[#3A3A3A]/45 dark:text-[#003349]/35 py-3 text-center">
+              No NetSuite entities to map yet.
+            </p>
+          )
         )}
       </Section>
     </div>

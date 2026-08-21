@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
 import { buildSeasonalTrendModel, isoWeek, isoWeekStart, type ForecastObservation } from "../lib/forecast-model.js";
+import { GIMME_ASSORTMENT_SKU_SQL_FILTER } from "../lib/sku-filter.js";
 
 const router = Router();
 
@@ -1951,6 +1952,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
       `),
       querySnowflake(`
         SELECT
@@ -1963,6 +1965,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
         GROUP BY STORE_NAME, STORE_TYPE
         ORDER BY revenue DESC
       `),
@@ -1977,6 +1980,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
         GROUP BY SKU, PRODUCT_NAME, UPCCODE, STORE_NAME
         ORDER BY revenue DESC
         LIMIT 50
@@ -1989,6 +1993,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
         GROUP BY TRANDATE
         ORDER BY TRANDATE ASC
       `),

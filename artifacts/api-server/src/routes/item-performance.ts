@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
 import { buildRetailerVelocity } from "../lib/retailer-velocity.js";
+import { GIMME_ASSORTMENT_SKU_SQL_FILTER } from "../lib/sku-filter.js";
 
 const router = Router();
 router.use(authenticate);
@@ -9,17 +10,6 @@ router.use(authenticate);
 const DB_NAME = process.env.SNOWFLAKE_DATABASE ?? "MONARCH_RAW";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const STORE_COUNTS: Record<number, number> = {
-  229: 2000,  // Target
-  231: 4700,  // Walmart
-  230: 1350,  // Ulta Beauty
-  228: 2800,  // Kroger
-  222: 9000,  // CVS
-  633: 9000,  // Walgreens — entity 633 maps to Walgreens per spec entity map
-  // Note: spec lists Walgreens as 633 but entity map shows 633=Publix, 1068=Walgreens
-  // Using the spec's entity→retailer mapping verbatim
-};
 
 // Entity ID → retailer name (per spec)
 const ENTITY_MAP: Record<number, string> = {
@@ -238,6 +228,7 @@ router.get("/", async (req, res) => {
           ) AS rn
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
         WHERE ${dateFilter}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
       ),
       base AS (
         SELECT
@@ -260,7 +251,7 @@ router.get("/", async (req, res) => {
       FETCH FIRST 1000 ROWS ONLY
     `;
 
-    // ── Weekly trend for sparklines (last 8 weeks, regardless of period) ───────
+    // ── Weekly trend for sparklines (last 8 weeks, respects the retailer filter) ─
     const weeklyTrendSql = `
       WITH deduped AS (
         SELECT *,
@@ -270,6 +261,8 @@ router.get("/", async (req, res) => {
           ) AS rn
         FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
         WHERE ${dateFilter}
+          AND TRANDATE >= DATEADD(week, -8, CURRENT_DATE())
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
       ),
       weekly AS (
         SELECT
@@ -279,7 +272,7 @@ router.get("/", async (req, res) => {
           SUM(d.REVENUE) AS REVENUE
         FROM deduped d
         WHERE d.rn = 1
-          AND d.ENTITY_ID NOT IN (${dtcList})
+          ${retailerFilter}
         GROUP BY d.SKU, DATE_TRUNC('week', d.TRANDATE)
       )
       SELECT * FROM weekly
@@ -451,10 +444,8 @@ router.get("/", async (req, res) => {
       upc: string;
       totalRevenue: number;
       totalUnits: number;
-      targetRevenue: number;
       retailerRevenue: Map<number, number>; // entityId → revenue
       retailerUnits: Map<number, number>;
-      retailerCount: Set<number>;
     }
 
     const skuMap = new Map<string, SkuAgg>();
@@ -467,21 +458,15 @@ router.get("/", async (req, res) => {
           upc: e.upc,
           totalRevenue: 0,
           totalUnits: 0,
-          targetRevenue: 0,
           retailerRevenue: new Map(),
           retailerUnits: new Map(),
-          retailerCount: new Set(),
         });
       }
       const agg = skuMap.get(e.sku)!;
       agg.totalRevenue += e.revenue;
       agg.totalUnits   += e.units;
-      if (e.entityId === 229) agg.targetRevenue += e.revenue;
       agg.retailerRevenue.set(e.entityId, (agg.retailerRevenue.get(e.entityId) ?? 0) + e.revenue);
       agg.retailerUnits.set(e.entityId,   (agg.retailerUnits.get(e.entityId)   ?? 0) + e.units);
-      if (STORE_COUNTS_BY_ENTITY[e.entityId]) {
-        agg.retailerCount.add(e.entityId);
-      }
     }
 
     // retailerMap is used only for the final retailers response array;
@@ -490,9 +475,9 @@ router.get("/", async (req, res) => {
     // ── Compute DPSW values ───────────────────────────────────────────────────
 
     // Velocity-factor-adjusted denominator: store count × retailer velocity factor
-    function computeVelocityAdjustedDenom(retailerRevenueMap: Map<number, number>): number {
+    function computeVelocityAdjustedDenom(entityIds: number[]): number {
       let denom = 0;
-      for (const [entityId] of retailerRevenueMap) {
+      for (const entityId of entityIds) {
         const stores = STORE_COUNTS_BY_ENTITY[entityId];
         const vf     = VELOCITY_FACTORS[entityId] ?? 1.0;
         if (!stores) continue;
@@ -502,9 +487,6 @@ router.get("/", async (req, res) => {
     }
 
     const skuResults = Array.from(skuMap.values()).map(agg => {
-      const adjDenom    = computeVelocityAdjustedDenom(agg.retailerRevenue);
-      const avgDpsw     = adjDenom > 0 ? agg.totalRevenue / adjDenom / numWeeks : 0;
-      const targetDpsw  = agg.targetRevenue > 0 ? agg.targetRevenue / STORE_COUNTS_BY_ENTITY[229] / numWeeks : 0;
       const weeklyTrend = weeklyBySku.get(agg.sku) ?? [];
 
       // Product title: Target POS > Walmart POS > NetSuite
@@ -584,48 +566,48 @@ router.get("/", async (req, res) => {
       if (hasPOS)    dataSources.push("pos");
       if (!dataSources.length) dataSources.push("sellin");
 
+      // Data-source-aware totals: in "sellin" mode byRetailerMap is seeded purely
+      // from sell-in so this equals agg.totalRevenue unchanged; in "pos"/"all" mode
+      // it reflects the POS-preferred (with sell-in fallback) merge above. Every
+      // metric below is derived from this merged view so the data-source toggle
+      // actually changes revenue, DPSW, benchmark and retailer count — previously
+      // these were always computed from sell-in only, making the toggle a no-op.
+      const mergedTotalRevenue = byRetailerArr.reduce((s, r) => s + r.revenue, 0);
+      const mergedTotalUnits   = byRetailerArr.reduce((s, r) => s + r.units, 0);
+      const activeRetailers    = byRetailerArr.filter(r => r.revenue > 0);
+
+      const adjDenom = computeVelocityAdjustedDenom(activeRetailers.map(r => r.entityId));
+      const avgDpsw  = adjDenom > 0 ? mergedTotalRevenue / adjDenom / numWeeks : 0;
+
+      const targetMerged = byRetailerMap.get(229);
+      const targetDpsw = targetMerged && targetMerged.revenue > 0
+        ? targetMerged.revenue / STORE_COUNTS_BY_ENTITY[229] / numWeeks
+        : 0;
+
       // Revenue-weighted velocity benchmark across all retailers carrying this SKU
       let benchNumer = 0, benchDenom = 0;
-      for (const [entityId, rev] of agg.retailerRevenue.entries()) {
-        const vf = VELOCITY_FACTORS[entityId];
+      for (const r of activeRetailers) {
+        const vf = VELOCITY_FACTORS[r.entityId];
         if (vf == null) continue;
-        benchNumer += rev * vf;
-        benchDenom += rev;
+        benchNumer += r.revenue * vf;
+        benchDenom += r.revenue;
       }
       const velocityBenchmark = benchDenom > 0 ? benchNumer / benchDenom : VELOCITY_FACTORS[229];
-
-      // POS totals (used for sell-through mode in the frontend)
-      const posTotalRevenue = includePOS && agg.upc ? (
-        (targetPosByUpc.get(agg.upc)?.revenue ?? 0) +
-        (walmartPosByUpc.get(agg.upc)?.revenue ?? 0) +
-        (() => {
-          const cf = circanaByUpc.get(agg.upc!);
-          return cf ? Array.from(cf.values()).reduce((s, v) => s + v.revenue, 0) : 0;
-        })()
-      ) : 0;
-      const posTotalUnits = includePOS && agg.upc ? (
-        (targetPosByUpc.get(agg.upc)?.units ?? 0) +
-        (walmartPosByUpc.get(agg.upc)?.units ?? 0) +
-        (() => {
-          const cf = circanaByUpc.get(agg.upc!);
-          return cf ? Array.from(cf.values()).reduce((s, v) => s + v.units, 0) : 0;
-        })()
-      ) : 0;
 
       return {
         sku:              agg.sku,
         productName:      resolvedTitle,
         upc:              agg.upc,
-        totalRevenue:     agg.totalRevenue,
-        totalUnits:       agg.totalUnits,
-        posTotalRevenue,
-        posTotalUnits,
+        totalRevenue:     mergedTotalRevenue,
+        totalUnits:       mergedTotalUnits,
+        sellInRevenue:    agg.totalRevenue,
+        sellInUnits:      agg.totalUnits,
         avgDpsw,
         targetDpsw,
         velocityBenchmark,
         vsTargetBenchmark: 0,
         vsRetailAvg:       0,
-        retailerCount: agg.retailerCount.size,
+        retailerCount: activeRetailers.length,
         dataSources,
         weeklyTrend,
         byRetailer: byRetailerArr,
