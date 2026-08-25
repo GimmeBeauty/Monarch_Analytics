@@ -126,14 +126,23 @@ def run_pinterest():
     except Exception as e:
         print(f"  ❌ Pinterest error: {e}")
 
+def run_target_inventory():
+    print("\n[5b/5] Target Inventory...")
+    try:
+        from ingestion.sources.target_inventory import run_inventory_daily
+        run_inventory_daily()
+        print("  ✅ Target Inventory done")
+    except Exception as e:
+        print(f"  ❌ Target Inventory error: {e}")
+
 def run_target():
     print("\n[5/5] Target...")
     try:
         KW_URL="https://securesharek.target.com"
-        KW_CLIENT_ID="1c9f2b24-847e-5ee6-acc4-f03c8da0cfba"
-        KW_CLIENT_SECRET="2bLyg*oqja"
-        KW_USERNAME="nick@gimmebeauty.com"
-        KW_PASSWORD=os.environ.get("TARGET_KW_PASSWORD","TjNc030715!!")
+        KW_CLIENT_ID=os.environ["TARGET_KW_CLIENT_ID"]
+        KW_CLIENT_SECRET=os.environ["TARGET_KW_CLIENT_SECRET"]
+        KW_USERNAME=os.environ["TARGET_KW_USERNAME"]
+        KW_PASSWORD=os.environ["TARGET_KW_PASSWORD"]
         r=requests.post(f"{KW_URL}/oauth/token",data={"grant_type":"password","client_id":KW_CLIENT_ID,"client_secret":KW_CLIENT_SECRET,"username":KW_USERNAME,"password":KW_PASSWORD},timeout=30)
         token=r.json()["access_token"]
         r=requests.get(f"{KW_URL}/rest/folders/58077025/children",headers={"Authorization":f"Bearer {token}"},timeout=30)
@@ -275,6 +284,7 @@ if __name__ == "__main__":
     run_google()
     run_ga4()
     run_target()
+    run_target_inventory()
     run_criteo()
     run_roundel()
     run_pinterest()
