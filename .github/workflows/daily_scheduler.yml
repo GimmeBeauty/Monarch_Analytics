@@ -44,6 +44,9 @@ jobs:
           GA4_PROPERTY_ID: ${{ secrets.GA4_PROPERTY_ID }}
           GA4_REFRESH_TOKEN: ${{ secrets.GA4_REFRESH_TOKEN }}
           TARGET_KW_PASSWORD: ${{ secrets.TARGET_KW_PASSWORD }}
+          TARGET_KW_CLIENT_ID: ${{ secrets.TARGET_KW_CLIENT_ID }}
+          TARGET_KW_CLIENT_SECRET: ${{ secrets.TARGET_KW_CLIENT_SECRET }}
+          TARGET_KW_USERNAME: ${{ secrets.TARGET_KW_USERNAME }}
           PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
           PINTEREST_AD_ACCOUNT_ID: ${{ secrets.PINTEREST_AD_ACCOUNT_ID }}
           CRITEO_CLIENT_ID: ${{ secrets.CRITEO_CLIENT_ID }}
