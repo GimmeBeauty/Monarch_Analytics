@@ -133,8 +133,11 @@ router.get("/tiktok_shop/callback", async (req, res) => {
       `&auth_code=${encodeURIComponent(code)}` +
       `&grant_type=authorized_code`,
     );
+    const bodyText = await tokenRes.text();
+    console.log("[tiktok_shop callback] token exchange status:", tokenRes.status);
+    console.log("[tiktok_shop callback] token exchange response:", bodyText);
     if (!tokenRes.ok) { res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return; }
-    const body = await tokenRes.json() as {
+    const body = JSON.parse(bodyText) as {
       data?: { access_token: string; refresh_token?: string; seller_id?: string };
       access_token?: string; refresh_token?: string; seller_id?: string;
     };
@@ -143,8 +146,14 @@ router.get("/tiktok_shop/callback", async (req, res) => {
     accessToken  = td.access_token ?? "";
     refreshToken = td.refresh_token ?? "";
     shopId       = td.seller_id ?? "";
-    if (!accessToken) { res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return; }
-  } catch { res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return; }
+    if (!accessToken) {
+      console.log("[tiktok_shop callback] No access_token in response body:", JSON.stringify(body));
+      res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return;
+    }
+  } catch (err) {
+    console.log("[tiktok_shop callback] Exception during token exchange:", err);
+    res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return;
+  }
 
   const existing = await db.select().from(integrationsTable)
     .where(eq(integrationsTable.provider, "tiktok_shop")).limit(1);
