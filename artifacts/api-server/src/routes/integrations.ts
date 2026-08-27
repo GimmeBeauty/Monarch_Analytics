@@ -170,14 +170,14 @@ router.get("/meta/connect", authenticate, (req, res) => {
 // ─── TikTok Shop OAuth ────────────────────────────────────────────────────────
 
 router.get("/tiktok_shop/connect", authenticate, (req, res) => {
-  if (!TIKTOK_SHOP_APP_KEY || !TIKTOK_SHOP_SECRET) {
+  if (!TIKTOK_SHOP_APP_KEY || !TIKTOK_SHOP_SECRET || !TIKTOK_SHOP_CLIENT_ID) {
     res.status(500).json({ error: "TikTok Shop integration not configured" }); return;
   }
   const state = jwt.sign({ userId: (req as any).auth!.userId }, JWT_SECRET, { expiresIn: "10m" });
   const redirectUri = `${APP_URL}/api/oauth/tiktok_shop/callback`;
   const authUrl =
-    `https://auth.tiktok-shops.com/oauth/authorize` +
-    `?app_key=${encodeURIComponent(TIKTOK_SHOP_APP_KEY)}` +
+    `https://services.tiktokshop.com/open/authorize` +
+    `?service_id=${encodeURIComponent(TIKTOK_SHOP_CLIENT_ID)}` +
     `&state=${encodeURIComponent(state)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}`;
   res.redirect(authUrl);

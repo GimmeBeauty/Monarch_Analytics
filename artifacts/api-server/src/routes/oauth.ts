@@ -127,7 +127,7 @@ router.get("/tiktok_shop/callback", async (req, res) => {
   let accessToken: string; let refreshToken: string; let shopId: string;
   try {
     const tokenRes = await fetch(
-      `https://auth.tiktok-shops.com/api/authorize/token` +
+      `https://auth.tiktok-shops.com/api/v2/token/get` +
       `?app_key=${encodeURIComponent(TIKTOK_SHOP_APP_KEY!)}` +
       `&app_secret=${encodeURIComponent(TIKTOK_SHOP_SECRET!)}` +
       `&auth_code=${encodeURIComponent(code)}` +
