@@ -41,10 +41,11 @@ router.get("/", authenticate, async (_req, res) => {
       const row = rows.find((r) => r.provider === provider);
       let savedFields: string[] = [];
       let sheets: unknown[] = [];
+      let meta: Record<string, unknown> = {};
 
       if (row?.metadata) {
         try {
-          const meta = JSON.parse(row.metadata) as Record<string, unknown>;
+          meta = JSON.parse(row.metadata) as Record<string, unknown>;
           if (provider === "google_sheets") {
             sheets = (meta.sheets as unknown[]) ?? [];
           } else {
@@ -62,6 +63,14 @@ router.get("/", authenticate, async (_req, res) => {
         savedFields,
         sheets,
         status:     row?.status ?? null,
+        // TikTok Shop runs a one-time historical backfill in the background
+        // (see tiktokShopSync.ts); surface its progress so Settings can tell
+        // users how far back their ad data actually goes.
+        ...(provider === "tiktok_shop" ? {
+          historyBackfillEarliestDate: (meta.historyBackfillEarliestDate as string | undefined) ?? null,
+          historyBackfillComplete:     !!meta.historyBackfillComplete,
+          historyBackfillCompletedAt: (meta.historyBackfillCompletedAt as string | undefined) ?? null,
+        } : {}),
       };
     });
 

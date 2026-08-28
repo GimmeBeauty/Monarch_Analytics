@@ -38,6 +38,50 @@ interface IntegrationStatus {
   shopDomain:  string | null;
   savedFields: string[];
   status:      string | null;
+  /** TikTok Shop only — progress of the one-time historical backfill. */
+  historyBackfillEarliestDate?: string | null;
+  historyBackfillComplete?:     boolean;
+  historyBackfillCompletedAt?:  string | null;
+}
+
+/** "2025-03-01" -> "March 2025" for a friendly, non-technical date label. */
+function formatMonthYear(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * TikTok Shop's ad history backfill runs in the background after connecting
+ * and can take a while to reach full depth. Surfaces what's actually synced
+ * so far rather than leaving it a silent black box.
+ */
+function TikTokShopBackfillStatus({ status }: { status?: IntegrationStatus }) {
+  const earliest = status?.historyBackfillEarliestDate;
+  if (!earliest) {
+    return (
+      <div className="flex items-center gap-1.5 mb-3 text-[10px] text-[#3A3A3A]/50 dark:text-[#003349]/40">
+        <Loader2 size={10} className="animate-spin shrink-0" />
+        <span>History backfill starting soon…</span>
+      </div>
+    );
+  }
+
+  const complete = !!status?.historyBackfillComplete;
+  return (
+    <div className="flex items-center gap-1.5 mb-3 text-[10px]">
+      {complete ? (
+        <CheckCircle2 size={10} className="shrink-0 text-emerald-500" />
+      ) : (
+        <Loader2 size={10} className="animate-spin shrink-0 text-[#3A3A3A]/50 dark:text-[#003349]/40" />
+      )}
+      <span className="text-[#3A3A3A]/55 dark:text-[#003349]/45">
+        {complete
+          ? `Full history synced — data available from ${formatMonthYear(earliest)}`
+          : `Backfilling historical data — available from ${formatMonthYear(earliest)} so far, still going further back`}
+      </span>
+    </div>
+  );
 }
 
 // ─── Provider definitions ──────────────────────────────────────────────────────
@@ -315,6 +359,7 @@ function IntegrationCard({
         {/* ── Connected Summary ───────────────────────────── */}
         {connected && !editing && (
           <div>
+            {provider.id === "tiktok_shop" && <TikTokShopBackfillStatus status={status} />}
             {hasFields && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
                 {(provider.fields ?? []).map(f => {
