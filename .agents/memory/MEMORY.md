@@ -7,3 +7,4 @@
 - [Gimme assortment SKU filter](gimme-assortment-sku-filter.md) — "P"+4-digit and sub-7000 SKUs in NetSuite sell-in aren't real products; exclude via shared sku-filter.ts helper on every route reading that table.
 - [Item Performance data-source toggle bug](item-performance-datasource-toggle.md) — SKU-level DPSW/benchmark/retailer-count must be derived from the POS-merged view, not raw sell-in, or the sell-in/sell-through/best-available toggle silently does nothing.
 - [TikTok Shop core ad channel integration](tiktok-shop-channel-integration.md) — TikTok Shop Partner API (not Marketing API) is the right auth domain; on-demand throttled Postgres sync is the pattern for any non-Snowflake channel.
+- [TikTok Shop historical backfill design](tiktok-shop-historical-backfill.md) — chunked, resumable-via-persisted-checkpoint backfill that treats an API-rejected older date range as the history boundary, since no documented lookback limit exists.

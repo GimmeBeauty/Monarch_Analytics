@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
+import { withTikTokShopIntegrationLock } from "../lib/tiktokShopSync.js";
 
 const router = Router();
 
@@ -155,19 +156,28 @@ router.get("/tiktok_shop/callback", async (req, res) => {
     res.redirect(`${APP_URL}/settings/integrations?error=oauth_failed`); return;
   }
 
-  const existing = await db.select().from(integrationsTable)
-    .where(eq(integrationsTable.provider, "tiktok_shop")).limit(1);
-  const existingMeta = existing[0]?.metadata
-    ? JSON.parse(existing[0].metadata) as Record<string, string>
-    : {};
-  const newMeta = { ...existingMeta, refreshToken, ...(shopId && { shopId }) };
+  // Serialized with the rolling sync / historical backfill jobs, which also
+  // read-modify-write this same row's JSON metadata — without this, a
+  // long-running backfill using the old token could overwrite the freshly
+  // reconnected credentials (or vice versa) with a stale snapshot.
+  await withTikTokShopIntegrationLock(async () => {
+    const existing = await db.select().from(integrationsTable)
+      .where(eq(integrationsTable.provider, "tiktok_shop")).limit(1);
+    const existingMeta = existing[0]?.metadata
+      ? JSON.parse(existing[0].metadata) as Record<string, string>
+      : {};
+    // Keep any prior backfill checkpoint (historyBackfillEarliestDate/etc.) —
+    // reconnecting just refreshes credentials, it doesn't invalidate history
+    // already fetched, so the backfill can resume from where it left off.
+    const newMeta = { ...existingMeta, refreshToken, ...(shopId && { shopId }) };
 
-  await db.insert(integrationsTable)
-    .values({ provider: "tiktok_shop", accessToken, metadata: JSON.stringify(newMeta), status: "connected" })
-    .onConflictDoUpdate({
-      target: integrationsTable.provider,
-      set: { accessToken, metadata: JSON.stringify(newMeta), status: "connected", updatedAt: new Date() },
-    });
+    await db.insert(integrationsTable)
+      .values({ provider: "tiktok_shop", accessToken, metadata: JSON.stringify(newMeta), status: "connected" })
+      .onConflictDoUpdate({
+        target: integrationsTable.provider,
+        set: { accessToken, metadata: JSON.stringify(newMeta), status: "connected", updatedAt: new Date() },
+      });
+  });
   res.redirect(`${APP_URL}/settings/integrations?success=tiktok_shop`);
 });
 

@@ -34,6 +34,20 @@ export class TikTokShopApiError extends Error {
   }
 }
 
+/**
+ * A failure that says nothing about the request itself — rate limiting,
+ * a 5xx, a network hiccup, or a malformed response. Callers must retry these
+ * (with backoff) rather than treat them as a meaningful API rejection: unlike
+ * TikTokShopApiError, a transient error carries no information about whether
+ * an older date range is actually unavailable.
+ */
+export class TikTokShopTransientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TikTokShopTransientError";
+  }
+}
+
 function signRequest(
   path: string,
   params: Record<string, string>,
@@ -88,24 +102,52 @@ async function callSignedApi<T>(
   extraHeaders: Record<string, string> = {},
 ): Promise<T> {
   const url = buildUrl(path, appKey, appSecret, accessToken, extraParams);
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "x-tts-access-token": accessToken, ...extraHeaders },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: { "x-tts-access-token": accessToken, ...extraHeaders },
+    });
+  } catch (err) {
+    // Network-level failure (DNS, timeout, connection reset) — says nothing
+    // about the request itself, always retryable.
+    throw new TikTokShopTransientError(`Network error calling TikTok Shop API: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Rate limiting and server errors are retryable and must never be treated
+  // as a meaningful rejection of the request's parameters (e.g. a date range).
+  if (res.status === 429 || res.status >= 500) {
+    throw new TikTokShopTransientError(`TikTok Shop API returned HTTP ${res.status}`);
+  }
+
   const bodyText = await res.text();
   let parsed: TikTokShopEnvelope<T>;
   try {
     parsed = JSON.parse(bodyText) as TikTokShopEnvelope<T>;
   } catch {
-    throw new TikTokShopApiError(`Non-JSON response from TikTok Shop API (status ${res.status})`);
+    // A non-JSON body on an otherwise-non-error status is a malformed/transient
+    // response, not a real rejection — retry it rather than giving up.
+    throw new TikTokShopTransientError(`Non-JSON response from TikTok Shop API (status ${res.status})`);
   }
   if (!res.ok || parsed.code !== 0) {
     const msg = parsed.message ?? `HTTP ${res.status}`;
     // TikTok Shop auth-related error codes: expired/invalid access token,
-    // insufficient scope/permission for this API.
-    if ([105002, 105003, 105005, 401].includes(parsed.code) || res.status === 401) {
+    // insufficient scope/permission for this API. The exact code list isn't
+    // fully confirmed against a real approved app yet, so also catch
+    // permission/scope wording in the message rather than relying on codes alone —
+    // under-detecting an auth problem just means it's retried forever instead of
+    // surfacing "needs reconnect", which is the safer failure mode of the two.
+    const looksLikeAuthOrPermission =
+      [105002, 105003, 105005, 401, 403].includes(parsed.code) ||
+      res.status === 401 || res.status === 403 ||
+      /\b(scope|permission|unauthori[sz]ed|not authoriz)/i.test(msg);
+    if (looksLikeAuthOrPermission) {
       throw new TikTokShopAuthError(msg);
     }
+    // Any other well-formed rejection is NOT assumed to mean "no data exists for
+    // this range" — TikTok Shop doesn't publish an error contract for that, so
+    // callers must treat this the same as a transient failure (retry with
+    // backoff, never treat as a completion signal) rather than guessing.
     throw new TikTokShopApiError(msg, parsed.code);
   }
   if (parsed.data === undefined) {
