@@ -5,6 +5,7 @@ import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
 import { buildSeasonalTrendModel, isoWeek, isoWeekStart, type ForecastObservation } from "../lib/forecast-model.js";
 import { GIMME_ASSORTMENT_SKU_SQL_FILTER } from "../lib/sku-filter.js";
+import { getTikTokShopChannelData } from "../lib/tiktokShopSync.js";
 
 const router = Router();
 
@@ -136,6 +137,15 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
   ctv_programmatic: { channelId: "ctv-programmatic", channelLabel: "CTV / Programmatic", color: "#6B46C1", channelFamily: "core", storeIds: ["target", "amazon"] },
   display_ads:      { channelId: "display-ads",      channelLabel: "Display",              color: "#F97316", channelFamily: "core", storeIds: ["target", "amazon"] },
+};
+
+/**
+ * TikTok Shop channel metadata. Unlike the channels above, TikTok Shop has no
+ * Snowflake ADS.*_RAW pipeline — its data is synced directly from TikTok's
+ * API into Postgres (see lib/tiktokShopSync.ts) and merged in below.
+ */
+const TIKTOK_SHOP_META = {
+  channelId: "tiktok-shop", channelLabel: "TikTok Shop", color: "#FE2C55", channelFamily: "core" as const, storeIds: ["shopify"],
 };
 
 interface AdDayRow { date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number; }
@@ -1094,6 +1104,19 @@ router.get("/attribution", authenticate, async (req, res) => {
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
 
+    // TikTok Shop is synced directly into Postgres (no Snowflake pipeline) —
+    // merge it in using the same row shape so CPC/CTR/ROAS compute identically.
+    const tiktokShop = await getTikTokShopChannelData(start, end);
+    if (tiktokShop.status !== "not_connected") {
+      const totals = aggregateAdRows(tiktokShop.rows);
+      channels.push({
+        ...TIKTOK_SHOP_META,
+        ...totals,
+        dailySeries: tiktokShop.rows,
+        dataStatus: tiktokShop.status,
+      } as typeof channels[number] & { dataStatus: string });
+    }
+
     res.json({ channels, isEmpty: channels.length === 0 });
   } catch (e) {
     req.log.error({ err: e }, "[data/attribution] Error:");
@@ -1455,6 +1478,21 @@ router.get("/spend", authenticate, async (req, res) => {
       if (date) channelMap[cid].dailySpend.push({ date, spend });
     }
 
+    // Merge in TikTok Shop, which is synced directly to Postgres (see attribution route).
+    const tiktokShopStatuses: Record<string, string> = {};
+    if (allStores || requestedStoreIds.some(sid => TIKTOK_SHOP_META.storeIds.includes(sid))) {
+      const tiktokShop = await getTikTokShopChannelData(start, end);
+      if (tiktokShop.status !== "not_connected") {
+        const totals = aggregateAdRows(tiktokShop.rows);
+        channelMap[TIKTOK_SHOP_META.channelId] = {
+          totalSpend: totals.spend,
+          totalConversionValue: totals.revenue,
+          dailySpend: tiktokShop.rows.map(r => ({ date: r.date, spend: r.spend })),
+        };
+        tiktokShopStatuses[TIKTOK_SHOP_META.channelId] = tiktokShop.status;
+      }
+    }
+
     const channels = Object.entries(channelMap).map(([channelId, v]) => ({
       channelId,
       totalSpend:           Math.round(v.totalSpend * 100) / 100,
@@ -1523,7 +1561,7 @@ router.get("/spend", authenticate, async (req, res) => {
       "[data/spend] organic revenue breakdown (wholesale dedup applied)",
     );
 
-    res.json({ channels, organicRevenue, isEmpty: channels.length === 0 });
+    res.json({ channels, organicRevenue, channelStatus: tiktokShopStatuses, isEmpty: channels.length === 0 });
   } catch (e) {
     req.log.error({ err: e }, "[data/spend] Error:");
     res.status(500).json({ error: "Failed to query spend data" });

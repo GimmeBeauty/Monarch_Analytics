@@ -6,6 +6,7 @@ export type IntegrationProvider =
   | "google_analytics"
   | "meta"
   | "tiktok"
+  | "tiktok_shop"
   | "netsuite";
 
 export const integrationsTable = pgTable("integrations", {

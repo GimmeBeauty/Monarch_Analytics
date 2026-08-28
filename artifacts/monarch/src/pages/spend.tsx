@@ -21,8 +21,14 @@ import ErrorState from "@/components/ErrorState";
 interface SpendApiResponse {
   channels: Array<{ channelId: string; totalSpend: number; totalConversionValue: number; dailySpend: Array<{ date: string; spend: number }> }>;
   organicRevenue: number;
+  channelStatus?: Record<string, string>;
   isEmpty: boolean;
 }
+
+const CHANNEL_STATUS_LABELS: Record<string, string> = {
+  tiktok_shop: "TikTok Shop",
+  "tiktok-shop": "TikTok Shop",
+};
 
 export default function Spend() {
   const { dateRange } = useDateRange();
@@ -106,6 +112,18 @@ export default function Spend() {
 
   const isEmpty = !isLoading && (!realSpendByChannel || data === null || spendApiData?.isEmpty);
 
+  const channelWarnings = useMemo(() => {
+    const statuses = spendApiData?.channelStatus ?? {};
+    const visibleIds = new Set(filteredChannels.map((c) => c.channelId));
+    return Object.entries(statuses)
+      .filter(([channelId, status]) => (status === "stale" || status === "needs_reconnect") && visibleIds.has(channelId))
+      .map(([channelId, status]) => ({
+        channelId,
+        status,
+        label: CHANNEL_STATUS_LABELS[channelId] ?? filteredChannels.find((c) => c.channelId === channelId)?.channelLabel ?? channelId,
+      }));
+  }, [spendApiData, filteredChannels]);
+
   return (
     <DashboardLayout
       title="Spend Optimizer"
@@ -140,6 +158,22 @@ export default function Spend() {
                 <strong>Model estimates:</strong> iROAS, incrementality, saturation, mROAS, confidence, R², MAPE, adstock, halo, and reallocation upside are calculated using industry-benchmark parameters per channel type — not fitted to Durham Brands&apos; own data. They are directional guidance. Hover any <strong className="underline decoration-dotted">(?)</strong> tooltip for details. These will automatically upgrade to real statistics once holdout experiment data is ingested.
               </span>
             </div>
+
+            {channelWarnings.length > 0 && (
+              <div className="px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-100 border border-red-200/70 dark:border-red-300/40 text-xs text-red-800 dark:text-red-700 flex items-start gap-2">
+                <span className="shrink-0 mt-0.5">⚠</span>
+                <span>
+                  {channelWarnings.map((w, i) => (
+                    <span key={w.channelId}>
+                      {i > 0 && " · "}
+                      <strong>{w.label}</strong> {w.status === "needs_reconnect"
+                        ? "needs to be reconnected — its numbers may be missing or out of date until you reconnect it in Settings → Integrations."
+                        : "hasn't synced recently — its numbers may be stale."}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
 
             <ChannelFamilyFilter
               state={filterState}

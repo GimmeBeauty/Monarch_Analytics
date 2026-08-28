@@ -797,6 +797,7 @@ interface ChannelRow {
   impressions: number;
   ctr: number;
   cpc: number;
+  dataStatus?: "connected" | "stale" | "needs_reconnect";
 }
 
 // ─── Expandable Channel Table ─────────────────────────────────────────────────
@@ -860,6 +861,16 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
                         <span className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-[#FFBC80]/12 dark:bg-[#EFBAE1]/12 text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wide">
                           {row.channelFamily}
                         </span>
+                        {row.dataStatus === "needs_reconnect" && (
+                          <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/12 text-red-600 dark:text-red-700 uppercase tracking-wide">
+                            <AlertTriangle size={9} /> Needs reconnect
+                          </span>
+                        )}
+                        {row.dataStatus === "stale" && (
+                          <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-400/12 text-amber-600 dark:text-amber-700 uppercase tracking-wide">
+                            <AlertTriangle size={9} /> Stale
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -1203,6 +1214,7 @@ export default function Attribution() {
     channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[];
     spend: number; impressions: number; clicks: number; conversions: number; revenue: number;
     dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }>;
+    dataStatus?: "connected" | "stale" | "needs_reconnect";
   }
   interface AttrApiResponse { channels: AttrApiChannel[]; isEmpty: boolean; }
 
@@ -1251,6 +1263,7 @@ export default function Attribution() {
         impressions:   c.impressions,
         ctr,
         cpc,
+        dataStatus:    c.dataStatus,
       };
     }).sort((a, b) => b.revenue - a.revenue);
 

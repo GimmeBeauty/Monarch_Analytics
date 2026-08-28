@@ -79,6 +79,15 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
     channelFamily: "core",
   },
   {
+    channelId: "tiktok-shop",
+    channelLabel: "TikTok Shop",
+    storeIds: ["shopify"],
+    dailySpendBaseline: 2600,
+    baseRoas: 3.1,
+    color: "#FE2C55",
+    channelFamily: "core",
+  },
+  {
     channelId: "applovin-axon",
     channelLabel: "AppLovin Axon",
     storeIds: ["shopify"],
