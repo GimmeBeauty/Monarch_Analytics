@@ -3,16 +3,17 @@ import { DateRangeButton } from "@/components/ui/DateRangePicker";
 import StoreFilter from "@/components/layout/StoreFilter";
 import { usePricingMode } from "@/context/PricingModeContext";
 import { useTheme } from "@/context/ThemeContext";
-import { Tag } from "lucide-react";
+import { Tag, Menu } from "lucide-react";
 
 interface TopBarProps {
   title: string;
   description: string;
   hideDatePicker?: boolean;
   hideStoreFilter?: boolean;
+  onMenuClick?: () => void;
 }
 
-export default function TopBar({ title, description, hideDatePicker, hideStoreFilter }: TopBarProps) {
+export default function TopBar({ title, description, hideDatePicker, hideStoreFilter, onMenuClick }: TopBarProps) {
   const { dateRange } = useDateRange();
   const { isWholesale } = usePricingMode();
   const { theme } = useTheme();
@@ -26,21 +27,32 @@ export default function TopBar({ title, description, hideDatePicker, hideStoreFi
   return (
     <div
       data-testid="top-bar"
-      className="flex items-center justify-between px-8 py-3.5 border-b border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFF9F2]/80 dark:bg-white/80 backdrop-blur-sm sticky top-0 z-20"
+      className="flex flex-wrap items-center justify-between gap-3 px-4 md:px-8 py-3 md:py-3.5 border-b border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFF9F2]/80 dark:bg-white/80 backdrop-blur-sm sticky top-0 z-20"
     >
-      {/* Title + description */}
-      <div>
-        <h1
-          data-testid="page-title"
-          className="text-xl font-bold text-[#3A3A3A] dark:text-[#003349] tracking-tight"
+      {/* Menu button + title/description */}
+      <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          data-testid="mobile-menu-button"
+          onClick={onMenuClick}
+          aria-label="Open navigation menu"
+          className="md:hidden shrink-0 -ml-1.5 p-2 rounded-lg text-[#3A3A3A] dark:text-[#003349] hover:bg-[#FFBC80]/10 dark:hover:bg-[#9BDBF3]/10"
         >
-          {title}
-        </h1>
-        <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5">{description}</p>
+          <Menu size={20} />
+        </button>
+        <div className="min-w-0">
+          <h1
+            data-testid="page-title"
+            className="text-xl font-bold text-[#3A3A3A] dark:text-[#003349] tracking-tight truncate"
+          >
+            {title}
+          </h1>
+          <p className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40 mt-0.5 truncate">{description}</p>
+        </div>
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3">
         {/* Wholesale pricing badge */}
         {isWholesale && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-400/50 bg-amber-400/10">

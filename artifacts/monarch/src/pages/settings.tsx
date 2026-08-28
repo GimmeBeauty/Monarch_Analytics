@@ -447,6 +447,7 @@ export default function Settings({ params }: { params?: { section?: string } }) 
   const [, setLocation] = useLocation();
   const { theme } = useTheme();
   const section = params?.section ?? "profile";
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const accentGradient = theme === "dark"
     ? "linear-gradient(135deg, #BFA1E3, #9BDBF3)"
     : "linear-gradient(135deg, #FFBC80, #FFE29A)";
@@ -454,7 +455,7 @@ export default function Settings({ params }: { params?: { section?: string } }) 
   return (
     <div className="flex h-screen overflow-hidden bg-[#FFF9F2] dark:bg-white">
       {/* Main sidebar */}
-      <Sidebar />
+      <Sidebar mobileOpen={mobileNavOpen} onMobileOpenChange={setMobileNavOpen} />
 
       {/* Settings sub-nav */}
       <div className="w-52 shrink-0 border-r border-[#FFBC80]/25 dark:border-[#9BDBF3]/25 pt-6 pb-4 px-2 bg-[#FFF9F2] dark:bg-white overflow-y-auto">
@@ -484,7 +485,11 @@ export default function Settings({ params }: { params?: { section?: string } }) 
 
       {/* Settings content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopBar title="Settings" description="Configure your MONARCH workspace, team, and integrations." />
+        <TopBar
+          title="Settings"
+          description="Configure your MONARCH workspace, team, and integrations."
+          onMenuClick={() => setMobileNavOpen(true)}
+        />
         <main className={`flex-1 overflow-y-auto py-6 ${section === "integrations" ? "w-full px-[57px]" : "px-8 max-w-2xl"}`}>
           <PanelContent section={section} />
         </main>
