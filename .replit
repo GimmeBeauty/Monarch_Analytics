@@ -34,3 +34,6 @@ packages = ["pm2"]
 [userenv.shared]
 EMAIL_FROM = "Monarch <noreply@monarch.durhambrands.com>"
 APP_URL = "https://monarch.durhambrands.com"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-0a93251b-f78c-4410-8fc5-0513b8b8b877"
