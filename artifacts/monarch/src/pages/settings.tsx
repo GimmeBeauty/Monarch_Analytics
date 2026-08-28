@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   UserCircle, Users, CreditCard, CalendarClock, KeyRound, Palette,
-  Bell, Download, Plug, Camera, Check, Sun, Moon, Settings as SettingsIcon,
+  Bell, Download, Plug, Camera, Check, Settings as SettingsIcon,
   Lock, Copy, Trash2, Eye, EyeOff, ShieldAlert, Plus, Tag,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
@@ -179,7 +179,7 @@ function AppearancePanel() {
             {theme === "light" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#FFBC80]" />}
             <div className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #FFF9F2, #FFE29A)" }}>
-              <Sun size={16} className="text-[#3A3A3A]" />
+              <img src="/monarch-butterfly.png" alt="Monarch Mode" className="w-6 h-6 object-contain" />
             </div>
             <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Monarch Mode</p>
             <div className="mt-2 space-y-1.5">
@@ -200,7 +200,7 @@ function AppearancePanel() {
           >
             {theme === "dark" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#BFA1E3]" />}
             <div className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center bg-white border border-[#9BDBF3]">
-              <Moon size={16} className="text-[#BFA1E3]" />
+              <img src="/gimme-logo-icon.png" alt="Gimme Mode" className="w-5 h-5 object-contain" />
             </div>
             <p className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349]">Gimme Mode</p>
             <div className="mt-2 space-y-1.5">
