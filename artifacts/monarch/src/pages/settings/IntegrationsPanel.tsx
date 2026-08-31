@@ -99,6 +99,7 @@ const PROVIDERS: ProviderDef[] = [
     authMode: "oauth", oauthLabel: "Connect TikTok Shop",
     fields: [
       { key: "accessToken", label: "Access Token", secret: true, placeholder: "Enter access token" },
+      { key: "refreshToken", label: "Refresh Token", secret: true, placeholder: "Enter refresh token" },
       { key: "shopId", label: "Shop ID", placeholder: "Enter shop (seller) ID" },
     ],
   },

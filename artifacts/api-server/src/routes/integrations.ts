@@ -215,9 +215,30 @@ router.post("/:provider/credentials", authenticate, async (req, res) => {
       .where(eq(integrationsTable.provider, provider)).limit(1);
     const existingMeta = existing[0]?.metadata ? JSON.parse(existing[0].metadata) as Record<string, string> : {};
     const mergedMeta   = { ...existingMeta, ...incoming };
-    const accessToken  = existing[0]?.accessToken && existing[0].accessToken !== "manual"
-      ? existing[0].accessToken
-      : "manual";
+
+    let accessToken: string;
+    if (provider === "tiktok_shop") {
+      // Unlike other providers' manual fields (supplementary config next to a
+      // separate OAuth token), TikTok Shop's "Access Token" field IS the live
+      // bearer token tiktokShopSync.ts calls the API with via the `accessToken`
+      // column — it must never fall back to the "manual" placeholder used
+      // below, or every sync/backfill call silently authenticates as the
+      // literal string "manual" and fails. Also recovers a token stranded in
+      // metadata by a previous save that hit this bug.
+      accessToken =
+        incoming.accessToken ||
+        (existing[0]?.accessToken && existing[0].accessToken !== "manual" ? existing[0].accessToken : "") ||
+        existingMeta.accessToken ||
+        "";
+      if (!accessToken) {
+        res.status(400).json({ error: "Access Token is required to connect TikTok Shop" });
+        return;
+      }
+    } else {
+      accessToken = existing[0]?.accessToken && existing[0].accessToken !== "manual"
+        ? existing[0].accessToken
+        : "manual";
+    }
 
     await db.insert(integrationsTable)
       .values({ provider, accessToken, metadata: JSON.stringify(mergedMeta), status: "connected" })
