@@ -398,9 +398,17 @@ export async function getTikTokShopChannelData(start: string, end: string): Prom
     status = "connected";
   }
 
-  const metricRows = await db.select().from(tiktokShopDailyMetricsTable)
-    .where(sql`${tiktokShopDailyMetricsTable.date} BETWEEN ${start} AND ${end}`)
-    .orderBy(tiktokShopDailyMetricsTable.date);
+  let metricRows: Array<typeof tiktokShopDailyMetricsTable.$inferSelect> = [];
+  try {
+    metricRows = await db.select().from(tiktokShopDailyMetricsTable)
+      .where(sql`${tiktokShopDailyMetricsTable.date} BETWEEN ${start} AND ${end}`)
+      .orderBy(tiktokShopDailyMetricsTable.date);
+  } catch (err) {
+    // Never let a Postgres-side problem (e.g. a schema not yet migrated in
+    // this environment) take down the whole Attribution/Spend page — TikTok
+    // Shop is a supplementary channel, so degrade to "no rows" instead.
+    logger.error({ err }, "[tiktokShopSync] Failed to query tiktok_shop_daily_metrics — returning empty rows");
+  }
 
   return {
     status,
