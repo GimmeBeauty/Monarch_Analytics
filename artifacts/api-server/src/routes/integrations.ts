@@ -56,6 +56,18 @@ router.get("/", authenticate, async (_req, res) => {
         } catch { /* ignore */ }
       }
 
+      // TikTok Shop's "Access Token" field IS the live bearer token stored in
+      // the top-level accessToken column (see 63c2f97), not in metadata — so
+      // its saved/not-set status has to come from the real column, not
+      // metadata.accessToken.
+      if (
+        provider === "tiktok_shop" &&
+        row?.accessToken && row.accessToken !== "manual" &&
+        !savedFields.includes("accessToken")
+      ) {
+        savedFields = [...savedFields, "accessToken"];
+      }
+
       return {
         provider,
         connected:  !!row,
