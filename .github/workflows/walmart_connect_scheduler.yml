@@ -1,0 +1,33 @@
+name: Monarch Walmart Connect Scheduler
+on:
+  schedule:
+    - cron: '0 17 * * 0'  # Sunday 10:00am MST (17:00 UTC)
+  workflow_dispatch:
+jobs:
+  run-walmart-connect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install snowflake-connector-python requests python-dotenv cryptography python-dateutil boto3
+      - name: Create private key file
+        env:
+          GH_PRIVATE_KEY_B64: ${{ secrets.GH_PRIVATE_KEY_B64 }}
+        run: |
+          echo "$GH_PRIVATE_KEY_B64" | base64 -d > github_private_key.pem
+          chmod 600 github_private_key.pem
+      - name: Run Walmart Connect scheduler
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: github_private_key.pem
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: python3 walmart_connect_scheduler.py
