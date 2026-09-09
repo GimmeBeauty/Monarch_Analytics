@@ -22,5 +22,30 @@ FROM MONARCH_RAW.ADS.WALMART_CONNECT_RAW""")
     except Exception as e:
         print(f"❌ Walmart Connect error: {e}")
 
+def run_walmart_display():
+    print("Walmart Display Ads...")
+    try:
+        from ingestion.sources.walmart_display import run_walmart_display_ingestion
+        run_walmart_display_ingestion()
+        from snowflake_connect import get_connection
+        conn = get_connection(schema="ADS")
+        cur = conn.cursor()
+        cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE channel='walmart_display'")
+        conn.commit()
+        cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY
+(summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
+SELECT ad_date,'walmart_display',SUM(spend),SUM(impressions),SUM(clicks),SUM(attributed_transactions),SUM(attributed_sales),
+AVG(ctr),CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END,
+CASE WHEN SUM(impressions)>0 THEN SUM(spend)/SUM(impressions)*1000 ELSE 0 END,
+CASE WHEN SUM(spend)>0 THEN SUM(attributed_sales)/SUM(spend) ELSE 0 END
+FROM MONARCH_RAW.ADS.WALMART_DISPLAY_RAW
+GROUP BY ad_date""")
+        conn.commit()
+        cur.close(); conn.close()
+        print("✅ Walmart Display done")
+    except Exception as e:
+        print(f"❌ Walmart Display error: {e}")
+
 if __name__ == "__main__":
     run_walmart_connect()
+    run_walmart_display()
