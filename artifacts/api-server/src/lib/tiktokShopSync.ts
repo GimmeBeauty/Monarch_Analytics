@@ -146,6 +146,14 @@ async function runSync(): Promise<void> {
 
   let accessToken = row.accessToken;
   let refreshToken = loaded.meta.refreshToken;
+  // Set once refreshTikTokShopToken() actually mints a new pair, so it can
+  // still be persisted even if the immediately-following retry call fails for
+  // an unrelated reason (e.g. a scope/permission error misclassified as auth
+  // by tiktokShop.ts's looksLikeAuthOrPermission heuristic). TikTok's refresh
+  // may also rotate/invalidate the old refresh_token on use, so failing to
+  // persist the new pair here can strand the connection with a refresh_token
+  // that no longer even works.
+  let refreshedToken: { accessToken: string; refreshToken: string } | null = null;
 
   try {
     let shopCipher = loaded.meta.shopCipher;
@@ -173,6 +181,7 @@ async function runSync(): Promise<void> {
       if (!refreshToken) throw err;
       const fresh = await refreshTikTokShopToken(TIKTOK_SHOP_APP_KEY, TIKTOK_SHOP_SECRET, refreshToken);
       if (!fresh) throw err;
+      refreshedToken = fresh;
       accessToken  = fresh.accessToken;
       refreshToken = fresh.refreshToken;
       metrics = await fetchShopAdsPerformance(
@@ -191,12 +200,19 @@ async function runSync(): Promise<void> {
     logger.info({ days: metrics.length }, "[tiktokShopSync] Synced TikTok Shop ad metrics");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Persist a minted refresh regardless of how the sync ultimately failed —
+    // see the comment on refreshedToken above.
+    const tokenPatch = refreshedToken ? { accessToken: refreshedToken.accessToken } : {};
+    const metaPatch = {
+      lastSyncError: message,
+      ...(refreshedToken ? { refreshToken: refreshedToken.refreshToken } : {}),
+    };
     if (err instanceof TikTokShopAuthError) {
       logger.warn({ err: message }, "[tiktokShopSync] Auth failure — marking needs reconnect");
-      await patchIntegration({ status: "expired" }, { lastSyncError: message });
+      await patchIntegration({ ...tokenPatch, status: "expired" }, metaPatch);
     } else {
       logger.warn({ err: message }, "[tiktokShopSync] Sync failed — keeping last-known data");
-      await patchIntegration({}, { lastSyncError: message });
+      await patchIntegration(tokenPatch, metaPatch);
     }
   }
 
