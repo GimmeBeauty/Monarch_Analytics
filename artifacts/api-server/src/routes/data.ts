@@ -133,7 +133,8 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
-  walmart_connect: { channelId: "walmart-connect", channelLabel: "Walmart Connect", color: "#0071CE", channelFamily: "rmn", storeIds: ["walmart"] },
+  walmart_connect: { channelId: "walmart-connect", channelLabel: "Walmart Sponsored Search", color: "#0071CE", channelFamily: "rmn", storeIds: ["walmart"] },
+  walmart_display: { channelId: "walmart-display", channelLabel: "Walmart Display", color: "#004F9A", channelFamily: "rmn", storeIds: ["walmart"] },
   amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
   ctv_programmatic: { channelId: "ctv-programmatic", channelLabel: "CTV / Programmatic", color: "#6B46C1", channelFamily: "core", storeIds: ["target", "amazon"] },
   display_ads:      { channelId: "display-ads",      channelLabel: "Display",              color: "#F97316", channelFamily: "core", storeIds: ["target", "amazon"] },
@@ -606,7 +607,7 @@ router.get("/overview", authenticate, async (req, res) => {
   if (isShopifySelected)                 activeChannels.push("meta_ads", "google_ads", "pinterest_ads");
   if (isUltaSelected)                    activeChannels.push("criteo_ads");
   if (includesTarget)                    activeChannels.push("roundel_target");
-  if (isWalmartSelected)                 activeChannels.push("walmart_connect");
+  if (isWalmartSelected)                 activeChannels.push("walmart_connect", "walmart_display");
   if (isAmazonSelected)                  activeChannels.push("amazon_ads");
   if (includesTarget || isAmazonSelected) activeChannels.push("ctv_programmatic", "display_ads");
   const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
@@ -3468,7 +3469,7 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
 
 // ─── GET /api/data/ads/channel-detail ────────────────────────────────────────
 
-const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "walmart_connect", "ctv_programmatic", "display_ads"]);
+const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "walmart_connect", "walmart_display", "ctv_programmatic", "display_ads"]);
 
 router.get("/ads/channel-detail", authenticate, async (req, res) => {
   const { channel: channelRaw, start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
@@ -3478,7 +3479,7 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
 
   const channel = channelRaw?.toLowerCase().trim() ?? "";
   if (!VALID_DETAIL_CHANNELS.has(channel)) {
-    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, walmart_connect, ctv_programmatic, display_ads" });
+    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, walmart_connect, walmart_display, ctv_programmatic, display_ads" });
     return;
   }
 
@@ -3788,6 +3789,75 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
           instoreSales14d: Math.round(Number(agg["INSTORE_SALES_14D"] ?? agg["instore_sales_14d"] ?? 0) * 100) / 100,
         },
         isEmpty: Number(agg["IMPRESSIONS"] ?? agg["impressions"] ?? 0) === 0,
+      });
+
+    } else if (channel === "walmart_display") {
+      const [campaignRows, aggRows] = await Promise.all([
+        querySnowflake(`
+          SELECT
+            campaign_name,
+            SUM(spend)                    AS spend,
+            SUM(impressions)               AS impressions,
+            SUM(clicks)                    AS clicks,
+            SUM(attributed_sales)          AS attributed_sales,
+            SUM(attributed_units)          AS attributed_units,
+            SUM(attributed_transactions)   AS attributed_transactions
+          FROM ${DB_NAME}.ADS.WALMART_DISPLAY_RAW
+          WHERE ad_date BETWEEN '${start}' AND '${end}'
+          GROUP BY 1
+          ORDER BY spend DESC
+          LIMIT 50
+        `),
+        querySnowflake(`
+          SELECT
+            SUM(household_reach)      AS household_reach,
+            AVG(household_frequency)  AS household_frequency,
+            AVG(add_to_cart_rate)     AS add_to_cart_rate
+          FROM ${DB_NAME}.ADS.WALMART_DISPLAY_RAW
+          WHERE ad_date BETWEEN '${start}' AND '${end}'
+        `),
+      ]);
+
+      const campaigns = campaignRows.map(r => {
+        const spend           = Number(r["SPEND"]           ?? r["spend"]           ?? 0);
+        const attributedSales = Number(r["ATTRIBUTED_SALES"] ?? r["attributed_sales"] ?? 0);
+        const roas            = spend > 0 ? attributedSales / spend : 0;
+        return {
+          campaignName:           String(r["CAMPAIGN_NAME"] ?? r["campaign_name"] ?? ""),
+          spend:                  Math.round(spend * 100) / 100,
+          impressions:            Math.round(Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0)),
+          clicks:                 Math.round(Number(r["CLICKS"]      ?? r["clicks"]      ?? 0)),
+          attributedSales:        Math.round(attributedSales * 100) / 100,
+          roas:                   Math.round(roas * 100) / 100,
+          attributedUnits:        Math.round(Number(r["ATTRIBUTED_UNITS"]        ?? r["attributed_units"]        ?? 0)),
+          attributedTransactions: Math.round(Number(r["ATTRIBUTED_TRANSACTIONS"] ?? r["attributed_transactions"] ?? 0)),
+        };
+      });
+
+      const tSpend           = campaigns.reduce((s, c) => s + c.spend, 0);
+      const tImpr            = campaigns.reduce((s, c) => s + c.impressions, 0);
+      const tClicks          = campaigns.reduce((s, c) => s + c.clicks, 0);
+      const tAttributedSales = campaigns.reduce((s, c) => s + c.attributedSales, 0);
+      const blRoas           = tSpend > 0 ? tAttributedSales / tSpend : 0;
+      const blCtr            = tImpr  > 0 ? (tClicks / tImpr) * 100 : 0;
+
+      const agg = aggRows[0] ?? {};
+
+      res.json({
+        channel: "walmart_display",
+        kpis: {
+          impressions:        tImpr,
+          clicks:              tClicks,
+          ctr:                 Math.round(blCtr * 100) / 100,
+          spend:               Math.round(tSpend * 100) / 100,
+          attributedSales:     Math.round(tAttributedSales * 100) / 100,
+          roas:                Math.round(blRoas * 100) / 100,
+          householdReach:      Math.round(Number(agg["HOUSEHOLD_REACH"]     ?? agg["household_reach"]     ?? 0)),
+          householdFrequency:  Math.round(Number(agg["HOUSEHOLD_FREQUENCY"] ?? agg["household_frequency"] ?? 0) * 100) / 100,
+          addToCartRate:       Math.round(Number(agg["ADD_TO_CART_RATE"]    ?? agg["add_to_cart_rate"]    ?? 0) * 100) / 100,
+        },
+        campaigns,
+        isEmpty: campaigns.length === 0,
       });
 
     } else {

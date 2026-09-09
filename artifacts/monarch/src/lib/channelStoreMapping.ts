@@ -138,11 +138,20 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
   },
   {
     channelId: "walmart-connect",
-    channelLabel: "Walmart Connect",
+    channelLabel: "Walmart Sponsored Search",
     storeIds: ["walmart"],
     dailySpendBaseline: 5200,
     baseRoas: 4.3,
     color: "#0071CE",
+    channelFamily: "rmn",
+  },
+  {
+    channelId: "walmart-display",
+    channelLabel: "Walmart Display",
+    storeIds: ["walmart"],
+    dailySpendBaseline: 2400,
+    baseRoas: 3.6,
+    color: "#004F9A",
     channelFamily: "rmn",
   },
   {

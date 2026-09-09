@@ -292,6 +292,23 @@ interface WalmartConnectDetailData {
   isEmpty: boolean;
 }
 
+interface WalmartDisplayCampaign {
+  campaignName: string;
+  spend: number; impressions: number; clicks: number;
+  attributedSales: number; roas: number;
+  attributedUnits: number; attributedTransactions: number;
+}
+interface WalmartDisplayDetailData {
+  channel: "walmart_display";
+  kpis: {
+    impressions: number; clicks: number; ctr: number; spend: number;
+    attributedSales: number; roas: number;
+    householdReach: number; householdFrequency: number; addToCartRate: number;
+  };
+  campaigns: WalmartDisplayCampaign[];
+  isEmpty: boolean;
+}
+
 interface BlendedSourceRow {
   source: string;
   spend: number; impressions: number; revenue: number; roas: number;
@@ -322,6 +339,7 @@ type ChannelDetailData =
   | CriteoDetailData
   | RoundelDetailData
   | WalmartConnectDetailData
+  | WalmartDisplayDetailData
   | CtvProgrammaticDetailData
   | DisplayDetailData;
 
@@ -332,6 +350,7 @@ const CHANNEL_ID_TO_PARAM: Record<string, string> = {
   "criteo-ads":       "criteo",
   "roundel-target":   "roundel",
   "walmart-connect":  "walmart_connect",
+  "walmart-display":  "walmart_display",
   "ctv-programmatic": "ctv_programmatic",
   "display-ads":      "display_ads",
 };
@@ -648,6 +667,67 @@ function WalmartConnectDetailPanel({ data }: { data: WalmartConnectDetailData })
   );
 }
 
+// ─── Walmart Display Detail Panel ─────────────────────────────────────────────
+
+function WalmartDisplayDetailPanel({ data }: { data: WalmartDisplayDetailData }) {
+  const k = data.kpis;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <SmallKpiCard label="Impressions"         value={fmtNumber(k.impressions)} />
+        <SmallKpiCard label="Clicks"              value={fmtNumber(k.clicks)} />
+        <SmallKpiCard label="CTR"                 value={`${k.ctr.toFixed(2)}%`} />
+        <SmallKpiCard label="Spend"                value={fmtCurrency(k.spend)} />
+        <SmallKpiCard label="Attributed Sales"     value={fmtCurrency(k.attributedSales)} />
+        <SmallKpiCard
+          label="ROAS"
+          value={`${k.roas.toFixed(2)}x`}
+          sub={k.roas >= 3 ? "Strong" : k.roas >= 1.5 ? "Moderate" : "Below target"}
+        />
+        <SmallKpiCard label="Household Reach"      value={fmtNumber(k.householdReach)} />
+        <SmallKpiCard label="Household Frequency"  value={`${k.householdFrequency.toFixed(1)}x`} />
+        <SmallKpiCard label="Add to Cart Rate"     value={`${k.addToCartRate.toFixed(2)}%`} />
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+        <table className="w-full text-xs min-w-[740px]">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
+            <tr>
+              <th className={`${TH} min-w-[200px]`}>Campaign</th>
+              <th className={THR}>Spend</th>
+              <th className={THR}>Impr.</th>
+              <th className={THR}>Clicks</th>
+              <th className={THR}>Attr. Sales</th>
+              <th className={THR}>ROAS</th>
+              <th className={THR}>Attr. Units</th>
+              <th className={THR}>Attr. Transactions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.campaigns.map((c, i) => (
+              <tr key={i} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
+                <td className={TDL}>
+                  <span className="line-clamp-1 max-w-[240px] block">{c.campaignName}</span>
+                </td>
+                <td className={TD}>{fmtCurrency(c.spend)}</td>
+                <td className={TD}>{fmtNumber(c.impressions)}</td>
+                <td className={TD}>{fmtNumber(c.clicks)}</td>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
+                  {fmtCurrency(c.attributedSales)}
+                </td>
+                <td className={`${TD} font-semibold ${roasTextColor(c.roas)}`}>
+                  {c.roas.toFixed(2)}x
+                </td>
+                <td className={TD}>{fmtNumber(c.attributedUnits)}</td>
+                <td className={TD}>{fmtNumber(c.attributedTransactions)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Blended Source/Campaign Table (shared by CTV/Programmatic + Display) ────
 
 function BlendedDetailBody({ data, accentColor, note }: { data: { kpis: { spend: number; impressions: number; revenue: number; roas: number }; bySource: BlendedSourceRow[]; byCampaign: BlendedCampaignRow[] }; accentColor: string; note: string }) {
@@ -777,6 +857,7 @@ function ChannelDetailPanel({ channelId, start, end }: { channelId: string; star
   if (data.channel === "criteo")    return <CriteoDetailPanel    data={data} />;
   if (data.channel === "roundel")   return <RoundelDetailPanel   data={data} />;
   if (data.channel === "walmart_connect") return <WalmartConnectDetailPanel data={data} />;
+  if (data.channel === "walmart_display") return <WalmartDisplayDetailPanel data={data} />;
   if (data.channel === "ctv_programmatic") return <CtvProgrammaticDetailPanel data={data} />;
   if (data.channel === "display_ads")      return <DisplayDetailPanel         data={data} />;
 
