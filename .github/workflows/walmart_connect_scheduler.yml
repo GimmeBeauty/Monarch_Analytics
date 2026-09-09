@@ -1,7 +1,7 @@
 name: Monarch Walmart Connect Scheduler
 on:
   schedule:
-    - cron: '0 17 * * 0'  # Sunday 10:00am MST (17:00 UTC)
+    - cron: '0 17 * * 1'  # Monday 10:00am MST (17:00 UTC)
   workflow_dispatch:
 jobs:
   run-walmart-connect:
