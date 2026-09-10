@@ -21,11 +21,13 @@ def _upsert_weekly_to_daily(cur, rows):
         w_rev    = _parse_money(row.get('Attributed Total Sales', 0))
         w_clicks = _parse_money(row.get('Clicks', 0))
         w_impr   = _parse_money(row.get('Impressions', 0))
+        w_orders = _parse_money(row.get('Attributed Total Orders', 0))
 
         d_spend  = w_spend  / 7
         d_rev    = w_rev    / 7
         d_clicks = round(w_clicks / 7)
         d_impr   = round(w_impr   / 7)
+        d_orders = round(w_orders / 7)
         d_ctr    = f"{(d_clicks / d_impr * 100):.6f}" if d_impr > 0 else "NULL"
         d_cpc    = f"{(d_spend  / d_clicks):.6f}"     if d_clicks > 0 else "NULL"
         d_cpm    = f"{(d_spend  / d_impr * 1000):.6f}" if d_impr > 0 else "NULL"
@@ -37,7 +39,7 @@ def _upsert_weekly_to_daily(cur, rows):
 
         values = ", ".join(
             f"('{(week_start + timedelta(days=i)).isoformat()}', 'roundel_target', "
-            f"{d_spend:.6f}, {d_impr}, {d_clicks}, 0, {d_rev:.6f}, "
+            f"{d_spend:.6f}, {d_impr}, {d_clicks}, {d_orders}, {d_rev:.6f}, "
             f"{d_ctr}, {d_cpc}, {d_cpm}, {d_roas}, CURRENT_TIMESTAMP)"
             for i in range(7)
         )
@@ -61,7 +63,8 @@ def backfill_roundel_daily(from_date="2025-01-01"):
           TRY_CAST(REGEXP_REPLACE(raw_data:"Actualized Vendor Spend"::STRING,'[$,]','') AS FLOAT) AS spend,
           TRY_CAST(REGEXP_REPLACE(raw_data:"Attributed Total Sales"::STRING, '[$,]','') AS FLOAT) AS revenue,
           TRY_CAST(REGEXP_REPLACE(raw_data:"Clicks"::STRING,                 '[$,]','') AS FLOAT) AS clicks,
-          TRY_CAST(REGEXP_REPLACE(raw_data:"Impressions"::STRING,            '[$,]','') AS FLOAT) AS impressions
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Impressions"::STRING,            '[$,]','') AS FLOAT) AS impressions,
+          TRY_CAST(REGEXP_REPLACE(raw_data:"Attributed Total Orders"::STRING,'[$,]','') AS FLOAT) AS orders
         FROM MONARCH_RAW.ROUNDEL.ROUNDEL_ADS_RAW
         WHERE report_type = 'Weekly Performance'
           AND TRY_CAST(SPLIT_PART(raw_data:"Week"::STRING,' to ',1) AS DATE) >= '{from_date}'
@@ -79,6 +82,7 @@ def backfill_roundel_daily(from_date="2025-01-01"):
             'Attributed Total Sales':   str(d['revenue']     or 0),
             'Clicks':                   str(d['clicks']      or 0),
             'Impressions':              str(d['impressions'] or 0),
+            'Attributed Total Orders':  str(d['orders']      or 0),
         })
     print(f"  Backfilling {len(rows)} weekly rows into DAILY_AD_SUMMARY...")
     _upsert_weekly_to_daily(cur, rows)

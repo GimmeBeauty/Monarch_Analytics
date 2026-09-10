@@ -3469,7 +3469,7 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
 
 // ─── GET /api/data/ads/channel-detail ────────────────────────────────────────
 
-const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "walmart_connect", "walmart_display", "ctv_programmatic", "display_ads"]);
+const VALID_DETAIL_CHANNELS = new Set(["meta", "google", "pinterest", "criteo", "roundel", "walmart_connect", "walmart_display", "ctv_programmatic", "display_ads", "amazon"]);
 
 router.get("/ads/channel-detail", authenticate, async (req, res) => {
   const { channel: channelRaw, start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
@@ -3479,7 +3479,7 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
 
   const channel = channelRaw?.toLowerCase().trim() ?? "";
   if (!VALID_DETAIL_CHANNELS.has(channel)) {
-    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, walmart_connect, walmart_display, ctv_programmatic, display_ads" });
+    res.status(400).json({ error: "Invalid channel — must be one of: meta, google, pinterest, criteo, roundel, walmart_connect, walmart_display, ctv_programmatic, display_ads, amazon" });
     return;
   }
 
@@ -3855,6 +3855,68 @@ router.get("/ads/channel-detail", authenticate, async (req, res) => {
           householdReach:      Math.round(Number(agg["HOUSEHOLD_REACH"]     ?? agg["household_reach"]     ?? 0)),
           householdFrequency:  Math.round(Number(agg["HOUSEHOLD_FREQUENCY"] ?? agg["household_frequency"] ?? 0) * 100) / 100,
           addToCartRate:       Math.round(Number(agg["ADD_TO_CART_RATE"]    ?? agg["add_to_cart_rate"]    ?? 0) * 100) / 100,
+        },
+        campaigns,
+        isEmpty: campaigns.length === 0,
+      });
+
+    } else if (channel === "amazon") {
+      const rows = await querySnowflake(`
+        SELECT
+          campaign_id,
+          campaign_name,
+          SUM(spend)        AS spend,
+          SUM(impressions)  AS impressions,
+          SUM(clicks)       AS clicks,
+          SUM(ad_revenue)   AS revenue,
+          SUM(conversions)  AS conversions,
+          SUM(clicks)::FLOAT / NULLIF(SUM(impressions), 0) * 100 AS ctr,
+          SUM(spend)::FLOAT  / NULLIF(SUM(clicks), 0)             AS cpc,
+          SUM(spend)::FLOAT  / NULLIF(SUM(impressions), 0) * 1000 AS cpm
+        FROM ${DB_NAME}.ADS.AMAZON_ADS_RAW
+        WHERE ad_date BETWEEN '${start}' AND '${end}'
+        GROUP BY campaign_id, campaign_name
+        ORDER BY spend DESC
+        LIMIT 50
+      `);
+
+      const campaigns = rows.map(r => {
+        const spend   = Number(r["SPEND"]   ?? r["spend"]   ?? 0);
+        const revenue = Number(r["REVENUE"] ?? r["revenue"] ?? 0);
+        const roas    = spend > 0 ? revenue / spend : 0;
+        return {
+          campaignId:   String(r["CAMPAIGN_ID"]   ?? r["campaign_id"]   ?? ""),
+          campaignName: String(r["CAMPAIGN_NAME"] ?? r["campaign_name"] ?? ""),
+          spend:        Math.round(spend * 100) / 100,
+          impressions:  Math.round(Number(r["IMPRESSIONS"] ?? r["impressions"] ?? 0)),
+          clicks:       Math.round(Number(r["CLICKS"]      ?? r["clicks"]      ?? 0)),
+          revenue:      Math.round(revenue * 100) / 100,
+          conversions:  Math.round(Number(r["CONVERSIONS"] ?? r["conversions"] ?? 0)),
+          ctr:          Math.round(Number(r["CTR"] ?? r["ctr"] ?? 0) * 100) / 100,
+          cpc:          Math.round(Number(r["CPC"] ?? r["cpc"] ?? 0) * 100) / 100,
+          cpm:          Math.round(Number(r["CPM"] ?? r["cpm"] ?? 0) * 100) / 100,
+          roas:         Math.round(roas * 100) / 100,
+        };
+      });
+
+      const tSpend       = campaigns.reduce((s, c) => s + c.spend, 0);
+      const tImpr        = campaigns.reduce((s, c) => s + c.impressions, 0);
+      const tClicks      = campaigns.reduce((s, c) => s + c.clicks, 0);
+      const tRevenue     = campaigns.reduce((s, c) => s + c.revenue, 0);
+      const tConversions = campaigns.reduce((s, c) => s + c.conversions, 0);
+      const blCtr        = tImpr  > 0 ? (tClicks / tImpr) * 100 : 0;
+      const blRoas       = tSpend > 0 ? tRevenue / tSpend : 0;
+
+      res.json({
+        channel: "amazon",
+        kpis: {
+          impressions: tImpr,
+          clicks:      tClicks,
+          ctr:         Math.round(blCtr * 100) / 100,
+          spend:       Math.round(tSpend * 100) / 100,
+          revenue:     Math.round(tRevenue * 100) / 100,
+          roas:        Math.round(blRoas * 100) / 100,
+          conversions: tConversions,
         },
         campaigns,
         isEmpty: campaigns.length === 0,

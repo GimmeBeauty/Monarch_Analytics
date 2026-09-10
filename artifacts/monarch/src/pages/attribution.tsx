@@ -9,6 +9,8 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useDateRange } from "@/context/DateRangeContext";
 import { useStoreFilter } from "@/context/StoreFilterContext";
+import { usePricingMode } from "@/context/PricingModeContext";
+import { NS_STORE_ID, CIRCANA_STORE_IDS } from "@/lib/companyRevenue";
 import { getChannelsForStores, type ChannelMapping } from "@/lib/channelStoreMapping";
 import { type BlendedMetric, type AdSignal, type ChannelFunnel, type AdvancedRow, type SignalType } from "@/lib/adAttributionData";
 import { API_BASE } from "@/lib/apiBase";
@@ -254,6 +256,18 @@ interface GoogleDetailData {
   isEmpty: boolean;
 }
 
+interface AmazonCampaign {
+  campaignId: string; campaignName: string;
+  spend: number; impressions: number; clicks: number;
+  revenue: number; conversions: number; ctr: number; cpc: number; cpm: number; roas: number;
+}
+interface AmazonDetailData {
+  channel: "amazon";
+  kpis: { impressions: number; clicks: number; ctr: number; spend: number; revenue: number; roas: number; conversions: number };
+  campaigns: AmazonCampaign[];
+  isEmpty: boolean;
+}
+
 interface PinterestDetailData {
   channel: "pinterest";
   kpis: { spend: number; impressions: number; clicks: number; engagements: number; ctr: number };
@@ -341,7 +355,8 @@ type ChannelDetailData =
   | WalmartConnectDetailData
   | WalmartDisplayDetailData
   | CtvProgrammaticDetailData
-  | DisplayDetailData;
+  | DisplayDetailData
+  | AmazonDetailData;
 
 const CHANNEL_ID_TO_PARAM: Record<string, string> = {
   "meta-ads":         "meta",
@@ -353,6 +368,7 @@ const CHANNEL_ID_TO_PARAM: Record<string, string> = {
   "walmart-display":  "walmart_display",
   "ctv-programmatic": "ctv_programmatic",
   "display-ads":      "display_ads",
+  "amazon-ads":       "amazon",
 };
 
 // ─── Channel Detail Hook ──────────────────────────────────────────────────────
@@ -503,6 +519,63 @@ function GoogleDetailPanel({ data }: { data: GoogleDetailData }) {
                 <td className={`${TD} font-semibold ${roasTextColor(c.roas)}`}>
                   {c.roas.toFixed(2)}x
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Amazon Detail Panel ──────────────────────────────────────────────────────
+
+function AmazonDetailPanel({ data }: { data: AmazonDetailData }) {
+  const k = data.kpis;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <SmallKpiCard label="Impressions" value={fmtNumber(k.impressions)} />
+        <SmallKpiCard label="Clicks"      value={fmtNumber(k.clicks)} />
+        <SmallKpiCard label="CTR"         value={`${k.ctr.toFixed(2)}%`} />
+        <SmallKpiCard label="Spend"       value={fmtCurrency(k.spend)} />
+        <SmallKpiCard label="Ad Revenue"  value={fmtCurrency(k.revenue)} />
+        <SmallKpiCard
+          label="ROAS"
+          value={`${k.roas.toFixed(2)}x`}
+          sub={k.roas >= 3 ? "Strong" : k.roas >= 1.5 ? "Moderate" : "Below target"}
+        />
+        <SmallKpiCard label="Conversions" value={fmtNumber(k.conversions)} />
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-[#FFBC80]/15 dark:border-[#9BDBF3]/15">
+        <table className="w-full text-xs min-w-[740px]">
+          <thead className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4">
+            <tr>
+              <th className={`${TH} min-w-[200px]`}>Campaign</th>
+              <th className={THR}>Spend</th>
+              <th className={THR}>Impr.</th>
+              <th className={THR}>Clicks</th>
+              <th className={THR}>Ad Revenue</th>
+              <th className={THR}>ROAS</th>
+              <th className={THR}>Conversions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.campaigns.map(c => (
+              <tr key={c.campaignId} className="border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 hover:bg-[#FFBC80]/4 dark:hover:bg-[#EFBAE1]/4 transition-colors">
+                <td className={TDL}>
+                  <span className="line-clamp-1 max-w-[240px] block">{c.campaignName}</span>
+                </td>
+                <td className={TD}>{fmtCurrency(c.spend)}</td>
+                <td className={TD}>{fmtNumber(c.impressions)}</td>
+                <td className={TD}>{fmtNumber(c.clicks)}</td>
+                <td className={`${TD} text-emerald-600 dark:text-emerald-700 font-semibold`}>
+                  {fmtCurrency(c.revenue)}
+                </td>
+                <td className={`${TD} font-semibold ${roasTextColor(c.roas)}`}>
+                  {c.roas.toFixed(2)}x
+                </td>
+                <td className={TD}>{fmtNumber(c.conversions)}</td>
               </tr>
             ))}
           </tbody>
@@ -860,6 +933,7 @@ function ChannelDetailPanel({ channelId, start, end }: { channelId: string; star
   if (data.channel === "walmart_display") return <WalmartDisplayDetailPanel data={data} />;
   if (data.channel === "ctv_programmatic") return <CtvProgrammaticDetailPanel data={data} />;
   if (data.channel === "display_ads")      return <DisplayDetailPanel         data={data} />;
+  if (data.channel === "amazon")           return <AmazonDetailPanel          data={data} />;
 
   return <DetailEmpty />;
 }
@@ -1245,6 +1319,8 @@ function AdvancedTable({ rows }: { rows: AdvancedRow[] }) {
 export default function Attribution() {
   const { dateRange } = useDateRange();
   const { selectedIds: storeIds } = useStoreFilter();
+  const { isWholesale } = usePricingMode();
+  const includesCircana = storeIds.length === 0 || storeIds.some(id => CIRCANA_STORE_IDS.includes(id));
 
   const allChannels = useMemo(() => getChannelsForStores(storeIds), [storeIds]);
 
@@ -1316,6 +1392,68 @@ export default function Attribution() {
     retry: false,
   });
 
+  // ─── Fetch total company revenue (for MER) — mirrors Overview's per-mode revenue source ───
+
+  const { data: revenueApiData } = useQuery<{ revenue: number; isEmpty: boolean }>({
+    queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, storeIds.join(","), "", "", isWholesale],
+    queryFn: async () => {
+      const storeParam = storeIds.length ? `&storeIds=${storeIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/overview?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=&priorEnd=&isWholesale=${isWholesale}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: !isWholesale,
+  });
+
+  const { data: wholesaleRevenueData } = useQuery<{ byStore: Array<{ storeName: string; revenue: number }>; isEmpty: boolean }>({
+    queryKey: ["netsuite-sales", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isWholesale,
+  });
+
+  const { data: circanaRevenueData } = useQuery<{ items: Array<{ storeId: string; revenue: number }>; isStale: boolean }>({
+    queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, storeIds.join(",")],
+    queryFn: async () => {
+      const storeParam = storeIds.length ? `&storeIds=${storeIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/circana/summary?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: !isWholesale && includesCircana,
+  });
+
+  const totalCompanyRevenue = useMemo(() => {
+    if (isWholesale) {
+      const byStore = wholesaleRevenueData?.byStore ?? [];
+      const filtered = storeIds.length > 0
+        ? byStore.filter(s => storeIds.includes(NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-")))
+        : byStore;
+      return filtered.reduce((sum, s) => sum + s.revenue, 0);
+    }
+    const baseRevenue = revenueApiData?.revenue ?? 0;
+    const circanaItems = circanaRevenueData && !circanaRevenueData.isStale ? circanaRevenueData.items : [];
+    return baseRevenue + circanaItems.reduce((sum, s) => sum + s.revenue, 0);
+  }, [isWholesale, wholesaleRevenueData, revenueApiData, circanaRevenueData, storeIds]);
+
   // ─── Derive channel rows + blended metrics ────────────────────────────────
 
   function fmtC(v: number): string {
@@ -1351,20 +1489,22 @@ export default function Attribution() {
     const tSpend  = channelRows.reduce((s, c) => s + c.spend,  0);
     const tRev    = channelRows.reduce((s, c) => s + c.revenue, 0);
     const tImpr   = channelRows.reduce((s, c) => s + c.impressions, 0);
-    const tClicks = channelRows.reduce((s, c) => s + c.impressions > 0 ? c.ctr / 100 * c.impressions : 0, 0);
+    const tClicks = channelRows.reduce((s, c) => s + (c.impressions > 0 ? c.ctr / 100 * c.impressions : 0), 0);
     const blRoas  = tSpend  > 0 ? tRev    / tSpend  : 0;
+    const blMer   = tSpend  > 0 ? totalCompanyRevenue / tSpend : 0;
     const blCtr   = tImpr   > 0 ? (tClicks / tImpr)  * 100 : 0;
     const blCpm   = tImpr   > 0 ? (tSpend  / tImpr)  * 1000 : 0;
     const blCpc   = tClicks > 0 ? tSpend  / tClicks : 0;
 
     const blendedMetrics: BlendedMetric[] = [
-      { id: "spend",       label: "Total Spend",   value: tSpend,  formatted: fmtC(tSpend),            change: 0, positiveIsUp: false, description: "Aggregate ad spend across all channels" },
-      { id: "revenue",     label: "Total Revenue", value: tRev,    formatted: fmtC(tRev),              change: 0, positiveIsUp: true,  description: "Attributed revenue across all channels" },
-      { id: "roas",        label: "Blended ROAS",  value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend" },
-      { id: "ctr",         label: "Blended CTR",   value: blCtr,   formatted: `${blCtr.toFixed(2)}%`,  change: 0, positiveIsUp: true,  description: "Clicks ÷ Impressions" },
-      { id: "impressions", label: "Impressions",   value: tImpr,   formatted: tImpr >= 1e6 ? `${(tImpr/1e6).toFixed(1)}M` : tImpr >= 1e3 ? `${(tImpr/1e3).toFixed(1)}K` : tImpr.toLocaleString(), change: 0, positiveIsUp: true, description: "Total impressions" },
-      { id: "cpm",         label: "Blended CPM",   value: blCpm,   formatted: fmtC(blCpm),             change: 0, positiveIsUp: false, description: "Cost per 1K impressions" },
-      { id: "cpc",         label: "Blended CPC",   value: blCpc,   formatted: `$${blCpc.toFixed(2)}`,  change: 0, positiveIsUp: false, description: "Cost per click" },
+      { id: "spend",       label: "Total Ad Spend",    value: tSpend,  formatted: fmtC(tSpend),            change: 0, positiveIsUp: false, description: "Aggregate ad spend across all channels" },
+      { id: "revenue",     label: "Total Ad Revenue",  value: tRev,    formatted: fmtC(tRev),              change: 0, positiveIsUp: true,  description: "Attributed revenue across all channels" },
+      { id: "roas",        label: "Blended ROAS",      value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend" },
+      { id: "mer",         label: "MER",               value: blMer,   formatted: `${blMer.toFixed(2)}x`,  change: 0, positiveIsUp: true,  description: "Total Company Revenue ÷ Total Ad Spend" },
+      { id: "ctr",         label: "Blended CTR",       value: blCtr,   formatted: `${blCtr.toFixed(2)}%`,  change: 0, positiveIsUp: true,  description: "Clicks ÷ Impressions" },
+      { id: "impressions", label: "Impressions",       value: tImpr,   formatted: tImpr >= 1e6 ? `${(tImpr/1e6).toFixed(1)}M` : tImpr >= 1e3 ? `${(tImpr/1e3).toFixed(1)}K` : tImpr.toLocaleString(), change: 0, positiveIsUp: true, description: "Total impressions" },
+      { id: "cpm",         label: "Blended CPM",       value: blCpm,   formatted: fmtC(blCpm),             change: 0, positiveIsUp: false, description: "Cost per 1K impressions" },
+      { id: "cpc",         label: "Blended CPC",       value: blCpc,   formatted: `$${blCpc.toFixed(2)}`,  change: 0, positiveIsUp: false, description: "Cost per click" },
     ];
 
     // ── Signals ───────────────────────────────────────────────────────────────
@@ -1435,7 +1575,7 @@ export default function Attribution() {
     });
 
     return { blendedMetrics, channelRows, signals, funnels, advanced };
-  }, [attrApiData, filterChannelIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attrApiData, filterChannelIds, totalCompanyRevenue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [funnelChannelId, setFunnelChannelId] = useState<string>("");
   const effectiveFunnelId = funnelChannelId || channelRows[0]?.channelId || "";
