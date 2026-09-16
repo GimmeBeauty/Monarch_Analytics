@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { LayoutDashboard, Users, Plug, Building2 } from "lucide-react";
+import { LayoutDashboard, Users, Plug, Building2, ShoppingBag, Megaphone, Store, ArrowRight } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { brandGradient } from "@/lib/brandGradient";
 import Footer from "@/components/layout/Footer";
@@ -14,9 +14,9 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative rounded-2xl monarch-card p-6 md:p-8">
+    <div className="group relative rounded-2xl monarch-card p-6 md:p-8 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#FFBC80]/10 dark:hover:shadow-[#BFA1E3]/10">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#FFBC80]/15 dark:bg-[#BFA1E3]/10">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#FFBC80]/15 dark:bg-[#BFA1E3]/10 transition-colors duration-300 group-hover:bg-[#FFBC80]/25 dark:group-hover:bg-[#BFA1E3]/20">
           <Icon className="w-4 h-4 text-[#FFBC80] dark:text-[#9BDBF3]" />
         </div>
         <h2 className="text-lg font-bold text-[#3A3A3A] dark:text-[#003349]">{title}</h2>
@@ -24,6 +24,17 @@ function Section({
       <div className="space-y-3 text-sm text-[#3A3A3A]/65 dark:text-[#003349]/55 leading-relaxed">
         {children}
       </div>
+    </div>
+  );
+}
+
+function Pill({ icon: Icon, label }: { icon: React.FC<{ className?: string }>; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-[#FFBC80]/30 dark:border-[#BFA1E3]/25 bg-white/60 dark:bg-white/[0.06] px-4 py-2 backdrop-blur-sm">
+      <Icon className="w-3.5 h-3.5 text-[#FFBC80] dark:text-[#9BDBF3]" />
+      <span className="text-xs font-semibold tracking-wide text-[#3A3A3A]/75 dark:text-[#003349]/70">
+        {label}
+      </span>
     </div>
   );
 }
@@ -54,9 +65,32 @@ export default function Home() {
 
       {/* Hero banner */}
       <div className="relative overflow-hidden border-b border-[#FFBC80]/25 dark:border-[#BFA1E3]/20">
+        {/* Soft gradient wash */}
         <div
           className="absolute inset-0 opacity-[0.14] dark:opacity-[0.12]"
           style={{ background: brandGradient(theme) }}
+        />
+        {/* Fine grid texture */}
+        <div
+          className="absolute inset-0 opacity-[0.5] dark:opacity-[0.35] pointer-events-none"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+            color: theme === "dark" ? "#BFA1E3" : "#FFBC80",
+            opacity: 0.06,
+            maskImage: "radial-gradient(ellipse 60% 60% at 50% 30%, black, transparent)",
+            WebkitMaskImage: "radial-gradient(ellipse 60% 60% at 50% 30%, black, transparent)",
+          }}
+        />
+        {/* Glow orbs */}
+        <div
+          className="absolute -left-24 top-8 w-72 h-72 rounded-full blur-3xl opacity-30 dark:opacity-25 pointer-events-none"
+          style={{ background: theme === "dark" ? "#9BDBF3" : "#FFE29A" }}
+        />
+        <div
+          className="absolute -right-16 top-24 w-64 h-64 rounded-full blur-3xl opacity-25 dark:opacity-20 pointer-events-none"
+          style={{ background: theme === "dark" ? "#BFA1E3" : "#FFBC80" }}
         />
         <img
           src={logoSrc}
@@ -68,16 +102,46 @@ export default function Home() {
             WebkitMaskImage: "radial-gradient(closest-side, black, transparent)",
           }}
         />
-        <div className="relative max-w-5xl mx-auto w-full px-8 pt-20 pb-16 text-center">
-          <h1 className="text-5xl font-black tracking-tight text-[#3A3A3A] dark:text-[#003349] mb-4">
+
+        <div className="relative max-w-5xl mx-auto w-full px-8 pt-24 pb-20 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#FFBC80]/40 dark:border-[#BFA1E3]/30 bg-white/50 dark:bg-white/[0.05] px-4 py-1.5 mb-8 backdrop-blur-sm">
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: brandGradient(theme) }}
+            />
+            <span className="text-[11px] font-bold tracking-[0.15em] uppercase text-[#3A3A3A]/60 dark:text-[#003349]/55">
+              Private &amp; Internal
+            </span>
+          </div>
+
+          <h1
+            className="text-6xl md:text-7xl font-black tracking-tight mb-5 bg-clip-text text-transparent"
+            style={{ backgroundImage: brandGradient(theme) }}
+          >
             Monarch
           </h1>
-          <p className="text-xl font-semibold text-[#3A3A3A]/80 dark:text-[#003349]/70 mb-4">
-            Internal Business Intelligence for Gimme Beauty
+          <p className="text-2xl md:text-[26px] font-bold text-[#3A3A3A] dark:text-[#003349] mb-4">
+            Internal Business Intelligence
           </p>
-          <p className="text-base text-[#3A3A3A]/60 dark:text-[#003349]/50 leading-relaxed max-w-xl mx-auto">
-            Centralizing retail, e-commerce, and advertising data into one platform — built by Durham Brands.
+          <p className="text-base md:text-lg text-[#3A3A3A]/60 dark:text-[#003349]/50 leading-relaxed max-w-xl mx-auto mb-10">
+            Centralizing retail, e-commerce, and advertising data into one platform.
           </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-11">
+            <Pill icon={Store} label="Retail" />
+            <Pill icon={ShoppingBag} label="E-commerce" />
+            <Pill icon={Megaphone} label="Advertising" />
+          </div>
+
+          <Link href="/login">
+            <span
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-[#3A3A3A] cursor-pointer transition-all hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.98] shadow-lg shadow-[#FFBC80]/20 dark:shadow-[#BFA1E3]/20"
+              style={{ background: brandGradient(theme) }}
+            >
+              Sign in to Monarch
+              <ArrowRight className="w-4 h-4" />
+            </span>
+          </Link>
         </div>
       </div>
 
