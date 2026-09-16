@@ -30,6 +30,7 @@ import ResetPassword from "@/pages/reset-password";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfUse from "@/pages/terms-of-use";
 import DataSecurity from "@/pages/data-security";
+import Home from "@/pages/home";
 import InfoSecPolicy from "@/pages/data-security/information-security-policy";
 import DataClassPolicy from "@/pages/data-security/data-classification-policy";
 import AccessControlPolicy from "@/pages/data-security/access-control-policy";
@@ -118,10 +119,12 @@ function Router() {
         {() => <ResetPassword />}
       </Route>
 
-      {/* Protected app routes */}
+      {/* Public landing page — redirects authenticated users to /overview */}
       <Route path="/">
-        <Redirect to="/overview" />
+        {() => <PublicRoute component={Home} />}
       </Route>
+
+      {/* Protected app routes */}
       <Route path="/overview">
         {() => <PrivateRoute component={Overview} />}
       </Route>
