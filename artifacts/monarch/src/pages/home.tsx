@@ -104,16 +104,6 @@ export default function Home() {
         />
 
         <div className="relative max-w-5xl mx-auto w-full px-8 pt-24 pb-20 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#FFBC80]/40 dark:border-[#BFA1E3]/30 bg-white/50 dark:bg-white/[0.05] px-4 py-1.5 mb-8 backdrop-blur-sm">
-            <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ background: brandGradient(theme) }}
-            />
-            <span className="text-[11px] font-bold tracking-[0.15em] uppercase text-[#3A3A3A]/60 dark:text-[#003349]/55">
-              Private &amp; Internal
-            </span>
-          </div>
-
           <h1
             className="text-6xl md:text-7xl font-black tracking-tight mb-5 bg-clip-text text-transparent"
             style={{ backgroundImage: brandGradient(theme) }}
@@ -133,15 +123,22 @@ export default function Home() {
             <Pill icon={Megaphone} label="Advertising" />
           </div>
 
-          <Link href="/login">
-            <span
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-[#3A3A3A] cursor-pointer transition-all hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.98] shadow-lg shadow-[#FFBC80]/20 dark:shadow-[#BFA1E3]/20"
-              style={{ background: brandGradient(theme) }}
-            >
-              Sign in to Monarch
-              <ArrowRight className="w-4 h-4" />
-            </span>
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link href="/login">
+              <span
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-[#3A3A3A] cursor-pointer transition-all hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.98] shadow-lg shadow-[#FFBC80]/20 dark:shadow-[#BFA1E3]/20"
+                style={{ background: brandGradient(theme) }}
+              >
+                Sign in to Monarch
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </Link>
+            <Link href="/product-tour">
+              <span className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-[#3A3A3A] dark:text-[#003349] border border-[#FFBC80]/40 dark:border-[#BFA1E3]/30 bg-white/50 dark:bg-white/[0.05] cursor-pointer transition-all hover:bg-white/80 dark:hover:bg-white/[0.1] hover:-translate-y-0.5 active:scale-[0.98] backdrop-blur-sm">
+                See how it works
+              </span>
+            </Link>
+          </div>
         </div>
       </div>
 

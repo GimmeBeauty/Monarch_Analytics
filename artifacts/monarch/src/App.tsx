@@ -31,6 +31,7 @@ import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfUse from "@/pages/terms-of-use";
 import DataSecurity from "@/pages/data-security";
 import Home from "@/pages/home";
+import ProductTour from "@/pages/product-tour";
 import InfoSecPolicy from "@/pages/data-security/information-security-policy";
 import DataClassPolicy from "@/pages/data-security/data-classification-policy";
 import AccessControlPolicy from "@/pages/data-security/access-control-policy";
@@ -122,6 +123,11 @@ function Router() {
       {/* Public landing page — redirects authenticated users to /overview */}
       <Route path="/">
         {() => <PublicRoute component={Home} />}
+      </Route>
+
+      {/* Public product walkthrough — no auth required, uses sample data only */}
+      <Route path="/product-tour">
+        {() => <ProductTour />}
       </Route>
 
       {/* Protected app routes */}
