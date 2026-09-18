@@ -62,6 +62,10 @@ interface OverviewApiResponse {
   aspChange: number;
   sessionsChange: number;
   cvrChange: number;
+  spendChange: number;
+  merChange: number;
+  roasChange: number;
+  unitsChange: number;
   targetInstoreRevenue: number;
   targetDistributionPoints: number;
   storeBreakdown: Array<{ storeId: string; revenue: number }>;
@@ -229,13 +233,20 @@ export default function Overview() {
       ? "Target in-store sales per store per week, weighted by each SKU's store distribution. Approximately within 9% of Target's internal reporting."
       : "Available for Target only";
 
+    // Circana revenue/units are merged into displayRevenue/displayUnits above, but the
+    // backend's revenueChange/unitsChange/merChange/aspChange are computed from Snowflake-only
+    // totals (Circana has no date-range-based prior-period query, see resolveCircanaPeriod).
+    // Showing those % changes next to a Circana-inclusive value would compare mismatched
+    // scopes, so suppress the badge (0%) whenever Circana data has actually been merged in.
+    const circanaScopeMismatch = circanaItems.length > 0;
+
     const kpis: KPIMetric[] = [
-      { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrencyWhole(displayRevenue),   change: wsRevenue != null ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
-      { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrencyWhole(apiData.spend),    change: 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
-      { id: "mer",     label: "MER",               value: wsMer,            formatted: fmtRatio(wsMer),               change: 0, positive: true,  format: "ratio",    description: isWholesale ? "Wholesale Revenue ÷ Ad Spend" : "Marketing Efficiency Ratio — Total Revenue ÷ Total Ad Spend" },
-      { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
-      { id: "units",   label: "Units",              value: displayUnits,     formatted: Math.round(displayUnits).toLocaleString(), change: 0, positive: true,  format: "number",   description: "Total units sold across all selected stores" },
-      { id: "asp",     label: "ASP",                value: wsAsp,            formatted: fmtCurrencyFull(wsAsp),        change: wsRevenue != null ? 0 : (apiData.aspChange ?? 0), positive: true, format: "currency", description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
+      { id: "revenue", label: revenueLabel,        value: displayRevenue,   formatted: fmtCurrencyWhole(displayRevenue),   change: (wsRevenue != null || circanaScopeMismatch) ? 0 : (apiData.revenueChange ?? 0), positive: true,  format: "currency", description: isWholesale ? "Wholesale (sell-in) revenue from NetSuite" : "Aggregate revenue across all selected stores" },
+      { id: "spend",   label: "Ad Spend",          value: apiData.spend,    formatted: fmtCurrencyWhole(apiData.spend),    change: apiData.spendChange ?? 0, positive: false, format: "currency", description: "Total spend across all mapped ad channels" },
+      { id: "mer",     label: "MER",               value: wsMer,            formatted: fmtRatio(wsMer),               change: (wsRevenue != null || circanaScopeMismatch) ? 0 : (apiData.merChange ?? 0), positive: true,  format: "ratio",    description: isWholesale ? "Wholesale Revenue ÷ Ad Spend" : "Marketing Efficiency Ratio — Total Revenue ÷ Total Ad Spend" },
+      { id: "roas",    label: "Blended ROAS",       value: apiData.roas,     formatted: fmtRatio(apiData.roas),        change: apiData.roasChange ?? 0, positive: true,  format: "ratio",    description: "Return on Ad Spend — Attributed Revenue ÷ Total Spend" },
+      { id: "units",   label: "Units",              value: displayUnits,     formatted: Math.round(displayUnits).toLocaleString(), change: (wsUnits != null || circanaScopeMismatch) ? 0 : (apiData.unitsChange ?? 0), positive: true,  format: "number",   description: "Total units sold across all selected stores" },
+      { id: "asp",     label: "ASP",                value: wsAsp,            formatted: fmtCurrencyFull(wsAsp),        change: (wsRevenue != null || circanaScopeMismatch) ? 0 : (apiData.aspChange ?? 0), positive: true, format: "currency", description: isWholesale ? "Wholesale Revenue ÷ Units" : "Average Selling Price — Total Revenue ÷ Total Units" },
       { id: "dpsw",    label: "$ Per Store Per Week", value: dpswValue ?? 0, formatted: dpswValue != null ? `$${dpswValue.toFixed(2)}` : "—", change: 0, positive: true, format: "currency", description: dpswDescription },
       { id: "cvr",      label: "Conversion Rate",  value: apiData.cvr     ?? 0, formatted: `${((apiData.cvr ?? 0) * 100).toFixed(2)}%`,        change: apiData.cvrChange     ?? 0, positive: true, format: "percent", description: "Web orders ÷ GA4 sessions" },
     ];

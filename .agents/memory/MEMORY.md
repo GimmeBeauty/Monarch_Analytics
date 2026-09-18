@@ -8,3 +8,4 @@
 - [Item Performance data-source toggle bug](item-performance-datasource-toggle.md) — SKU-level DPSW/benchmark/retailer-count must be derived from the POS-merged view, not raw sell-in, or the sell-in/sell-through/best-available toggle silently does nothing.
 - [TikTok Shop core ad channel integration](tiktok-shop-channel-integration.md) — TikTok Shop Partner API (not Marketing API) is the right auth domain; on-demand throttled Postgres sync is the pattern for any non-Snowflake channel.
 - [TikTok Shop historical backfill design](tiktok-shop-historical-backfill.md) — chunked, resumable-via-persisted-checkpoint backfill that treats an API-rejected older date range as the history boundary, since no documented lookback limit exists.
+- [Monarch period-over-period comparison scope rule](monarch-period-comparison-scope.md) — only fix a "vs prior" slot that already exists and is fed fake data; never add new comparison UI where none exists.

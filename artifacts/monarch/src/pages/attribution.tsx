@@ -1387,13 +1387,18 @@ export default function Attribution() {
     dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }>;
     dataStatus?: "connected" | "stale" | "needs_reconnect";
   }
-  interface AttrApiResponse { channels: AttrApiChannel[]; isEmpty: boolean; }
+  interface AttrApiResponse {
+    channels: AttrApiChannel[];
+    isEmpty: boolean;
+    priorChannels?: Array<{ channelId: string; spend: number; revenue: number; impressions: number; clicks: number }>;
+    hasPrior?: boolean;
+  }
 
   const { data: attrApiData, isLoading: attrLoading, error: attrError, refetch: refetchAttr, isRefetching: attrRefetching } = useQuery<AttrApiResponse>({
-    queryKey: ["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(",")],
+    queryKey: ["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(","), dateRange.compareStart, dateRange.compareEnd],
     queryFn: async () => {
       const res = await fetch(
-        `${API_BASE}/api/data/attribution?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        `${API_BASE}/api/data/attribution?start=${dateRange.startDate}&end=${dateRange.endDate}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -1468,6 +1473,53 @@ export default function Attribution() {
     return baseRevenue + circanaItems.reduce((sum, s) => sum + s.revenue, 0);
   }, [isWholesale, wholesaleRevenueData, revenueApiData, circanaRevenueData, storeIds]);
 
+  // ─── Prior-period total company revenue (for MER "vs prior" comparison) ───
+
+  const hasCompareRange = !!(dateRange.compareStart && dateRange.compareEnd);
+
+  const { data: priorRevenueApiData } = useQuery<{ revenue: number; isEmpty: boolean }>({
+    queryKey: ["overview-data", dateRange.compareStart, dateRange.compareEnd, storeIds.join(","), "", "", isWholesale],
+    queryFn: async () => {
+      const storeParam = storeIds.length ? `&storeIds=${storeIds.join(",")}` : "";
+      const res = await fetch(
+        `${API_BASE}/api/data/overview?start=${dateRange.compareStart}&end=${dateRange.compareEnd}${storeParam}&priorStart=&priorEnd=&isWholesale=${isWholesale}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: !isWholesale && hasStoreSelection && hasCompareRange,
+  });
+
+  const { data: priorWholesaleRevenueData } = useQuery<{ byStore: Array<{ storeName: string; revenue: number }>; isEmpty: boolean }>({
+    queryKey: ["netsuite-sales", dateRange.compareStart, dateRange.compareEnd],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/netsuite/sales?start=${dateRange.compareStart}&end=${dateRange.compareEnd}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isWholesale && hasStoreSelection && hasCompareRange,
+  });
+
+  const priorTotalCompanyRevenue = useMemo(() => {
+    if (!hasStoreSelection || !hasCompareRange) return 0;
+    if (isWholesale) {
+      const byStore = priorWholesaleRevenueData?.byStore ?? [];
+      const filtered = byStore.filter(s => storeIds.includes(NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-")));
+      return filtered.reduce((sum, s) => sum + s.revenue, 0);
+    }
+    // Circana is excluded here (same as the current-period baseline omits it when stale);
+    // this keeps the comparison conservative rather than mixing stale prior-period data in.
+    return priorRevenueApiData?.revenue ?? 0;
+  }, [isWholesale, hasCompareRange, priorWholesaleRevenueData, priorRevenueApiData, storeIds, hasStoreSelection]);
+
   // ─── Derive channel rows + blended metrics ────────────────────────────────
 
   function fmtC(v: number): string {
@@ -1510,15 +1562,32 @@ export default function Attribution() {
     const blCpm   = tImpr   > 0 ? (tSpend  / tImpr)  * 1000 : 0;
     const blCpc   = tClicks > 0 ? tSpend  / tClicks : 0;
 
+    // ── Real "vs prior period" comparisons ──────────────────────────────────
+    // Prior totals are filtered to the same selected channels as the current
+    // period before summing, so the comparison never mixes a filtered current
+    // scope against a company-wide prior scope.
+    const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
+    const hasPrior = !!attrApiData?.hasPrior;
+    const priorRaw = (attrApiData?.priorChannels ?? []).filter(c => filterChannelIds.includes(c.channelId));
+    const prior = priorRaw.reduce(
+      (acc, c) => ({ spend: acc.spend + c.spend, revenue: acc.revenue + c.revenue, impressions: acc.impressions + c.impressions, clicks: acc.clicks + c.clicks }),
+      { spend: 0, revenue: 0, impressions: 0, clicks: 0 },
+    );
+    const pRoas = prior.spend > 0 ? prior.revenue / prior.spend : 0;
+    const pMer  = prior.spend > 0 ? priorTotalCompanyRevenue / prior.spend : 0;
+    const pCtr  = prior.impressions > 0 ? (prior.clicks / prior.impressions) * 100 : 0;
+    const pCpm  = prior.impressions > 0 ? (prior.spend / prior.impressions) * 1000 : 0;
+    const pCpc  = prior.clicks > 0 ? prior.spend / prior.clicks : 0;
+
     const blendedMetrics: BlendedMetric[] = [
-      { id: "spend",       label: "Total Ad Spend",    value: tSpend,  formatted: fmtC(tSpend),            change: 0, positiveIsUp: false, description: "Aggregate ad spend across all channels" },
-      { id: "revenue",     label: "Total Ad Revenue",  value: tRev,    formatted: fmtC(tRev),              change: 0, positiveIsUp: true,  description: "Attributed revenue across all channels" },
-      { id: "roas",        label: "Blended ROAS",      value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend" },
-      { id: "mer",         label: "MER",               value: blMer,   formatted: `${blMer.toFixed(2)}x`,  change: 0, positiveIsUp: true,  description: "Total Company Revenue ÷ Total Ad Spend" },
-      { id: "ctr",         label: "Blended CTR",       value: blCtr,   formatted: `${blCtr.toFixed(2)}%`,  change: 0, positiveIsUp: true,  description: "Clicks ÷ Impressions" },
-      { id: "impressions", label: "Impressions",       value: tImpr,   formatted: tImpr >= 1e6 ? `${(tImpr/1e6).toFixed(1)}M` : tImpr >= 1e3 ? `${(tImpr/1e3).toFixed(1)}K` : tImpr.toLocaleString(), change: 0, positiveIsUp: true, description: "Total impressions" },
-      { id: "cpm",         label: "Blended CPM",       value: blCpm,   formatted: fmtC(blCpm),             change: 0, positiveIsUp: false, description: "Cost per 1K impressions" },
-      { id: "cpc",         label: "Blended CPC",       value: blCpc,   formatted: `$${blCpc.toFixed(2)}`,  change: 0, positiveIsUp: false, description: "Cost per click" },
+      { id: "spend",       label: "Total Ad Spend",    value: tSpend,  formatted: fmtC(tSpend),            change: hasPrior ? pct(tSpend, prior.spend) : 0, positiveIsUp: false, description: "Aggregate ad spend across all channels" },
+      { id: "revenue",     label: "Total Ad Revenue",  value: tRev,    formatted: fmtC(tRev),              change: hasPrior ? pct(tRev, prior.revenue) : 0, positiveIsUp: true,  description: "Attributed revenue across all channels" },
+      { id: "roas",        label: "Blended ROAS",      value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: hasPrior ? pct(blRoas, pRoas) : 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend" },
+      { id: "mer",         label: "MER",               value: blMer,   formatted: `${blMer.toFixed(2)}x`,  change: hasPrior ? pct(blMer, pMer) : 0, positiveIsUp: true,  description: "Total Company Revenue ÷ Total Ad Spend" },
+      { id: "ctr",         label: "Blended CTR",       value: blCtr,   formatted: `${blCtr.toFixed(2)}%`,  change: hasPrior ? pct(blCtr, pCtr) : 0, positiveIsUp: true,  description: "Clicks ÷ Impressions" },
+      { id: "impressions", label: "Impressions",       value: tImpr,   formatted: tImpr >= 1e6 ? `${(tImpr/1e6).toFixed(1)}M` : tImpr >= 1e3 ? `${(tImpr/1e3).toFixed(1)}K` : tImpr.toLocaleString(), change: hasPrior ? pct(tImpr, prior.impressions) : 0, positiveIsUp: true, description: "Total impressions" },
+      { id: "cpm",         label: "Blended CPM",       value: blCpm,   formatted: fmtC(blCpm),             change: hasPrior ? pct(blCpm, pCpm) : 0, positiveIsUp: false, description: "Cost per 1K impressions" },
+      { id: "cpc",         label: "Blended CPC",       value: blCpc,   formatted: `$${blCpc.toFixed(2)}`,  change: hasPrior ? pct(blCpc, pCpc) : 0, positiveIsUp: false, description: "Cost per click" },
     ];
 
     // ── Signals ───────────────────────────────────────────────────────────────
@@ -1589,7 +1658,7 @@ export default function Attribution() {
     });
 
     return { blendedMetrics, channelRows, signals, funnels, advanced };
-  }, [attrApiData, filterChannelIds, totalCompanyRevenue]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attrApiData, filterChannelIds, totalCompanyRevenue, priorTotalCompanyRevenue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [funnelChannelId, setFunnelChannelId] = useState<string>("");
   const effectiveFunnelId = funnelChannelId || channelRows[0]?.channelId || "";
