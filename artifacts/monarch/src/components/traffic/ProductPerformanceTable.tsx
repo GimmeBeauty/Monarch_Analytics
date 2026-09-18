@@ -130,6 +130,35 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
   const visible = filtered.slice(0, limit);
   const hasMore = filtered.length > limit;
 
+  // Aggregate totals across every row currently matching the table's own
+  // filters (not just the paginated slice), so "Total" reflects the full
+  // filtered set regardless of how many rows are currently paged in.
+  const totals = useMemo(() => {
+    const sales       = filtered.reduce((s, r) => s + r.sales, 0);
+    const salesPrior  = filtered.reduce((s, r) => s + r.salesPrior, 0);
+    const units       = filtered.reduce((s, r) => s + r.units, 0);
+    const unitsPrior  = filtered.reduce((s, r) => s + r.unitsPrior, 0);
+    // % Online / Online $ / In-Store $ are Target-only metrics (other retailers
+    // don't have the channel breakdown). Scope both the numerator AND the
+    // denominator to Target rows only, or non-Target sales would dilute the
+    // percentage with sales that have no online/in-store split at all.
+    const targetRows    = filtered.filter(r => r.storeId === "target");
+    const hasTargetRows = targetRows.length > 0;
+    const targetSales     = hasTargetRows ? targetRows.reduce((s, r) => s + r.sales, 0) : 0;
+    const onlineRevenue   = hasTargetRows ? targetRows.reduce((s, r) => s + (r.onlineRevenue ?? 0), 0) : null;
+    const instoreRevenue  = hasTargetRows ? targetRows.reduce((s, r) => s + (r.instoreRevenue ?? 0), 0) : null;
+    return {
+      sales,
+      units,
+      changeInSales: salesPrior > 0 ? ((sales - salesPrior) / salesPrior) * 100 : 0,
+      unitsChange:   unitsPrior > 0 ? ((units - unitsPrior) / unitsPrior) * 100 : 0,
+      avgSellPrice:  units > 0 ? sales / units : 0,
+      onlineRevenue,
+      instoreRevenue,
+      pctOnline: (hasTargetRows && targetSales > 0) ? ((onlineRevenue ?? 0) / targetSales) * 100 : null,
+    };
+  }, [filtered]);
+
   function Th({ col, label, tooltip }: { col: SortKey; label: string; tooltip?: string }) {
     return (
       <th
@@ -317,6 +346,70 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
             </tr>
           </thead>
           <tbody>
+            {/* Total row — summarizes every row currently matching the table's
+                filters. Pinned as the first row so it stays put regardless of
+                sort order or pagination. Hidden when filters leave no rows,
+                consistent with the "No products match" empty state below. */}
+            {filtered.length > 0 && (
+              <tr className="border-b-2 border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/12 dark:bg-[#BFA1E3]/12 font-bold">
+                <td className="px-3 py-2.5"></td>
+                <td className="px-3 py-2.5">
+                  <span className="text-xs font-bold text-[#3A3A3A] dark:text-[#003349]">Total</span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">—</span>
+                </td>
+                {isWholesale && (
+                  <td className="px-3 py-2.5">
+                    <span className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">—</span>
+                  </td>
+                )}
+                <td className="px-3 py-2.5">
+                  <span className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">All Stores</span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div>
+                    <span className="text-xs font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">{fmt(totals.sales)}</span>
+                    <div className="mt-0.5">
+                      <ChangePill v={totals.changeInSales}/>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div>
+                    <span className="text-xs font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">{fmtNum(totals.units)}</span>
+                    <div className="mt-0.5">
+                      <ChangePill v={totals.unitsChange}/>
+                    </div>
+                  </div>
+                </td>
+                {hasStoreCount && !isWholesale && (
+                  <td className="px-3 py-2.5">
+                    <span className="text-xs text-[#3A3A3A]/50 dark:text-[#003349]/40">—</span>
+                  </td>
+                )}
+                {visibleCols.avgSellPrice && (
+                  <td className="px-3 py-2.5 text-xs font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
+                    ${totals.avgSellPrice.toFixed(2)}
+                  </td>
+                )}
+                {visibleCols.pctOnline && (
+                  <td className="px-3 py-2.5 text-right text-xs font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
+                    {totals.pctOnline != null ? `${totals.pctOnline.toFixed(1)}%` : "—"}
+                  </td>
+                )}
+                {visibleCols.onlineRevenue && (
+                  <td className="px-3 py-2.5 text-right text-xs font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
+                    {totals.onlineRevenue != null ? fmt(totals.onlineRevenue) : "—"}
+                  </td>
+                )}
+                {visibleCols.instoreRevenue && (
+                  <td className="px-3 py-2.5 text-right text-xs font-bold tabular-nums text-[#3A3A3A] dark:text-[#003349]">
+                    {totals.instoreRevenue != null ? fmt(totals.instoreRevenue) : "—"}
+                  </td>
+                )}
+              </tr>
+            )}
             {visible.map((row, i) => {
               const unitsChange = row.unitsPrior>0 ? ((row.units-row.unitsPrior)/row.unitsPrior)*100 : 0;
               return (
