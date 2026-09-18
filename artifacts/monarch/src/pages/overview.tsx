@@ -100,15 +100,16 @@ export default function Overview() {
   const { selectedIds } = useStoreFilter();
   const { isWholesale } = usePricingMode();
 
+  const hasStoreSelection = selectedIds.length > 0;
   const isTargetOnly   = selectedIds.length === 1 && selectedIds[0] === "target";
-  const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
+  const includesTarget = selectedIds.includes("target");
   const CIRCANA_STORE_IDS = ["meijer", "cvs", "walgreens", "publix"];
-  const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
+  const includesCircana = selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
 
   const { data: apiData, isLoading, error, refetch, isRefetching } = useQuery<OverviewApiResponse>({
     queryKey: ["overview-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/overview?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}&isWholesale=${isWholesale}`,
         { credentials: "include" },
@@ -121,6 +122,7 @@ export default function Overview() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
+    enabled: hasStoreSelection,
   });
 
   const { data: wholesaleData } = useQuery<NetSuiteSalesResponse>({
@@ -138,13 +140,13 @@ export default function Overview() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: isWholesale,
+    enabled: isWholesale && hasStoreSelection,
   });
 
   const { data: circanaData } = useQuery<CircanaSummaryResponse>({
     queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/circana/summary?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
@@ -157,7 +159,7 @@ export default function Overview() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: includesCircana,
+    enabled: includesCircana && hasStoreSelection,
   });
 
   const data = useMemo(() => {
@@ -166,12 +168,10 @@ export default function Overview() {
     // ── KPIs ─────────────────────────────────────────────────────────────────
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
     const wsStores = wsActive
-      ? (selectedIds.length > 0
-          ? wholesaleData!.byStore.filter(s => {
-              const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
-              return selectedIds.includes(sid);
-            })
-          : wholesaleData!.byStore)
+      ? wholesaleData!.byStore.filter(s => {
+          const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
+          return selectedIds.includes(sid);
+        })
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
@@ -295,7 +295,7 @@ export default function Overview() {
     return { kpis, trendSeries, storeBreakdown, channelBreakdown, contributionByStore, contributionByChannel, activityFeed };
   }, [apiData, isWholesale, wholesaleData, selectedIds, circanaData, dateRange]);
 
-  const isEmpty = !isLoading && (!apiData || apiData.isEmpty || !data);
+  const isEmpty = !isLoading && hasStoreSelection && (!apiData || apiData.isEmpty || !data);
 
   return (
     <DashboardLayout
@@ -311,6 +311,14 @@ export default function Overview() {
           />
         )}
 
+        {!hasStoreSelection && !error && (
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
+              No stores selected — choose at least one store from the filter above to see data.
+            </p>
+          </div>
+        )}
+
         {isEmpty && !error && (
           <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
             <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
@@ -319,7 +327,7 @@ export default function Overview() {
           </div>
         )}
 
-        {isLoading && (
+        {isLoading && hasStoreSelection && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="h-24 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />

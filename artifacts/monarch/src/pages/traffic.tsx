@@ -151,19 +151,20 @@ export default function Traffic() {
   const { dateRange } = useDateRange();
   const { selectedIds } = useStoreFilter();
   const { isWholesale } = usePricingMode();
+  const hasStoreSelection = selectedIds.length > 0;
   const isTargetOnly = selectedIds.length === 1 && selectedIds[0] === "target";
-  const includesTarget = selectedIds.length === 0 || selectedIds.includes("target");
-  const isWalmartSelected = selectedIds.length === 0 || selectedIds.includes("walmart");
-  const hasShopify = selectedIds.length === 0 || selectedIds.includes("shopify");
+  const includesTarget = selectedIds.includes("target");
+  const isWalmartSelected = selectedIds.includes("walmart");
+  const hasShopify = selectedIds.includes("shopify");
   const CIRCANA_STORE_IDS = ["meijer", "cvs", "walgreens", "publix"];
-  const includesCircana = selectedIds.length === 0 || selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
+  const includesCircana = selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
   const [circanaBannerDismissed, setCircanaBannerDismissed] = useState(false);
   const dismissCircanaBanner = useCallback(() => setCircanaBannerDismissed(true), []);
 
   const { data: apiData, isLoading, error, refetch, isRefetching } = useQuery<TrafficApiResponse>({
     queryKey: ["traffic-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd, isWholesale],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/traffic?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}&isWholesale=${isWholesale}`,
         { credentials: "include" },
@@ -176,6 +177,7 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
+    enabled: hasStoreSelection,
   });
 
   const { data: targetProductData, isLoading: isTargetLoading } = useQuery<TargetProductsApiResponse>({
@@ -193,7 +195,7 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: includesTarget,
+    enabled: includesTarget && hasStoreSelection,
   });
 
   const { data: targetGeoData, isLoading: isTargetGeoLoading } = useQuery<TargetGeographicApiResponse>({
@@ -231,7 +233,7 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 60,
     retry: false,
-    enabled: includesTarget && !!selectedMapState,
+    enabled: includesTarget && hasStoreSelection && !!selectedMapState,
   });
 
   const { data: walmartStoresData } = useQuery<WalmartStoresApiResponse>({
@@ -249,7 +251,7 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 60,
     retry: false,
-    enabled: isWalmartSelected && !!selectedMapState,
+    enabled: isWalmartSelected && hasStoreSelection && !!selectedMapState,
   });
 
   const { data: walmartProductData, isLoading: isWalmartLoading } = useQuery<WalmartProductsApiResponse>({
@@ -267,7 +269,7 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: isWalmartSelected,
+    enabled: isWalmartSelected && hasStoreSelection,
   });
 
   const { data: walmartGeoData, isLoading: isWalmartGeoLoading } = useQuery<WalmartGeographicApiResponse>({
@@ -285,13 +287,13 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: isWalmartSelected,
+    enabled: isWalmartSelected && hasStoreSelection,
   });
 
   const { data: circanaSummaryData, isLoading: isCircanaSummaryLoading } = useQuery<CircanaSummaryResponse>({
     queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/circana/summary?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
@@ -304,13 +306,13 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: includesCircana,
+    enabled: includesCircana && hasStoreSelection,
   });
 
   const { data: circanaProductData, isLoading: isCircanaProductLoading } = useQuery<CircanaProductsApiResponse>({
     queryKey: ["circana-products", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/circana/products?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
@@ -323,7 +325,7 @@ export default function Traffic() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: includesCircana,
+    enabled: includesCircana && hasStoreSelection,
   });
 
   const { data: wholesaleData, isLoading: isWholesaleLoading } = useQuery<NetSuiteSalesResponse>({
@@ -351,12 +353,10 @@ export default function Traffic() {
 
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
     const wsStores = wsActive
-      ? (selectedIds.length > 0
-          ? wholesaleData!.byStore.filter(s => {
-              const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
-              return selectedIds.includes(sid);
-            })
-          : wholesaleData!.byStore)
+      ? wholesaleData!.byStore.filter(s => {
+          const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
+          return selectedIds.includes(sid);
+        })
       : [];
     const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
@@ -394,13 +394,11 @@ export default function Traffic() {
     let products: ProductRow[];
 
     if (wsActive) {
-      const storeIdSet = selectedIds.length > 0 ? new Set(selectedIds) : null;
-      const filteredWsProducts = storeIdSet
-        ? wholesaleData!.products.filter(p => {
-            const sid = NS_STORE_ID[p.storeName] ?? p.storeName.toLowerCase().replace(/\s+/g, "-");
-            return storeIdSet.has(sid);
-          })
-        : wholesaleData!.products;
+      const storeIdSet = new Set(selectedIds);
+      const filteredWsProducts = wholesaleData!.products.filter(p => {
+        const sid = NS_STORE_ID[p.storeName] ?? p.storeName.toLowerCase().replace(/\s+/g, "-");
+        return storeIdSet.has(sid);
+      });
 
       products = filteredWsProducts.map((p, i) => {
         const storeId = NS_STORE_ID[p.storeName] ?? p.storeName.toLowerCase().replace(/\s+/g, "-");
@@ -426,7 +424,7 @@ export default function Traffic() {
         };
       });
     } else {
-      const shopifyRows = (selectedIds.length === 0 || selectedIds.includes("shopify"))
+      const shopifyRows = hasShopify
         ? apiData.products.map((p, i) => ({
             id:              `shopify-${p.id || p.sku || i}`,
             productName:     p.productName,
@@ -496,7 +494,7 @@ export default function Traffic() {
 
       const circanaRows = includesCircana
         ? (circanaProductData?.products ?? [])
-            .filter(p => selectedIds.length === 0 || selectedIds.includes(p.storeId))
+            .filter(p => selectedIds.includes(p.storeId))
             .map((p, i) => {
               const store = storeById(p.storeId);
               return {
@@ -617,7 +615,7 @@ export default function Traffic() {
     return { kpis, products, stateRevenue, storeLocations };
   }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana, hasShopify, dateRange]);
 
-  const isEmpty = !effectiveIsLoading && (!apiData || apiData.isEmpty || !data);
+  const isEmpty = !effectiveIsLoading && hasStoreSelection && (!apiData || apiData.isEmpty || !data);
 
   return (
     <DashboardLayout
@@ -633,6 +631,14 @@ export default function Traffic() {
           />
         )}
 
+        {!hasStoreSelection && !error && (
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
+              No stores selected — choose at least one store from the filter above to see data.
+            </p>
+          </div>
+        )}
+
         {isEmpty && !error && (
           <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
             <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
@@ -641,7 +647,7 @@ export default function Traffic() {
           </div>
         )}
 
-        {effectiveIsLoading && (
+        {effectiveIsLoading && hasStoreSelection && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (

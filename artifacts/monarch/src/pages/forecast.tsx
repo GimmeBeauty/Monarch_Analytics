@@ -85,13 +85,13 @@ export default function Forecast() {
 
   const { isWholesale } = usePricingMode();
   const { selectedIds } = useStoreFilter();
-  const storeIdsParam = selectedIds.length > 0 ? selectedIds.join(",") : "";
+  const hasStoreSelection = selectedIds.length > 0;
+  const storeIdsParam = selectedIds.join(",");
 
   const { data: summary, isLoading: summaryLoading, isFetching: summaryFetching, error: summaryError, refetch: refetchSummary } = useQuery<ForecastSummary>({
     queryKey: ["forecast-summary", selectedYear, isWholesale, storeIdsParam],
     queryFn: async () => {
-      const p = new URLSearchParams({ year: String(selectedYear), isWholesale: String(isWholesale) });
-      if (storeIdsParam) p.set("storeIds", storeIdsParam);
+      const p = new URLSearchParams({ year: String(selectedYear), isWholesale: String(isWholesale), storeIds: storeIdsParam });
       const r = await fetch(`/api/data/forecast/summary?${p}`);
       if (!r.ok) {
         const body = await r.json().catch(() => ({})) as { error?: string };
@@ -99,6 +99,7 @@ export default function Forecast() {
       }
       return r.json() as Promise<ForecastSummary>;
     },
+    enabled: hasStoreSelection,
   });
 
   const { data: chartResp, isLoading: chartLoading, isFetching: chartFetching, error: chartError, refetch: refetchChart } = useQuery<ForecastChartResp>({
@@ -109,8 +110,8 @@ export default function Forecast() {
         granularity,
         priorYear: String(showPriorYear),
         isWholesale: String(isWholesale),
+        storeIds: storeIdsParam,
       });
-      if (storeIdsParam) p.set("storeIds", storeIdsParam);
       const r = await fetch(`/api/data/forecast/chart?${p}`);
       if (!r.ok) {
         const body = await r.json().catch(() => ({})) as { error?: string };
@@ -118,6 +119,7 @@ export default function Forecast() {
       }
       return r.json() as Promise<ForecastChartResp>;
     },
+    enabled: hasStoreSelection,
   });
 
   const isLoading = summaryLoading || chartLoading;
@@ -229,7 +231,13 @@ export default function Forecast() {
         </span>
       </div>
 
-      {error ? (
+      {!hasStoreSelection ? (
+        <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+          <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
+            No stores selected — choose at least one store from the filter above to see data.
+          </p>
+        </div>
+      ) : error ? (
         <ErrorState
           message="Unable to load data — check your data connections."
           onRetry={refetchAll}

@@ -28,12 +28,12 @@ export function defaultFilterState(): FamilyFilterState {
 export function toggleFamily(state: FamilyFilterState, family: ChannelFamily): FamilyFilterState {
   const next = new Set(state.enabledFamilies);
   if (next.has(family)) {
-    if (next.size === 1) return state; // keep at least one family active
     next.delete(family);
   } else {
     next.add(family);
   }
   const viewMode: ViewMode =
+    next.size === 0 ? "custom" :
     next.size === 1 && next.has("core") ? "core" :
     next.has("core") && next.has("rmn") ? "total" : "custom";
   return { enabledFamilies: next, viewMode };

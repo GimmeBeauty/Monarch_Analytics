@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight,
@@ -71,11 +71,12 @@ interface ChannelSelectorProps {
 
 function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClearAll }: ChannelSelectorProps) {
   const [open, setOpen] = useState(false);
-  const isAll       = selected.size === 0;
-  const activeCount = isAll ? allChannels.length : selected.size;
-  const isActive    = (id: string) => isAll || selected.has(id);
+  const isAll       = allChannels.length > 0 && selected.size === allChannels.length;
+  const isNone      = selected.size === 0;
+  const activeCount = selected.size;
+  const isActive    = (id: string) => selected.has(id);
 
-  const activeChannels = isAll ? allChannels : allChannels.filter(c => selected.has(c.channelId));
+  const activeChannels = allChannels.filter(c => selected.has(c.channelId));
   const previewDots    = activeChannels.slice(0, 6);
   const overflow       = activeCount - 6;
 
@@ -137,7 +138,11 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
               <span className="text-[#3A3A3A]/15 dark:text-[#003349]/15 select-none">·</span>
               <button
                 onClick={onClearAll}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  isNone
+                    ? "bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A] dark:text-[#003349]"
+                    : "text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349]"
+                }`}
               >
                 None
               </button>
@@ -1320,48 +1325,57 @@ export default function Attribution() {
   const { dateRange } = useDateRange();
   const { selectedIds: storeIds } = useStoreFilter();
   const { isWholesale } = usePricingMode();
-  const includesCircana = storeIds.length === 0 || storeIds.some(id => CIRCANA_STORE_IDS.includes(id));
+  const hasStoreSelection = storeIds.length > 0;
+  const includesCircana = storeIds.some(id => CIRCANA_STORE_IDS.includes(id));
 
   const allChannels = useMemo(() => getChannelsForStores(storeIds), [storeIds]);
 
-  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(
+    () => new Set(allChannels.map(c => c.channelId)),
+  );
+  // Tracks the user's intent independent of the concrete id set, so that when the
+  // available channel list changes (e.g. store selection changes), we can reconcile
+  // correctly: "all" re-selects every newly available channel, "none" stays empty,
+  // and "custom" keeps the intersection of the prior explicit picks with what's available.
+  const selectionMode = useRef<"all" | "none" | "custom">("all");
+  const channelsInitialized = useRef(false);
 
   useEffect(() => {
-    if (selectedChannelIds.size === 0) return;
     const available = new Set(allChannels.map(c => c.channelId));
-    const pruned = new Set([...selectedChannelIds].filter(id => available.has(id)));
-    if (pruned.size !== selectedChannelIds.size) {
-      setSelectedChannelIds(pruned.size > 0 ? pruned : new Set());
+    if (!channelsInitialized.current) {
+      channelsInitialized.current = true;
+      return;
     }
-  }, [allChannels]); // eslint-disable-line react-hooks/exhaustive-deps
+    setSelectedChannelIds(prev => {
+      if (selectionMode.current === "all") return new Set(available);
+      if (selectionMode.current === "none") return prev.size === 0 ? prev : new Set();
+      const pruned = new Set([...prev].filter(id => available.has(id)));
+      return pruned.size === prev.size ? prev : pruned;
+    });
+  }, [allChannels]);
 
   const handleToggleChannel = (id: string) => {
     setSelectedChannelIds(prev => {
-      if (prev.size === 0) {
-        const next = new Set(allChannels.map(c => c.channelId));
-        next.delete(id);
-        return next.size > 0 ? next : prev;
-      }
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        if (next.size === 0) return prev;
-        if (next.size === allChannels.length) return new Set();
-      } else {
-        next.add(id);
-        if (next.size === allChannels.length) return new Set();
-      }
+      if (next.has(id)) next.delete(id); else next.add(id);
+      selectionMode.current =
+        next.size === 0 ? "none" :
+        next.size === allChannels.length ? "all" : "custom";
       return next;
     });
   };
 
-  const handleSelectAll = () => setSelectedChannelIds(new Set());
+  const handleSelectAll = () => {
+    selectionMode.current = "all";
+    setSelectedChannelIds(new Set(allChannels.map(c => c.channelId)));
+  };
   const handleClearAll = () => {
-    if (allChannels.length > 0) setSelectedChannelIds(new Set([allChannels[0].channelId]));
+    selectionMode.current = "none";
+    setSelectedChannelIds(new Set());
   };
 
   const filterChannelIds = useMemo(
-    () => selectedChannelIds.size > 0 ? [...selectedChannelIds] : undefined,
+    () => [...selectedChannelIds],
     [selectedChannelIds],
   );
 
@@ -1390,6 +1404,7 @@ export default function Attribution() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
+    enabled: hasStoreSelection,
   });
 
   // ─── Fetch total company revenue (for MER) — mirrors Overview's per-mode revenue source ───
@@ -1407,7 +1422,7 @@ export default function Attribution() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: !isWholesale,
+    enabled: !isWholesale && hasStoreSelection,
   });
 
   const { data: wholesaleRevenueData } = useQuery<{ byStore: Array<{ storeName: string; revenue: number }>; isEmpty: boolean }>({
@@ -1422,13 +1437,13 @@ export default function Attribution() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: isWholesale,
+    enabled: isWholesale && hasStoreSelection,
   });
 
   const { data: circanaRevenueData } = useQuery<{ items: Array<{ storeId: string; revenue: number }>; isStale: boolean }>({
     queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, storeIds.join(",")],
     queryFn: async () => {
-      const storeParam = storeIds.length ? `&storeIds=${storeIds.join(",")}` : "";
+      const storeParam = `&storeIds=${storeIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/circana/summary?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
@@ -1438,15 +1453,14 @@ export default function Attribution() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
-    enabled: !isWholesale && includesCircana,
+    enabled: !isWholesale && includesCircana && hasStoreSelection,
   });
 
   const totalCompanyRevenue = useMemo(() => {
+    if (!hasStoreSelection) return 0;
     if (isWholesale) {
       const byStore = wholesaleRevenueData?.byStore ?? [];
-      const filtered = storeIds.length > 0
-        ? byStore.filter(s => storeIds.includes(NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-")))
-        : byStore;
+      const filtered = byStore.filter(s => storeIds.includes(NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-")));
       return filtered.reduce((sum, s) => sum + s.revenue, 0);
     }
     const baseRevenue = revenueApiData?.revenue ?? 0;
@@ -1464,7 +1478,7 @@ export default function Attribution() {
 
   const { blendedMetrics, channelRows, signals, funnels, advanced } = useMemo(() => {
     const raw = (attrApiData?.channels ?? [])
-      .filter(c => filterChannelIds == null || filterChannelIds.includes(c.channelId));
+      .filter(c => filterChannelIds.includes(c.channelId));
 
     const channelRows: ChannelRow[] = raw.map(c => {
       const ctr  = c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
@@ -1590,7 +1604,14 @@ export default function Attribution() {
       title="Ad Attribution"
       description="Paid media performance — expand any channel to view campaign-level detail."
     >
-      {allChannels.length === 0 ? (
+      {!hasStoreSelection ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <AlertTriangle size={36} className="text-[#FFBC80]/50 dark:text-[#BFA1E3]/50" />
+          <p className="text-sm text-[#3A3A3A]/50 dark:text-[#003349]/40 text-center max-w-xs">
+            No stores selected — choose at least one store from the filter above to see data.
+          </p>
+        </div>
+      ) : allChannels.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <AlertTriangle size={36} className="text-[#FFBC80]/50 dark:text-[#BFA1E3]/50" />
           <p className="text-sm text-[#3A3A3A]/50 dark:text-[#003349]/40 text-center max-w-xs">

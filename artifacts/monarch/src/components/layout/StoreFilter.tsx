@@ -8,17 +8,15 @@ import { brandGradient } from "@/lib/brandGradient";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function isStoreSelected(selectedIds: string[], id: string): boolean {
-  return selectedIds.length === 0 || selectedIds.includes(id);
+  return selectedIds.includes(id);
 }
 
 function isGroupSelected(selectedIds: string[], groupId: string): boolean {
   const groupStores = STORES.filter((s) => s.group === groupId);
-  if (selectedIds.length === 0) return true;
-  return groupStores.every((s) => selectedIds.includes(s.id));
+  return groupStores.length > 0 && groupStores.every((s) => selectedIds.includes(s.id));
 }
 
 function isGroupPartial(selectedIds: string[], groupId: string): boolean {
-  if (selectedIds.length === 0) return false;
   const groupStores = STORES.filter((s) => s.group === groupId);
   const selected = groupStores.filter((s) => selectedIds.includes(s.id));
   return selected.length > 0 && selected.length < groupStores.length;
@@ -27,7 +25,7 @@ function isGroupPartial(selectedIds: string[], groupId: string): boolean {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function StoreFilter() {
-  const { selectedIds, isAllSelected, label, storeWeight, toggleStore, toggleGroup, selectAll } =
+  const { selectedIds, isAllSelected, label, storeWeight, toggleStore, toggleGroup, selectAll, deselectAll } =
     useStoreFilter();
   const { theme } = useTheme();
 
@@ -94,12 +92,23 @@ export default function StoreFilter() {
             <span className="text-xs font-semibold text-[#3A3A3A]/60 dark:text-[#003349]/50 uppercase tracking-wider">
               Stores
             </span>
-            <button
-              onClick={selectAll}
-              className="text-xs font-medium text-[#FFBC80] dark:text-[#BFA1E3] hover:text-[#F5A56A] dark:hover:text-[#EFBAE1] transition-colors"
-            >
-              {isAllSelected ? "All selected" : "Select all"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAll}
+                disabled={isAllSelected}
+                className="text-xs font-medium text-[#FFBC80] dark:text-[#BFA1E3] hover:text-[#F5A56A] dark:hover:text-[#EFBAE1] transition-colors disabled:opacity-40 disabled:cursor-default"
+              >
+                {isAllSelected ? "All selected" : "Select all"}
+              </button>
+              <span className="text-[#3A3A3A]/15 dark:text-[#003349]/15 select-none">·</span>
+              <button
+                onClick={deselectAll}
+                disabled={selectedIds.length === 0}
+                className="text-xs font-medium text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors disabled:opacity-40 disabled:cursor-default"
+              >
+                Deselect all
+              </button>
+            </div>
           </div>
 
           {/* Store groups */}

@@ -36,11 +36,12 @@ export default function Spend() {
   const { mode: pricingMode } = usePricingMode();
 
   const [filterState, setFilterState] = useState<FamilyFilterState>(defaultFilterState);
+  const hasStoreSelection = selectedIds.length > 0;
 
   const { data: spendApiData, isLoading, error, refetch, isRefetching } = useQuery<SpendApiResponse>({
     queryKey: ["spend-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
-      const storeParam = selectedIds.length > 0 ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/spend?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
@@ -53,6 +54,7 @@ export default function Spend() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
+    enabled: hasStoreSelection,
   });
 
   // Build real spend and conversion value maps from API data
@@ -110,7 +112,8 @@ export default function Spend() {
     return data.insights.filter((i) => !i.channelId || visibleIds.has(i.channelId));
   }, [data, filteredChannels]);
 
-  const isEmpty = !isLoading && (!realSpendByChannel || data === null || spendApiData?.isEmpty);
+  const isEmpty = !isLoading && hasStoreSelection && (!realSpendByChannel || data === null || spendApiData?.isEmpty);
+  const hasNoFamiliesSelected = filterState.enabledFamilies.size === 0;
 
   const channelWarnings = useMemo(() => {
     const statuses = spendApiData?.channelStatus ?? {};
@@ -138,7 +141,15 @@ export default function Spend() {
           />
         )}
 
-        {!error && isEmpty && (
+        {!error && !hasStoreSelection && (
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
+              No stores selected — choose at least one store from the filter above to see data.
+            </p>
+          </div>
+        )}
+
+        {!error && hasStoreSelection && isEmpty && (
           <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
             <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
               No data available — check your Snowflake connection and date range.
@@ -146,7 +157,7 @@ export default function Spend() {
           </div>
         )}
 
-        {!error && data && (
+        {!error && hasStoreSelection && data && (
           <>
             <div className="px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-300/40 text-xs text-emerald-700 dark:text-emerald-700">
               Spend and attributed revenue sourced from Snowflake — ROAS and MER reflect real data.
@@ -181,15 +192,25 @@ export default function Spend() {
               onChange={setFilterState}
             />
 
-            <SpendSummaryBar summary={filteredSummary} />
-            <BudgetAllocation channels={filteredChannels} summary={filteredSummary} />
-            <ChannelDeepDive channels={filteredChannels} />
-            <ScenarioSimulator
-              channels={filteredChannels}
-              summary={filteredSummary}
-              totalBaseRevenue={data.totalBaseRevenue}
-            />
-            <InsightsPanel insights={filteredInsights} />
+            {hasNoFamiliesSelected ? (
+              <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+                <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
+                  No channel families selected — choose at least one above to see data.
+                </p>
+              </div>
+            ) : (
+              <>
+                <SpendSummaryBar summary={filteredSummary} />
+                <BudgetAllocation channels={filteredChannels} summary={filteredSummary} />
+                <ChannelDeepDive channels={filteredChannels} />
+                <ScenarioSimulator
+                  channels={filteredChannels}
+                  summary={filteredSummary}
+                  totalBaseRevenue={data.totalBaseRevenue}
+                />
+                <InsightsPanel insights={filteredInsights} />
+              </>
+            )}
           </>
         )}
       </div>

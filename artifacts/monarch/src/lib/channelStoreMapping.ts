@@ -190,10 +190,10 @@ export const CHANNEL_MAP = new Map<string, ChannelMapping>(
 
 /**
  * Returns ChannelMapping entries relevant to the given store selection.
- * An empty storeIds array means "all stores" → returns all channels.
+ * An empty storeIds array means no stores are selected → returns no channels.
  */
 export function getChannelsForStores(storeIds: string[]): ChannelMapping[] {
-  if (!storeIds.length) return CHANNEL_STORE_MAPPINGS;
+  if (!storeIds.length) return [];
   const set = new Set(storeIds);
   return CHANNEL_STORE_MAPPINGS.filter((m) => m.storeIds.some((s) => set.has(s)));
 }

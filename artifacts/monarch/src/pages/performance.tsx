@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
@@ -114,11 +114,12 @@ function ChannelSelectorAccordion({
   allChannels, selected, onToggle, onSelectAll, onClearAll,
 }: ChannelSelectorAccordionProps) {
   const [open, setOpen] = useState(false);
-  const isAll        = selected.size === 0;
-  const activeCount  = isAll ? allChannels.length : selected.size;
-  const isActive     = (id: string) => isAll || selected.has(id);
+  const isAll        = allChannels.length > 0 && selected.size === allChannels.length;
+  const isNone       = selected.size === 0;
+  const activeCount  = selected.size;
+  const isActive     = (id: string) => selected.has(id);
 
-  const activeChannels = isAll ? allChannels : allChannels.filter((c) => selected.has(c.channelId));
+  const activeChannels = allChannels.filter((c) => selected.has(c.channelId));
   const previewDots    = activeChannels.slice(0, 6);
   const overflow       = activeCount - 6;
 
@@ -200,7 +201,11 @@ function ChannelSelectorAccordion({
               <span className="text-[#3A3A3A]/15 dark:text-[#003349]/15 select-none">·</span>
               <button
                 onClick={onClearAll}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349] transition-colors"
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  isNone
+                    ? "bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 text-[#3A3A3A] dark:text-[#003349]"
+                    : "text-[#3A3A3A]/45 dark:text-[#003349]/35 hover:text-[#3A3A3A] dark:hover:text-[#003349]"
+                }`}
               >
                 None
               </button>
@@ -415,8 +420,7 @@ export default function Performance() {
   const [showMA7, setShowMA7]   = useState(false);
   const [showMA30, setShowMA30] = useState(false);
 
-  // Channel selection state (empty Set = all channels)
-  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
+  const hasStoreSelection = selectedIds.length > 0;
 
   // All channels available for the current store selection (for the picker)
   const allChannels = useMemo(
@@ -425,26 +429,50 @@ export default function Performance() {
     [selectedIds.join(",")],
   );
 
+  // Channel selection state — starts with every available channel selected; empty Set means "no channels".
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(
+    () => new Set(allChannels.map((c) => c.channelId)),
+  );
+  // Tracks the user's intent independent of the concrete id set, so that when the
+  // available channel list changes (e.g. store selection changes), we can reconcile
+  // correctly: "all" re-selects every newly available channel, "none" stays empty,
+  // and "custom" keeps the intersection of the prior explicit picks with what's available.
+  const selectionMode = useRef<"all" | "none" | "custom">("all");
+  const channelsInitialized = useRef(false);
+
+  useEffect(() => {
+    const available = new Set(allChannels.map((c) => c.channelId));
+    if (!channelsInitialized.current) {
+      channelsInitialized.current = true;
+      return;
+    }
+    setSelectedChannelIds((prev) => {
+      if (selectionMode.current === "all") return new Set(available);
+      if (selectionMode.current === "none") return prev.size === 0 ? prev : new Set();
+      const pruned = new Set([...prev].filter((id) => available.has(id)));
+      return pruned.size === prev.size ? prev : pruned;
+    });
+  }, [allChannels]);
+
   const handleToggleChannel = (id: string) => {
     setSelectedChannelIds((prev) => {
-      const isAll = prev.size === 0;
-      const next  = isAll
-        ? new Set(allChannels.map((c) => c.channelId))
-        : new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        if (!next.size) return new Set();         // back to "all"
-      } else {
-        next.add(id);
-        if (next.size === allChannels.length) return new Set(); // back to "all"
-      }
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      selectionMode.current =
+        next.size === 0 ? "none" :
+        next.size === allChannels.length ? "all" : "custom";
       return next;
     });
   };
 
-  const handleSelectAll = () => setSelectedChannelIds(new Set());
-  const handleClearAll  = () =>
-    setSelectedChannelIds(new Set([allChannels[0]?.channelId ?? ""]));
+  const handleSelectAll = () => {
+    selectionMode.current = "all";
+    setSelectedChannelIds(new Set(allChannels.map((c) => c.channelId)));
+  };
+  const handleClearAll  = () => {
+    selectionMode.current = "none";
+    setSelectedChannelIds(new Set());
+  };
 
   // ─── Fetch performance data from Snowflake ──────────────────────────────────
 
@@ -457,7 +485,7 @@ export default function Performance() {
   const { data: perfApiData, isLoading: perfLoading, error: perfError, refetch: refetchPerf, isRefetching: perfRefetching } = useQuery<PerfApiResponse>({
     queryKey: ["performance-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
-      const storeParam = selectedIds.length ? `&storeIds=${selectedIds.join(",")}` : "";
+      const storeParam = `&storeIds=${selectedIds.join(",")}`;
       const res = await fetch(
         `${API_BASE}/api/data/performance?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
         { credentials: "include" },
@@ -470,6 +498,7 @@ export default function Performance() {
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
+    enabled: hasStoreSelection,
   });
 
   const DOW_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -483,9 +512,8 @@ export default function Performance() {
   }
 
   const data = useMemo((): PerformanceTrendsData & { channels: ChannelMapping[] } => {
-    const isAll = selectedChannelIds.size === 0;
     const apiChannels = (perfApiData?.channels ?? [])
-      .filter(c => isAll || selectedChannelIds.has(c.channelId));
+      .filter(c => selectedChannelIds.has(c.channelId));
 
     // Map to ChannelMapping shape for the components
     const channels: ChannelMapping[] = apiChannels.map(c => ({
@@ -609,25 +637,34 @@ export default function Performance() {
         />
 
         {/* ── Empty / loading / error state ────────────────────────────── */}
-        {perfError && (
+        {!hasStoreSelection && (
+          <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
+            <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
+              No stores selected — choose at least one store from the filter above to see data.
+            </p>
+          </div>
+        )}
+        {hasStoreSelection && perfError && (
           <ErrorState
             message="Unable to load data — check your data connections."
             onRetry={() => refetchPerf()}
             isRetrying={perfRefetching}
           />
         )}
-        {!perfError && perfLoading && (
+        {hasStoreSelection && !perfError && perfLoading && (
           <div className="h-40 rounded-xl bg-[#FFBC80]/8 dark:bg-[#EFBAE1]/8 animate-pulse" />
         )}
-        {!perfError && !perfLoading && perfApiData?.isEmpty && (
+        {hasStoreSelection && !perfError && !perfLoading && (perfApiData?.isEmpty || selectedChannelIds.size === 0) && (
           <div className="px-4 py-8 rounded-xl border border-dashed border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 bg-[#FFBC80]/4 dark:bg-[#EFBAE1]/4 text-center">
             <p className="text-sm font-medium text-[#3A3A3A]/60 dark:text-[#003349]/50">
-              No data available — check your Snowflake connection and date range.
+              {selectedChannelIds.size === 0
+                ? "No channels selected — choose at least one channel above to see data."
+                : "No data available — check your Snowflake connection and date range."}
             </p>
           </div>
         )}
 
-        {!perfError && !perfLoading && !perfApiData?.isEmpty && (
+        {hasStoreSelection && !perfError && !perfLoading && !perfApiData?.isEmpty && selectedChannelIds.size > 0 && (
           <>
         {/* ── Section 1: Daily Revenue vs Spend Composition ─────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">

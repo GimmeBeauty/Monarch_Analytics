@@ -108,10 +108,10 @@ export function storeById(id: string): StoreDefinition | undefined {
 
 /**
  * Returns the combined weight of the selected stores (0–1).
- * An empty selection is treated as "all stores" and returns 1.0.
+ * An empty selection means no stores are selected and returns 0.
  */
 export function combinedWeight(selectedIds: string[]): number {
-  if (selectedIds.length === 0) return 1;
+  if (selectedIds.length === 0) return 0;
   return STORES.filter((s) => selectedIds.includes(s.id))
     .reduce((sum, s) => sum + s.weight, 0);
 }

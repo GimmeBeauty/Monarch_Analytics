@@ -8,30 +8,35 @@ import { STORES, STORE_GROUPS, combinedWeight } from "@/lib/storeData";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StoreFilterState {
-  /** IDs of selected stores. Empty array = all stores selected. */
+  /** IDs of selected stores. Empty array = no stores selected (shows no data). */
   selectedIds: string[];
 }
 
 export interface StoreFilterContextValue {
   selectedIds:   string[];
-  storeWeight:   number;   // 0–1; 1.0 when all stores are selected
+  storeWeight:   number;   // 0–1; 1.0 when all stores are selected, 0 when none are
   isAllSelected: boolean;
   label:         string;   // human-readable summary for the trigger button
   toggleStore:   (id: string) => void;
   toggleGroup:   (groupId: string) => void;
   selectAll:     () => void;
+  deselectAll:   () => void;
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "monarch-store-filter";
+// v2: empty array now means "no stores selected" instead of "all stores selected".
+// A new key is used so old persisted `[]` values (which meant "all") aren't
+// silently reinterpreted as "none" for existing users.
+const STORAGE_KEY = "monarch-store-filter-v2";
 
 function loadState(userId: string): StoreFilterState {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEY}-${userId}`);
     if (raw) return JSON.parse(raw) as StoreFilterState;
   } catch {}
-  return { selectedIds: [] };
+  // Default for new/unmigrated users: all stores explicitly selected.
+  return { selectedIds: STORES.map((s) => s.id) };
 }
 
 function saveState(userId: string, state: StoreFilterState): void {
@@ -50,6 +55,7 @@ const StoreFilterCtx = createContext<StoreFilterContextValue>({
   toggleStore:   () => {},
   toggleGroup:   () => {},
   selectAll:     () => {},
+  deselectAll:   () => {},
 });
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -66,27 +72,16 @@ export function StoreFilterProvider({ children }: { children: ReactNode }) {
     [currentUserId],
   );
 
-  /** Normalise: if all stores are selected, store as empty array. */
-  const normalise = (ids: string[]): string[] =>
-    ids.length === STORES.length ? [] : ids;
-
   const toggleStore = useCallback(
     (id: string) => {
       setState((prev) => {
-        // Treat empty as "all selected"
-        const current =
-          prev.selectedIds.length === 0
-            ? STORES.map((s) => s.id)
-            : prev.selectedIds;
-
+        const current = prev.selectedIds;
         const next = current.includes(id)
           ? current.filter((s) => s !== id)
           : [...current, id];
 
-        // Prevent deselecting the last store
-        if (next.length === 0) return prev;
-
-        const nextState = { selectedIds: normalise(next) };
+        // Empty selection is allowed — it means "no stores selected".
+        const nextState = { selectedIds: next };
         saveState(currentUserId, nextState);
         return nextState;
       });
@@ -98,23 +93,14 @@ export function StoreFilterProvider({ children }: { children: ReactNode }) {
     (groupId: string) => {
       const groupIds = STORES.filter((s) => s.group === groupId).map((s) => s.id);
       setState((prev) => {
-        const current =
-          prev.selectedIds.length === 0
-            ? STORES.map((s) => s.id)
-            : prev.selectedIds;
-
+        const current = prev.selectedIds;
         const allInGroup = groupIds.every((id) => current.includes(id));
 
-        let next: string[];
-        if (allInGroup) {
-          const remaining = current.filter((id) => !groupIds.includes(id));
-          if (remaining.length === 0) return prev; // Prevent empty selection
-          next = remaining;
-        } else {
-          next = [...new Set([...current, ...groupIds])];
-        }
+        const next = allInGroup
+          ? current.filter((id) => !groupIds.includes(id))
+          : [...new Set([...current, ...groupIds])];
 
-        const nextState = { selectedIds: normalise(next) };
+        const nextState = { selectedIds: next };
         saveState(currentUserId, nextState);
         return nextState;
       });
@@ -122,15 +108,18 @@ export function StoreFilterProvider({ children }: { children: ReactNode }) {
     [currentUserId],
   );
 
-  const selectAll = useCallback(() => commit({ selectedIds: [] }), [commit]);
+  const selectAll   = useCallback(() => commit({ selectedIds: STORES.map((s) => s.id) }), [commit]);
+  const deselectAll = useCallback(() => commit({ selectedIds: [] }), [commit]);
 
   const value = useMemo<StoreFilterContextValue>(() => {
     const { selectedIds } = state;
-    const isAllSelected = selectedIds.length === 0;
+    const isAllSelected = selectedIds.length === STORES.length;
     const storeWeight   = combinedWeight(selectedIds);
 
     let label: string;
-    if (isAllSelected) {
+    if (selectedIds.length === 0) {
+      label = "No Stores Selected";
+    } else if (isAllSelected) {
       label = "All Stores";
     } else if (selectedIds.length === 1) {
       label = STORES.find((s) => s.id === selectedIds[0])?.label ?? "1 Store";
@@ -146,8 +135,8 @@ export function StoreFilterProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return { selectedIds, storeWeight, isAllSelected, label, toggleStore, toggleGroup, selectAll };
-  }, [state, toggleStore, toggleGroup, selectAll]);
+    return { selectedIds, storeWeight, isAllSelected, label, toggleStore, toggleGroup, selectAll, deselectAll };
+  }, [state, toggleStore, toggleGroup, selectAll, deselectAll]);
 
   return <StoreFilterCtx.Provider value={value}>{children}</StoreFilterCtx.Provider>;
 }
