@@ -1,0 +1,34 @@
+Before starting: please outline your implementation plan for all three tasks below and show me the list of files you expect to touch, so I can review before you begin making changes.
+
+Task 1 — Allow zero stores/channels to be selected
+
+Currently, the store filter (and ad channel filters on Spend Optimizer, Ad Attribution, and Performance Trends) require at least one store/channel to always be selected. Change this so:
+
+A user can deselect all stores, leaving zero selected
+When zero stores are selected, the affected page should show an empty/no-data state — it should NOT fall back to showing "all stores" data
+Same rule applies to ad channel selection on Spend Optimizer, Ad Attribution, and Performance Trends
+
+Note: the codebase currently treats an empty store/channel selection (storeIds.length === 0) as shorthand for "show all stores." This convention needs to change to mean "show nothing," which will require checking every page that relies on this pattern: Overview, Traffic, Ad Attribution, Spend Optimizer, Performance Trends, Item Performance, and Forecast. Please identify every place this pattern is used before making changes, since this affects many pages.
+
+Task 2 — Fix period-over-period comparison data
+
+Comparison data (vs. previous period or previous year) is not displaying correctly or is missing across Overview, Traffic, Spend Optimizer, Ad Attribution, Performance Trends, Item Performance, and Forecast.
+
+For each of these pages, please check:
+
+Is comparison-period data being fetched at all (look for compareStart/compareEnd or priorStart/priorEnd parameters)?
+Is the % change calculation correct ((current - prior) / prior * 100, with safe handling when prior = 0)?
+Is the comparison date range itself calculated correctly (previous period = same length immediately prior; previous year = same dates shifted back 365 days)?
+
+Please audit each page and report back which ones are working correctly, which have a calculation bug, and which don't have comparison data implemented at all, before making any fixes.
+
+Task 3 — Add a "Total" row to Product Performance table (Traffic page)
+
+Add a summary/total row to the Product Performance table on the Traffic page that:
+
+Tallies Units Sold, Total Sales, Online %, Online $, In-Store $, and any other applicable columns currently shown
+Updates dynamically based on whichever stores are currently selected
+Is visually distinct from regular product rows (bold text, different background shade, and/or a border separating it from the product list)
+Shows "Total" or "All Products" in the product title column instead of a product name
+
+Please confirm your plan for all three tasks, including which files you'll modify, before implementing.
