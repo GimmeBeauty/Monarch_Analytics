@@ -107,6 +107,9 @@ interface CircanaProductsApiResponse {
     units: number;
     avgPrice: number;
     storeCount: number;
+    salesPrior: number;
+    unitsPrior: number;
+    changeInSales: number;
   }>;
   isEmpty: boolean;
 }
@@ -506,11 +509,11 @@ export default function Traffic() {
                 storeColor:     store?.color ?? "#9CA3AF",
                 sales:          p.revenue,
                 formattedSales: fmtCurrency(p.revenue),
-                salesPrior:     0,
+                salesPrior:     p.salesPrior ?? 0,
                 units:          p.units,
-                unitsPrior:     0,
+                unitsPrior:     p.unitsPrior ?? 0,
                 avgSellPrice:   p.units > 0 ? p.revenue / p.units : 0,
-                changeInSales:  0,
+                changeInSales:  p.changeInSales ?? 0,
                 conversionRate: 0,
                 pageViews:      0,
                 storeCount:     p.storeCount,

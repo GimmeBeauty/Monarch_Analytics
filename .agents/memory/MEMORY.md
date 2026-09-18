@@ -9,3 +9,4 @@
 - [TikTok Shop core ad channel integration](tiktok-shop-channel-integration.md) — TikTok Shop Partner API (not Marketing API) is the right auth domain; on-demand throttled Postgres sync is the pattern for any non-Snowflake channel.
 - [TikTok Shop historical backfill design](tiktok-shop-historical-backfill.md) — chunked, resumable-via-persisted-checkpoint backfill that treats an API-rejected older date range as the history boundary, since no documented lookback limit exists.
 - [Monarch period-over-period comparison scope rule](monarch-period-comparison-scope.md) — only fix a "vs prior" slot that already exists and is fed fake data; never add new comparison UI where none exists.
+- [Circana "vs prior period" design](circana-prior-period-design.md) — Circana time_period labels are single-snapshot rolling windows; prior period is derived by subtracting nested buckets and normalizing to a per-day rate.

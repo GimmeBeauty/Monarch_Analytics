@@ -2487,22 +2487,102 @@ function isCircanaStale(dataAsOf: string, start: string, end: string): boolean {
   return d < s || d > e;
 }
 
-async function resolveCircanaPeriod(start: string, end: string): Promise<{ timePeriod: string; dataAsOf: string | null; isStale: boolean }> {
+async function resolveCircanaPeriod(start: string, end: string): Promise<{ timePeriod: string; dataAsOf: string | null; isStale: boolean; bucket: string }> {
   const sDate = new Date(start), eDate = new Date(end);
   const days = Math.round((eDate.getTime() - sDate.getTime()) / 86_400_000);
   const periods = await getTrafficCircanaPeriods();
 
+  // Recognize the shape of specific date-range presets before falling back to
+  // generic duration buckets, so "Year to Date" and "Last 52 Weeks" map to
+  // their intended bucket regardless of how many days they happen to span
+  // (a YTD range in January is short; a "last 365 days" range can land in
+  // the same year it started or straddle into the next one).
+  const isJan1Start   = sDate.getUTCMonth() === 0 && sDate.getUTCDate() === 1;
+  const sameYear      = sDate.getUTCFullYear() === eDate.getUTCFullYear();
+  const isNearYearEnd = eDate.getUTCMonth() === 11 && eDate.getUTCDate() >= 25;
+
   let bucket: string;
-  if (days <= 35)                      bucket = "4w";
-  else if (days <= 100)                bucket = "13w";
-  else if (days <= 190)                bucket = "26w";
-  else if (sDate.getFullYear() <= 2025) bucket = "2025";
-  else                                 bucket = "ytd";
+  if (isJan1Start && sameYear && isNearYearEnd) {
+    // A full calendar year selection (e.g. "Calendar Year 2025").
+    bucket = sDate.getUTCFullYear() <= 2025 ? "2025" : "ytd";
+  } else if (isJan1Start && sameYear) {
+    // A partial-year selection starting Jan 1 (Year to Date).
+    bucket = "ytd";
+  } else if (days >= 350 && days <= 375) {
+    // A ~52-week rolling window (e.g. "Last 52 Weeks" or "Last 365 Days").
+    bucket = "52w";
+  } else if (days <= 35)                bucket = "4w";
+  else if (days <= 100)                 bucket = "13w";
+  else if (days <= 190)                 bucket = "26w";
+  else if (sDate.getUTCFullYear() <= 2025) bucket = "2025";
+  else                                   bucket = "ytd";
 
   const timePeriod = periods[bucket] ?? TRAFFIC_CIRCANA_FALLBACK[bucket]!;
   const dataAsOf = parseCircanaEndDate(timePeriod);
   const stale = dataAsOf != null ? isCircanaStale(dataAsOf, start, end) : true;
-  return { timePeriod, dataAsOf, isStale: stale };
+  return { timePeriod, dataAsOf, isStale: stale, bucket };
+}
+
+// ── "Vs. prior period" for Circana products ─────────────────────────────────
+// Circana's time_period labels are pre-aggregated rolling windows (e.g.
+// "Latest 4 Week Pd Ending ...", "Latest 13 Week Pd Ending ..."), all
+// re-stamped as of the same as-of date. There is no historical row per
+// bucket to diff against (only one snapshot per window size exists at a
+// time), so a literal start/end date comparison — the pattern used for
+// every other retailer on this page — doesn't apply here.
+//
+// Instead we use the fact that the rolling windows nest inside one another
+// (4w ⊂ 13w ⊂ 26w ⊂ 52w, all ending on the same date): subtracting the
+// current bucket's total from the next-larger bucket's total isolates the
+// revenue/units that happened *before* the current window, which we treat
+// as the "prior period". That slice's day-count only exactly matches the
+// current window for the 13w and 26w buckets (91 and 182 days respectively);
+// for 4w it's a 9-week slice. To keep "prior" and "current" comparable
+// dollar-for-dollar despite the differing day counts, we scale the prior
+// slice to a per-day rate and re-express it over the current window's
+// day count (an implicit run-rate normalization).
+//
+// 52w and ytd have no larger nested bucket to diff against, so they fall
+// back to Circana's full "Calendar Year 2025" snapshot as the closest
+// available reference period, scaled the same way. The "2025" bucket
+// itself (a full prior calendar year) has no earlier snapshot in the data
+// at all, so no prior-period comparison is possible for it.
+function circanaPeriodDays(label: string): number {
+  const weekMatch = label.match(/Latest (\d+) Week/i);
+  if (weekMatch) return Number(weekMatch[1]) * 7;
+
+  const yearMatch = label.match(/(?:Building )?Calendar Year (\d{4}).*Ending (\d{2})-(\d{2})-(\d{2})/i);
+  if (yearMatch) {
+    const [, year, mm, dd, yy] = yearMatch;
+    const yearStart = new Date(`${year}-01-01T00:00:00Z`);
+    const ending = new Date(`20${yy}-${mm}-${dd}T00:00:00Z`);
+    const diffDays = Math.round((ending.getTime() - yearStart.getTime()) / 86_400_000) + 1;
+    return diffDays > 0 ? diffDays : 365;
+  }
+  return 28;
+}
+
+interface CircanaPriorSpec {
+  /** time_period label to compare against */
+  refTimePeriod: string;
+  /** whether refTimePeriod nests the current period (so its totals must be
+   *  subtracted from the current period's totals to isolate the "prior" slice) */
+  subtract: boolean;
+}
+
+function resolveCircanaPriorSpec(bucket: string, periods: Record<string, string>): CircanaPriorSpec | null {
+  const get = (key: string) => periods[key] ?? TRAFFIC_CIRCANA_FALLBACK[key];
+  switch (bucket) {
+    case "4w":  return periods["13w"] ? { refTimePeriod: get("13w")!, subtract: true } : null;
+    case "13w": return periods["26w"] ? { refTimePeriod: get("26w")!, subtract: true } : null;
+    case "26w": return periods["52w"] ? { refTimePeriod: get("52w")!, subtract: true } : null;
+    case "52w":
+    case "ytd":
+      return get("2025") ? { refTimePeriod: get("2025")!, subtract: false } : null;
+    default:
+      // "2025" (full prior calendar year) has no earlier Circana snapshot to compare against.
+      return null;
+  }
 }
 
 // ─── GET /api/data/circana/summary ────────────────────────────────────────────
@@ -2575,7 +2655,9 @@ router.get("/circana/products", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   const storeIds = parseStoreIds(storeIdsRaw);
-  const { timePeriod, dataAsOf, isStale } = await resolveCircanaPeriod(start, end);
+  const { timePeriod, dataAsOf, isStale, bucket } = await resolveCircanaPeriod(start, end);
+  const periods = await getTrafficCircanaPeriods();
+  const priorSpec = resolveCircanaPriorSpec(bucket, periods);
 
   const circanaStoreIds = new Set(["meijer", "publix", "cvs", "walgreens"]);
   const activeStoreIds = storeIds.length > 0
@@ -2592,7 +2674,14 @@ router.get("/circana/products", authenticate, async (req, res) => {
     .map(([retailer]) => `'${retailer.replace(/'/g, "\\'")}'`)
     .join(", ");
 
+  const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
+
   try {
+    const timePeriodsToFetch = priorSpec && priorSpec.refTimePeriod !== timePeriod
+      ? [timePeriod, priorSpec.refTimePeriod]
+      : [timePeriod];
+    const timePeriodFilter = timePeriodsToFetch.map(tp => `'${tp.replace(/'/g, "\\'")}'`).join(", ");
+
     const rows = await querySnowflake(`
       SELECT
         product,
@@ -2601,38 +2690,93 @@ router.get("/circana/products", authenticate, async (req, res) => {
         subcategory,
         brand,
         retailer,
+        time_period,
         SUM(dollar_sales)    AS revenue,
         SUM(unit_sales)      AS units,
         AVG(price_per_unit)  AS avg_price,
         MAX(stores_selling)  AS store_count
       FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
-      WHERE time_period = '${timePeriod}'
+      WHERE time_period IN (${timePeriodFilter})
         AND retailer IN (${retailerFilter})
-      GROUP BY product, upc, category, subcategory, brand, retailer
+      GROUP BY product, upc, category, subcategory, brand, retailer, time_period
       ORDER BY revenue DESC
     `);
 
-    const products = rows.map(row => {
-      const retailer   = String(row["RETAILER"]    ?? row["retailer"]    ?? "");
-      const revenue    = Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100;
-      const units      = Number(row["UNITS"]      ?? row["units"]      ?? 0);
-      const avgPrice   = Math.round(Number(row["AVG_PRICE"]  ?? row["avg_price"]  ?? 0) * 100) / 100;
-      const storeCount = Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0);
-      const storeId    = CIRCANA_RETAILER_TO_STORE[retailer] ?? retailer.toLowerCase().replace(/\s+/g, "-");
-      return {
-        product:     String(row["PRODUCT"]     ?? row["product"]     ?? ""),
-        upc:         String(row["UPC"]         ?? row["upc"]         ?? ""),
-        category:    String(row["CATEGORY"]    ?? row["category"]    ?? ""),
-        subcategory: String(row["SUBCATEGORY"] ?? row["subcategory"] ?? ""),
-        brand:       String(row["BRAND"]       ?? row["brand"]       ?? ""),
-        retailer,
-        storeId,
-        revenue,
-        units,
-        avgPrice,
-        storeCount,
-      };
-    });
+    const keyOf = (product: string, upc: string, retailer: string) => `${retailer}|${upc}|${product}`;
+
+    const refByKey = new Map<string, { revenue: number; units: number }>();
+    if (priorSpec) {
+      for (const row of rows) {
+        const rowPeriod = String(row["TIME_PERIOD"] ?? row["time_period"] ?? "");
+        if (rowPeriod !== priorSpec.refTimePeriod) continue;
+        const product  = String(row["PRODUCT"]  ?? row["product"]  ?? "");
+        const upc      = String(row["UPC"]      ?? row["upc"]      ?? "");
+        const retailer = String(row["RETAILER"] ?? row["retailer"] ?? "");
+        refByKey.set(keyOf(product, upc, retailer), {
+          revenue: Number(row["REVENUE"] ?? row["revenue"] ?? 0),
+          units:   Number(row["UNITS"]   ?? row["units"]   ?? 0),
+        });
+      }
+    }
+
+    const currentDays = circanaPeriodDays(timePeriod);
+    const refDaysRaw = priorSpec ? circanaPeriodDays(priorSpec.refTimePeriod) : 0;
+    // For "subtract" specs the reference bucket nests the current one, so the
+    // prior slice's day-count is the remainder after removing the current window.
+    const priorSliceDays = priorSpec
+      ? (priorSpec.subtract ? refDaysRaw - currentDays : refDaysRaw)
+      : 0;
+
+    const products = rows
+      .filter(row => String(row["TIME_PERIOD"] ?? row["time_period"] ?? "") === timePeriod)
+      .map(row => {
+        const retailer   = String(row["RETAILER"]    ?? row["retailer"]    ?? "");
+        const product    = String(row["PRODUCT"]     ?? row["product"]     ?? "");
+        const upc        = String(row["UPC"]         ?? row["upc"]         ?? "");
+        const revenue    = Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100;
+        const units      = Number(row["UNITS"]      ?? row["units"]      ?? 0);
+        const avgPrice   = Math.round(Number(row["AVG_PRICE"]  ?? row["avg_price"]  ?? 0) * 100) / 100;
+        const storeCount = Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0);
+        const storeId    = CIRCANA_RETAILER_TO_STORE[retailer] ?? retailer.toLowerCase().replace(/\s+/g, "-");
+
+        let salesPrior = 0, unitsPrior = 0;
+        if (priorSpec && priorSliceDays > 0) {
+          const ref = refByKey.get(keyOf(product, upc, retailer));
+          // No matching product in the reference bucket means no prior data is
+          // available for it (e.g. newly listed product) — leave salesPrior/
+          // unitsPrior at 0 rather than fabricating a comparison.
+          if (ref) {
+            // Isolate the prior slice (subtract current out of the nesting bucket,
+            // or use the reference bucket as-is), then re-express it at the
+            // current window's day-count so the two totals are run-rate comparable.
+            // Clamp to 0: syndicated data revisions between snapshot pulls can make
+            // a reference-bucket total dip below the current-bucket total for a
+            // product, which would otherwise surface as a nonsensical negative
+            // "prior" figure and skew summed table totals.
+            const priorSliceRevenue = Math.max(0, priorSpec.subtract ? ref.revenue - revenue : ref.revenue);
+            const priorSliceUnits   = Math.max(0, priorSpec.subtract ? ref.units   - units   : ref.units);
+            salesPrior = Math.round((priorSliceRevenue / priorSliceDays) * currentDays * 100) / 100;
+            unitsPrior = Math.round((priorSliceUnits   / priorSliceDays) * currentDays);
+          }
+        }
+
+        return {
+          product,
+          upc,
+          category:    String(row["CATEGORY"]    ?? row["category"]    ?? ""),
+          subcategory: String(row["SUBCATEGORY"] ?? row["subcategory"] ?? ""),
+          brand:       String(row["BRAND"]       ?? row["brand"]       ?? ""),
+          retailer,
+          storeId,
+          revenue,
+          units,
+          avgPrice,
+          storeCount,
+          salesPrior,
+          unitsPrior,
+          changeInSales: salesPrior > 0 ? pct(revenue, salesPrior) : 0,
+        };
+      });
 
     const effectiveDataAsOf = products.length > 0 ? dataAsOf : null;
     res.json({ products, isEmpty: products.length === 0, circanaDataAsOf: effectiveDataAsOf, isStale: effectiveDataAsOf === null || isStale });
