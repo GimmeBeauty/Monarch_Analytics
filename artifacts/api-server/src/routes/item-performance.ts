@@ -166,6 +166,52 @@ function safeNum(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+// Prior period: the equal-length window immediately preceding the current one.
+// Used only for the sell-in revenue "vs prior period" comparison — kept as its
+// own TRANDATE range (not per-SKU) since sell-in is the one data source always
+// queried regardless of the dataSource toggle, so both sides of the comparison
+// use an identical, real, unfiltered-by-toggle population.
+function computePriorSellInRange(
+  period: Period,
+  startParam: string | undefined,
+  endParam: string | undefined,
+): { priorStart: string; priorEnd: string } | null {
+  const toISO = (d: Date) => d.toISOString().slice(0, 10);
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (startParam && endParam && dateRe.test(startParam) && dateRe.test(endParam)) {
+    const s = new Date(`${startParam}T00:00:00Z`);
+    const e = new Date(`${endParam}T00:00:00Z`);
+    const days = Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1;
+    const priorEnd = new Date(s.getTime() - 86_400_000);
+    const priorStart = new Date(priorEnd.getTime() - (days - 1) * 86_400_000);
+    return { priorStart: toISO(priorStart), priorEnd: toISO(priorEnd) };
+  }
+  const now = new Date();
+  if (period === "2025") return { priorStart: "2024-01-01", priorEnd: "2024-12-31" };
+  if (period === "2026") {
+    const priorEnd = new Date(now);
+    priorEnd.setUTCFullYear(priorEnd.getUTCFullYear() - 1);
+    return { priorStart: "2025-01-01", priorEnd: toISO(priorEnd) };
+  }
+  if (period === "ytd") {
+    const priorEnd = new Date(now);
+    priorEnd.setUTCFullYear(priorEnd.getUTCFullYear() - 1);
+    return { priorStart: `${now.getUTCFullYear() - 1}-01-01`, priorEnd: toISO(priorEnd) };
+  }
+  const weeks = periodToWeeks(period);
+  if (weeks > 0) {
+    // The current-period predicate (DATEADD('week', -weeks, CURRENT_DATE()))
+    // is inclusive of both endpoints, i.e. it spans weeks*7 + 1 days (today
+    // back through today - weeks*7). The prior window must span the same
+    // number of days, ending the day before the current window starts.
+    const currentStart = new Date(now.getTime() - weeks * 7 * 86_400_000);
+    const priorEnd = new Date(currentStart.getTime() - 86_400_000);
+    const priorStart = new Date(priorEnd.getTime() - weeks * 7 * 86_400_000);
+    return { priorStart: toISO(priorStart), priorEnd: toISO(priorEnd) };
+  }
+  return null;
+}
+
 // ─── GET /api/item-performance ────────────────────────────────────────────────
 
 router.get("/", async (req, res) => {
@@ -334,19 +380,63 @@ router.get("/", async (req, res) => {
 
     const includePOS = dataSource !== "sellin";
 
+    // ── Current + prior period sell-in revenue totals (for "vs prior period"
+    // comparison) ───────────────────────────────────────────────────────────
+    // Both sides use the identical dedup + retailer filter and an uncapped
+    // SUM — deliberately NOT derived from skuRetailerSql's per-SKU breakdown,
+    // which truncates at 1000 rows (FETCH FIRST 1000 ROWS ONLY) and would
+    // understate the current-period total once a period exceeds that cap.
+    const currentSellInSql = `
+      WITH deduped AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY ENTITY_ID, TRANDATE, ITEM_ID, SKU
+            ORDER BY LOADED_AT DESC
+          ) AS rn
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE ${dateFilter}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
+      )
+      SELECT COALESCE(SUM(d.REVENUE), 0) AS TOTAL_REVENUE
+      FROM deduped d
+      WHERE d.rn = 1
+        ${retailerFilter}
+    `;
+    const priorRange = computePriorSellInRange(period, startParam, endParam);
+    const priorSellInSql = priorRange ? `
+      WITH deduped AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY ENTITY_ID, TRANDATE, ITEM_ID, SKU
+            ORDER BY LOADED_AT DESC
+          ) AS rn
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${priorRange.priorStart}' AND '${priorRange.priorEnd}'
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
+      )
+      SELECT COALESCE(SUM(d.REVENUE), 0) AS TOTAL_REVENUE
+      FROM deduped d
+      WHERE d.rn = 1
+        ${retailerFilter}
+    ` : null;
+
     let skuRetailerRows: Record<string, unknown>[] = [];
     let weeklyRows: Record<string, unknown>[] = [];
     let targetPosRows: Record<string, unknown>[] = [];
     let walmartPosRows: Record<string, unknown>[] = [];
     let circanaRows: Record<string, unknown>[] = [];
+    let currentSellInRows: Record<string, unknown>[] = [];
+    let priorSellInRows: Record<string, unknown>[] = [];
 
     try {
-      [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows] = await Promise.all([
+      [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows, currentSellInRows, priorSellInRows] = await Promise.all([
         querySnowflake(skuRetailerSql),
         querySnowflake(weeklyTrendSql),
         querySnowflake(targetPosSql),   // always run — needed for title lookup
         querySnowflake(walmartPosSql),  // always run — needed for title lookup
         includePOS ? querySnowflake(circanaPosSql) : Promise.resolve([]),
+        querySnowflake(currentSellInSql),
+        priorSellInSql ? querySnowflake(priorSellInSql) : Promise.resolve([]),
       ]);
     } catch (sfErr) {
       return res.status(503).json({
@@ -664,6 +754,20 @@ router.get("/", async (req, res) => {
       } : null,
     };
 
+    // ── Total sell-in revenue vs prior period ───────────────────────────────
+    // Sell-in (NetSuite) is the one data source always queried regardless of
+    // the dataSource toggle, so it's the only metric that can be compared
+    // apples-to-apples against an equal-length prior window.
+    const totalSellInRevenue = safeNum(currentSellInRows[0]?.["TOTAL_REVENUE"] ?? currentSellInRows[0]?.["total_revenue"]);
+    const priorTotalSellInRevenue = priorRange
+      ? safeNum(priorSellInRows[0]?.["TOTAL_REVENUE"] ?? priorSellInRows[0]?.["total_revenue"])
+      : null;
+    const sellInVsPriorPct = priorTotalSellInRevenue == null
+      ? null
+      : priorTotalSellInRevenue === 0
+        ? 0
+        : Math.round(((totalSellInRevenue - priorTotalSellInRevenue) / priorTotalSellInRevenue) * 1000) / 10;
+
     // ── Retailer response rows ────────────────────────────────────────────────
     const retailers = buildRetailerVelocity({
       entries,
@@ -681,6 +785,9 @@ router.get("/", async (req, res) => {
       storeCountsUsed: STORE_COUNTS_BY_ENTITY,
       periodLabel:     periodLabel(period),
       dataSourceNote:  "NetSuite data reflects sell-in (shipments to retailer). Target and Circana data reflects consumer sell-through.",
+      totalSellInRevenue,
+      priorTotalSellInRevenue,
+      sellInVsPriorPct,
     });
 
   } catch (err) {

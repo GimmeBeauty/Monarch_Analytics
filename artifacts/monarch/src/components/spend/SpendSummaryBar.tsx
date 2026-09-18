@@ -6,7 +6,7 @@
  * Cards that include model estimates: Blended iROAS, Realloc. Upside,
  * Model Quality — all labelled "(Est.)" with tooltips explaining assumptions.
  */
-import { DollarSign, BarChart2, Zap, TrendingUp, Award, Activity } from "lucide-react";
+import { DollarSign, BarChart2, Zap, TrendingUp, TrendingDown, Minus, Award, Activity } from "lucide-react";
 import type { SpendSummary } from "@/lib/spendData";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
@@ -16,6 +16,24 @@ function fmtCurrency(v: number): string {
   return `$${Math.round(v)}`;
 }
 
+function ChangeBadge({ change, positive }: { change: number; positive: boolean }) {
+  const isUp = change > 0;
+  const isDown = change < 0;
+  const isGood = (isUp && positive) || (isDown && !positive);
+  const isBad = (isDown && positive) || (isUp && !positive);
+  const colorClass = isGood
+    ? "text-emerald-600 dark:text-emerald-700 bg-emerald-50 dark:bg-emerald-100"
+    : isBad
+    ? "text-red-600 dark:text-red-700 bg-red-50 dark:bg-red-100"
+    : "text-[#3A3A3A]/50 dark:text-[#003349]/50 bg-[#3A3A3A]/5 dark:bg-[#003349]/5";
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums ${colorClass}`}>
+      {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : isDown ? <TrendingDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+      {Math.abs(change).toFixed(1)}%
+    </span>
+  );
+}
+
 interface MetricProps {
   icon: React.FC<{ className?: string }>;
   label: string;
@@ -23,9 +41,11 @@ interface MetricProps {
   sub?: string;
   subColor?: string;
   tooltip?: string;
+  badge?: number;
+  badgePositive?: boolean;
 }
 
-function Metric({ icon: Icon, label, value, sub, subColor, tooltip }: MetricProps) {
+function Metric({ icon: Icon, label, value, sub, subColor, tooltip, badge, badgePositive }: MetricProps) {
   return (
     <div className="rounded-2xl p-4 monarch-card h-full flex flex-col">
       <div className="flex items-start justify-between mb-2 gap-1">
@@ -44,6 +64,12 @@ function Metric({ icon: Icon, label, value, sub, subColor, tooltip }: MetricProp
         {sub && (
           <p className={`text-xs mt-1.5 ${subColor ?? "text-[#3A3A3A]/45 dark:text-[#003349]/35"}`}>{sub}</p>
         )}
+        {badge != null && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <ChangeBadge change={badge} positive={badgePositive ?? true} />
+            <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">vs prior period</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -51,9 +77,10 @@ function Metric({ icon: Icon, label, value, sub, subColor, tooltip }: MetricProp
 
 interface SpendSummaryBarProps {
   summary: SpendSummary;
+  prior?: { totalSpendPct: number; attRevenuePct: number; overallMerPct: number } | null;
 }
 
-export default function SpendSummaryBar({ summary }: SpendSummaryBarProps) {
+export default function SpendSummaryBar({ summary, prior }: SpendSummaryBarProps) {
   const uptideColor = summary.reallocationUpside > 0 ? "text-emerald-600 dark:text-emerald-700 font-semibold" : undefined;
   const mapeColor = summary.modelMape < 0.1 ? "text-emerald-600 dark:text-emerald-700" :
     summary.modelMape < 0.15 ? "text-amber-600 dark:text-amber-700" : "text-red-500 dark:text-red-700";
@@ -63,12 +90,16 @@ export default function SpendSummaryBar({ summary }: SpendSummaryBarProps) {
       <Metric icon={DollarSign} label="Total Spend"
         value={fmtCurrency(summary.totalSpend)}
         sub={`Rec: ${fmtCurrency(summary.recommendedTotalSpend)}`}
-        tooltip="Total media investment across all tracked ad channels in the selected period (real Snowflake data). Recommended total is a model estimate based on saturation analysis." />
+        tooltip="Total media investment across all tracked ad channels in the selected period (real Snowflake data). Recommended total is a model estimate based on saturation analysis."
+        badge={prior?.totalSpendPct}
+        badgePositive={false} />
 
       <Metric icon={TrendingUp} label="Att. Revenue"
         value={fmtCurrency(summary.totalAttributedRevenue)}
         sub={`Blended ROAS ${summary.blendedRoas.toFixed(2)}x`}
-        tooltip="Platform-reported conversion value attributed to ad spend, sourced directly from Snowflake. Blended ROAS = attributed revenue ÷ total spend (both real numbers)." />
+        tooltip="Platform-reported conversion value attributed to ad spend, sourced directly from Snowflake. Blended ROAS = attributed revenue ÷ total spend (both real numbers)."
+        badge={prior?.attRevenuePct}
+        badgePositive={true} />
 
       <Metric icon={Zap} label="Blended iROAS (Est.)"
         value={`${summary.blendedIroas.toFixed(2)}x`}
@@ -78,7 +109,9 @@ export default function SpendSummaryBar({ summary }: SpendSummaryBarProps) {
       <Metric icon={BarChart2} label="Overall MER"
         value={`${summary.overallMer.toFixed(2)}x`}
         sub="Revenue ÷ Ad Spend"
-        tooltip="Marketing Efficiency Ratio — total revenue (attributed + organic) divided by total ad spend. Spend, attributed revenue, and the organic baseline are all real Snowflake data — organic is Shopify revenue from orders with no UTM-tagged landing page, i.e. not attributable to any ad channel." />
+        tooltip="Marketing Efficiency Ratio — total revenue (attributed + organic) divided by total ad spend. Spend, attributed revenue, and the organic baseline are all real Snowflake data — organic is Shopify revenue from orders with no UTM-tagged landing page, i.e. not attributable to any ad channel."
+        badge={prior?.overallMerPct}
+        badgePositive={true} />
 
       <Metric icon={Award} label="Realloc. Upside (Est.)"
         value={fmtCurrency(summary.reallocationUpside)}

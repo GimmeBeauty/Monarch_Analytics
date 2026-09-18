@@ -480,14 +480,19 @@ export default function Performance() {
     channelId: string; channelLabel: string; color: string; channelFamily: string;
     dailySeries: Array<{ date: string; spend: number; revenue: number; impressions: number; clicks: number; conversions: number; roas: number; cpc: number; ctr: number; cvr: number; cpm: number; cpa: number }>;
   }
-  interface PerfApiResponse { channels: PerfApiChannel[]; isEmpty: boolean; }
+  interface PerfApiResponse {
+    channels: PerfApiChannel[];
+    isEmpty: boolean;
+    priorTotals: Record<string, { spend: number; revenue: number }> | null;
+  }
 
   const { data: perfApiData, isLoading: perfLoading, error: perfError, refetch: refetchPerf, isRefetching: perfRefetching } = useQuery<PerfApiResponse>({
-    queryKey: ["performance-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryKey: ["performance-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
     queryFn: async () => {
       const storeParam = `&storeIds=${selectedIds.join(",")}`;
+      const priorParam = `&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`;
       const res = await fetch(
-        `${API_BASE}/api/data/performance?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        `${API_BASE}/api/data/performance?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}${priorParam}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -500,6 +505,46 @@ export default function Performance() {
     retry: false,
     enabled: hasStoreSelection,
   });
+
+  // "vs prior period" summary — totals across the currently-selected channels,
+  // matching exactly the same channel-filter scope as the on-screen charts.
+  function pctChange(current: number, prior: number): number {
+    return prior === 0 ? 0 : Math.round(((current - prior) / prior) * 1000) / 10;
+  }
+  const priorComparison = useMemo(() => {
+    const priorTotals = perfApiData?.priorTotals;
+    if (!priorTotals) return null;
+    const apiChannels = perfApiData?.channels ?? [];
+    const curChannelsById = new Map(apiChannels.map(c => [c.channelId, c]));
+    // Scope = every selected channel that has EITHER current or prior activity,
+    // not just channels present in the current-period result set. A channel
+    // selected on-screen with prior activity but zero current activity must
+    // still contribute its full prior value (as a -100% drop), or the prior
+    // baseline is understated.
+    const scopeChannelIds = new Set([
+      ...apiChannels.filter(c => selectedChannelIds.has(c.channelId)).map(c => c.channelId),
+      ...Object.keys(priorTotals).filter(id => selectedChannelIds.has(id)),
+    ]);
+    if (scopeChannelIds.size === 0) return null;
+
+    let curSpend = 0, curRevenue = 0, priorSpend = 0, priorRevenue = 0;
+    for (const channelId of scopeChannelIds) {
+      const ch = curChannelsById.get(channelId);
+      if (ch) {
+        for (const d of ch.dailySeries) { curSpend += d.spend; curRevenue += d.revenue; }
+      }
+      const prior = priorTotals[channelId];
+      if (prior) { priorSpend += prior.spend; priorRevenue += prior.revenue; }
+    }
+    const curRoas   = curSpend > 0 ? curRevenue / curSpend : 0;
+    const priorRoas = priorSpend > 0 ? priorRevenue / priorSpend : 0;
+    return {
+      revenuePct: pctChange(curRevenue, priorRevenue),
+      spendPct:   pctChange(curSpend, priorSpend),
+      roasPct:    pctChange(curRoas, priorRoas),
+      curRevenue, curSpend, curRoas,
+    };
+  }, [perfApiData, selectedChannelIds]);
 
   const DOW_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const DOW_FULL  = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -666,6 +711,39 @@ export default function Performance() {
 
         {hasStoreSelection && !perfError && !perfLoading && !perfApiData?.isEmpty && selectedChannelIds.size > 0 && (
           <>
+        {/* ── vs Prior Period summary strip ───────────────────────────── */}
+        {priorComparison && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {([
+              { label: "Total Revenue", value: fmtCurrency(priorComparison.curRevenue), pct: priorComparison.revenuePct, positive: true },
+              { label: "Total Spend",   value: fmtCurrency(priorComparison.curSpend),   pct: priorComparison.spendPct,   positive: false },
+              { label: "Blended ROAS",  value: `${priorComparison.curRoas.toFixed(2)}x`, pct: priorComparison.roasPct,   positive: true },
+            ] as const).map(m => {
+              const isUp = m.pct > 0, isDown = m.pct < 0;
+              const isGood = (isUp && m.positive) || (isDown && !m.positive);
+              const isBad  = (isDown && m.positive) || (isUp && !m.positive);
+              const badgeCls = isGood
+                ? "text-emerald-600 dark:text-emerald-700 bg-emerald-50 dark:bg-emerald-100"
+                : isBad
+                ? "text-red-600 dark:text-red-700 bg-red-50 dark:bg-red-100"
+                : "text-[#3A3A3A]/50 dark:text-[#003349]/50 bg-[#3A3A3A]/5 dark:bg-[#003349]/5";
+              return (
+                <div key={m.label} className="rounded-xl p-4 monarch-card-settings">
+                  <p className="text-xs font-medium text-[#3A3A3A]/50 dark:text-[#003349]/40 uppercase tracking-wider mb-1.5">{m.label}</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-xl font-bold text-[#3A3A3A] dark:text-[#003349] tabular-nums">{m.value}</p>
+                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums ${badgeCls}`}>
+                      {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : isDown ? <TrendingDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+                      {Math.abs(m.pct).toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 mt-1">vs prior period</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* ── Section 1: Daily Revenue vs Spend Composition ─────────────── */}
         <div className="rounded-xl p-6 monarch-card-settings">
           <h2 className="text-sm font-semibold text-[#3A3A3A] dark:text-[#003349] mb-1">

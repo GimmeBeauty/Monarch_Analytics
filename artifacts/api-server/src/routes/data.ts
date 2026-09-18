@@ -1558,11 +1558,39 @@ router.get("/traffic", authenticate, async (req, res) => {
 
 // ─── GET /api/data/spend ──────────────────────────────────────────────────────
 
+// Aggregates DAILY_AD_SUMMARY rows (already store/channel filtered) into total
+// spend + conversion value. Shared by the current-period and prior-period
+// calculations in /spend so both sides use identical filtering logic.
+function aggregateSpendTotals(
+  rows: Record<string, unknown>[],
+  allStores: boolean,
+  requestedStoreIds: string[],
+): { totalSpend: number; totalConversionValue: number } {
+  let totalSpend = 0, totalConversionValue = 0;
+  for (const row of rows) {
+    const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+    const meta = CHANNEL_META[ch];
+    if (!meta) continue;
+    if (!allStores && !meta.storeIds.some(sid => requestedStoreIds.includes(sid))) continue;
+    totalSpend           += Number(row["SPEND"] ?? row["spend"] ?? 0);
+    totalConversionValue += Number(row["CONVERSION_VALUE"] ?? row["conversion_value"] ?? 0);
+  }
+  return { totalSpend, totalConversionValue };
+}
+
 router.get("/spend", authenticate, async (req, res) => {
   const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const { priorStart: _priorStartRaw, priorEnd: _priorEndRaw } = req.query as Record<string, string>;
+  const hasPrior = !!(_priorStartRaw && _priorEndRaw);
+  let priorStart = "", priorEnd = "";
+  if (hasPrior) {
+    try { priorStart = requireDate(_priorStartRaw, "priorStart"); priorEnd = requireDate(_priorEndRaw, "priorEnd"); }
+    catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  }
 
   const requestedStoreIds = parseStoreIds(req.query.storeIds);
   const allStores = requestedStoreIds.length === 0;
@@ -1613,10 +1641,45 @@ router.get("/spend", authenticate, async (req, res) => {
         `)
       : Promise.resolve([{ wholesale_organic_revenue: 0 }] as Record<string, unknown>[]);
 
-    const [rows, shopifyOrganicRows, wholesaleOrganicRows] = await Promise.all([
+    // Prior-period equivalents — only run when the caller supplied a prior
+    // window (drives the "vs prior period" comparison on the summary bar).
+    const priorAdQuery = hasPrior
+      ? querySnowflake(`
+          SELECT channel, spend, conversion_value
+          FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([] as Record<string, unknown>[]);
+
+    const priorShopifyOrganicQuery = hasPrior && shopifyInScope
+      ? querySnowflake(`
+          SELECT SUM(TRY_CAST(raw_data:total_price::STRING AS FLOAT)) AS shopify_organic_revenue
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_ORDERS_RAW
+          WHERE TRY_CAST(LEFT(raw_data:created_at::STRING, 10) AS DATE) BETWEEN '${priorStart}' AND '${priorEnd}'
+            AND raw_data:financial_status::STRING NOT IN ('voided', 'refunded')
+            AND (
+              raw_data:landing_site::STRING IS NULL
+              OR raw_data:landing_site::STRING NOT LIKE '%utm_source%'
+            )
+        `)
+      : Promise.resolve([{ shopify_organic_revenue: 0 }] as Record<string, unknown>[]);
+
+    const priorWholesaleOrganicQuery = hasPrior && wholesaleStoreNames.length > 0
+      ? querySnowflake(`
+          SELECT SUM(REVENUE) AS wholesale_organic_revenue
+          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          WHERE TRANDATE BETWEEN '${priorStart}' AND '${priorEnd}'
+            AND STORE_NAME IN (${wholesaleStoreNames.map(n => `'${n.replace(/'/g, "''")}'`).join(", ")})
+        `)
+      : Promise.resolve([{ wholesale_organic_revenue: 0 }] as Record<string, unknown>[]);
+
+    const [rows, shopifyOrganicRows, wholesaleOrganicRows, priorRows, priorShopifyOrganicRows, priorWholesaleOrganicRows] = await Promise.all([
       adQuery,
       shopifyOrganicQuery,
       wholesaleOrganicQuery,
+      priorAdQuery,
+      priorShopifyOrganicQuery,
+      priorWholesaleOrganicQuery,
     ]);
 
     // Group rows by channelId (mapped from DB channel name)
@@ -1720,7 +1783,60 @@ router.get("/spend", authenticate, async (req, res) => {
       "[data/spend] organic revenue breakdown (wholesale dedup applied)",
     );
 
-    res.json({ channels, organicRevenue, channelStatus: tiktokShopStatuses, isEmpty: channels.length === 0 });
+    // ── Prior-period totals (for the "vs prior period" summary badges) ─────────
+    // Mirrors the current-period computation above at an aggregate level: same
+    // channel/store filtering, same wholesale-overlap dedup, same TikTok Shop
+    // merge — just without the per-channel/daily breakdown, since only totals
+    // feed the comparison badges.
+    let prior: { totalSpend: number; totalAttributedRevenue: number; organicRevenue: number } | null = null;
+    if (hasPrior) {
+      const priorChannelMap: Record<string, { totalSpend: number; totalConversionValue: number }> = {};
+      for (const row of priorRows) {
+        const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+        const meta = CHANNEL_META[ch];
+        if (!meta) continue;
+        if (!allStores && !meta.storeIds.some(sid => requestedStoreIds.includes(sid))) continue;
+        const cid = meta.channelId;
+        if (!priorChannelMap[cid]) priorChannelMap[cid] = { totalSpend: 0, totalConversionValue: 0 };
+        priorChannelMap[cid].totalSpend           += Number(row["SPEND"] ?? row["spend"] ?? 0);
+        priorChannelMap[cid].totalConversionValue += Number(row["CONVERSION_VALUE"] ?? row["conversion_value"] ?? 0);
+      }
+      if (allStores || requestedStoreIds.some(sid => TIKTOK_SHOP_META.storeIds.includes(sid))) {
+        const priorTiktokShop = await getTikTokShopChannelData(priorStart, priorEnd);
+        if (priorTiktokShop.status !== "not_connected") {
+          const totals = aggregateAdRows(priorTiktokShop.rows);
+          priorChannelMap[TIKTOK_SHOP_META.channelId] = { totalSpend: totals.spend, totalConversionValue: totals.revenue };
+        }
+      }
+      const priorChannels = Object.entries(priorChannelMap).map(([channelId, v]) => ({ channelId, ...v }));
+      const priorTotalSpend = priorChannels.reduce((sum, c) => sum + c.totalSpend, 0);
+      const priorTotalConversionValue = priorChannels.reduce((sum, c) => sum + c.totalConversionValue, 0);
+
+      const priorShopifyOrganic = Number(
+        priorShopifyOrganicRows[0]?.["SHOPIFY_ORGANIC_REVENUE"] ??
+        priorShopifyOrganicRows[0]?.["shopify_organic_revenue"] ?? 0,
+      );
+      const priorWholesaleOrganic = Number(
+        priorWholesaleOrganicRows[0]?.["WHOLESALE_ORGANIC_REVENUE"] ??
+        priorWholesaleOrganicRows[0]?.["wholesale_organic_revenue"] ?? 0,
+      );
+      const priorWholesaleAttributedCv = priorChannels
+        .filter(c => {
+          const storeId = NETSUITE_OVERLAP_CHANNELS[c.channelId];
+          return storeId !== undefined && wholesaleStoreIdsSet.has(storeId);
+        })
+        .reduce((sum, c) => sum + c.totalConversionValue, 0);
+      const priorDeduplicatedWholesaleOrganic = Math.max(0, priorWholesaleOrganic - priorWholesaleAttributedCv);
+      const priorOrganicRevenue = Math.round((priorShopifyOrganic + priorDeduplicatedWholesaleOrganic) * 100) / 100;
+
+      prior = {
+        totalSpend:             Math.round(priorTotalSpend * 100) / 100,
+        totalAttributedRevenue: Math.round(priorTotalConversionValue * 100) / 100,
+        organicRevenue:         priorOrganicRevenue,
+      };
+    }
+
+    res.json({ channels, organicRevenue, channelStatus: tiktokShopStatuses, isEmpty: channels.length === 0, prior });
   } catch (e) {
     req.log.error({ err: e }, "[data/spend] Error:");
     res.status(500).json({ error: "Failed to query spend data" });
@@ -1735,15 +1851,50 @@ router.get("/performance", authenticate, async (req, res) => {
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
+  const { priorStart: _priorStartRaw, priorEnd: _priorEndRaw } = req.query as Record<string, string>;
+  const hasPrior = !!(_priorStartRaw && _priorEndRaw);
+  let priorStart = "", priorEnd = "";
+  if (hasPrior) {
+    try { priorStart = requireDate(_priorStartRaw, "priorStart"); priorEnd = requireDate(_priorEndRaw, "priorEnd"); }
+    catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  }
+
   const requestedStoreIds = parseStoreIds(req.query.storeIds);
 
   try {
-    const rows = await querySnowflake(`
+    const rowsPromise = querySnowflake(`
       SELECT summary_date, channel, spend, conversion_value, impressions, clicks, conversions, roas, cpc, ctr
       FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
       WHERE summary_date BETWEEN '${start}' AND '${end}'
       ORDER BY summary_date ASC
     `);
+
+    // Prior-period per-channel totals (lightweight — no daily granularity needed)
+    // for the "vs prior period" comparison badges on this page's summary strip.
+    const priorRowsPromise = hasPrior
+      ? querySnowflake(`
+          SELECT channel, SUM(spend) AS spend, SUM(conversion_value) AS conversion_value
+          FROM ${DB_NAME}.ADS.DAILY_AD_SUMMARY
+          WHERE summary_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          GROUP BY channel
+        `)
+      : Promise.resolve([] as Record<string, unknown>[]);
+
+    const [rows, priorRows] = await Promise.all([rowsPromise, priorRowsPromise]);
+
+    const priorTotals: Record<string, { spend: number; revenue: number }> = {};
+    for (const row of priorRows) {
+      const ch   = String(row["CHANNEL"] ?? row["channel"] ?? "").toLowerCase();
+      const meta = CHANNEL_META[ch];
+      if (!meta) continue;
+      if (requestedStoreIds.length && !meta.storeIds.some(id => requestedStoreIds.includes(id))) continue;
+      const cid = meta.channelId;
+      const spend   = Number(row["SPEND"]            ?? row["spend"]            ?? 0);
+      const revenue = Number(row["CONVERSION_VALUE"] ?? row["conversion_value"] ?? 0);
+      if (!priorTotals[cid]) priorTotals[cid] = { spend: 0, revenue: 0 };
+      priorTotals[cid].spend   += spend;
+      priorTotals[cid].revenue += revenue;
+    }
 
     const channelSeries: Record<string, {
       meta: (typeof CHANNEL_META)[string];
@@ -1797,7 +1948,7 @@ router.get("/performance", authenticate, async (req, res) => {
       }))
       .filter(ch => ch.dailySeries.length > 0);
 
-    res.json({ channels, isEmpty: channels.length === 0 });
+    res.json({ channels, isEmpty: channels.length === 0, priorTotals: hasPrior ? priorTotals : null });
   } catch (e) {
     req.log.error({ err: e }, "[data/performance] Error:");
     res.status(500).json({ error: "Failed to query performance data" });
@@ -3327,6 +3478,18 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
     const historyStartYear = Math.max(2020, year - 3);
     const historyStart = `${historyStartYear}-01-01`;
 
+    // Prior-year YTD window — the exact same calendar month/day range one year
+    // earlier, so a partial current year (e.g. Jan 1–Sep 18) is compared
+    // against the equivalent partial prior year (Jan 1–Sep 18), not the full
+    // prior year. Built by shifting the ytdEnd date back one year rather than
+    // using month-granularity, which would bias the comparison in the
+    // current-year's favor once the current month is incomplete.
+    const priorYear = year - 1;
+    const ytdEndDate = new Date(`${ytdEnd}T00:00:00Z`);
+    const priorYtdEndDate = new Date(Date.UTC(ytdEndDate.getUTCFullYear() - 1, ytdEndDate.getUTCMonth(), ytdEndDate.getUTCDate()));
+    const priorYtdStart = `${priorYear}-01-01`;
+    const priorYtdEnd   = priorYtdEndDate.toISOString().slice(0, 10);
+
     // ── Wholesale store filter ──────────────────────────────────────────────
     const wholesaleStoreIds = isAllStores
       ? Object.keys(WHOLESALE_NS_STORE_NAMES)
@@ -3391,7 +3554,12 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       adSpendSources.map(src => queryAdSource(src, historyStart, ytdEnd))
     ).then(perSource => perSource.flat());
 
-    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, adHistory, goalRows, annualRows] = await Promise.all([
+    // Prior-year YTD equivalents — same source tables/filters as the current-period
+    // queries above, just bounded by [priorYtdStart, priorYtdEnd] instead of
+    // [ytdStart, ytdEnd]. Only run when history actually reaches back that far.
+    const hasPriorYtdWindow = priorYear >= historyStartYear;
+    const [shopifyRows, targetRows, walmartRows, netsuiteRows, monthlyRaw, adHistory, goalRows, annualRows,
+           priorShopifyRows, priorTargetRows, priorWalmartRows, priorNetsuiteRows] = await Promise.all([
       isWholesale || !includeShopify ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
                COALESCE(SUM(units_sold), 0) AS UNITS
@@ -3432,6 +3600,27 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         WHERE year = ${year} AND month = 0
           ${goalStoreClause}
       `).catch(() => []),
+      isWholesale || !includeShopify || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(revenue), 0) AS REVENUE
+        FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
+      `),
+      isWholesale || !includeTarget || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(sale_amount), 0) AS REVENUE
+        FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
+        WHERE summary_date BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
+      `),
+      isWholesale || !includeWalmart || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(revenue), 0) AS REVENUE
+        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
+        WHERE week_date BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
+      `),
+      !isWholesale || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
+        SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE
+        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        WHERE TRANDATE BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
+          ${netsuiteStoreClause}
+      `),
     ]);
 
     const pick = (row: unknown, ...keys: string[]): number => {
@@ -3479,6 +3668,26 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       revenue: monthlyActualsMap[i + 1] ?? 0,
     }));
     const mtdRevenue = monthlyActualsMap[currentMonth] ?? 0;
+
+    // Prior-year YTD revenue — the exact same calendar-day window one year
+    // earlier ([priorYtdStart, priorYtdEnd], queried directly above from the
+    // same source tables as the current-period YTD figures), so a partial
+    // current year is compared against an equally partial prior year rather
+    // than a full prior year/month. Drives a real "vs prior year" comparison
+    // on YTD revenue (previously this page only had a visual prior-year line
+    // on the chart, no numeric change).
+    const priorYtdRevenue = !hasPriorYtdWindow
+      ? null
+      : isWholesale
+      ? Math.round(pick(r0(priorNetsuiteRows), "REVENUE") * 100) / 100
+      : Math.round((
+          pick(r0(priorShopifyRows), "REVENUE") +
+          pick(r0(priorTargetRows),  "REVENUE") +
+          pick(r0(priorWalmartRows), "REVENUE")
+        ) * 100) / 100;
+    const ytdVsPriorYearPct = priorYtdRevenue == null
+      ? null
+      : priorYtdRevenue === 0 ? 0 : Math.round(((ytdRevenue - priorYtdRevenue) / priorYtdRevenue) * 1000) / 10;
 
     const revenueModel = buildSeasonalTrendModel(revenueHistory.filter(row => row.year < year), year, Array.from({ length: 12 }, (_, i) => i + 1));
     const unitsModel = buildSeasonalTrendModel(unitsHistory.filter(row => row.year < year), year, Array.from({ length: 12 }, (_, i) => i + 1));
@@ -3611,6 +3820,8 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       monthlyActuals,
       monthlyGoals,
       totalMonthlyGoal,
+      priorYtdRevenue,
+      ytdVsPriorYearPct,
     });
   } catch (e) {
     req.log.error({ err: e }, "[data/forecast/summary]");

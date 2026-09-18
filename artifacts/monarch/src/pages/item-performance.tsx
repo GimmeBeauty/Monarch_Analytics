@@ -83,6 +83,25 @@ interface ApiResponse {
   storeCountsUsed: Record<string, number>;
   periodLabel: string;
   dataSourceNote: string;
+  totalSellInRevenue: number;
+  priorTotalSellInRevenue: number | null;
+  sellInVsPriorPct: number | null;
+}
+
+function ChangeBadge({ change }: { change: number }) {
+  const isUp = change > 0;
+  const isDown = change < 0;
+  const cls = isUp
+    ? "text-emerald-600 dark:text-emerald-700 bg-emerald-50 dark:bg-emerald-100"
+    : isDown
+    ? "text-red-600 dark:text-red-700 bg-red-50 dark:bg-red-100"
+    : "text-[#3A3A3A]/50 dark:text-[#003349]/50 bg-[#3A3A3A]/5 dark:bg-[#003349]/5";
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums ${cls}`}>
+      {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : isDown ? <TrendingDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+      {Math.abs(change).toFixed(1)}%
+    </span>
+  );
 }
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
@@ -239,9 +258,11 @@ interface KpiCardProps {
   note?: string;
   highlight?: boolean;
   onClick?: () => void;
+  badge?: number | null;
+  badgeLabel?: string;
 }
 
-function KpiCard({ title, value, sub, note, highlight, onClick }: KpiCardProps) {
+function KpiCard({ title, value, sub, note, highlight, onClick, badge, badgeLabel }: KpiCardProps) {
   const { theme } = useTheme();
   return (
     <div
@@ -253,6 +274,12 @@ function KpiCard({ title, value, sub, note, highlight, onClick }: KpiCardProps) 
       <div className="text-xl font-bold text-[#3A3A3A] dark:text-[#003349] leading-tight">{value}</div>
       {sub  && <div className="text-xs text-[#3A3A3A]/60 dark:text-[#003349]/50 mt-0.5 truncate">{sub}</div>}
       {note && <div className="text-[10px] text-[#3A3A3A]/40 mt-1">{note}</div>}
+      {badge != null && (
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <ChangeBadge change={badge} />
+          {badgeLabel && <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">{badgeLabel}</span>}
+        </div>
+      )}
       {onClick && <div className="text-[10px] text-[#FFBC80] dark:text-[#BFA1E3] mt-1.5">View top 10 →</div>}
     </div>
   );
@@ -874,9 +901,9 @@ export default function ItemPerformance() {
       )}
 
       {/* ── KPI Cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => (
+          Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="rounded-xl p-4 bg-white dark:bg-[#FFFFFF] shadow-sm border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 animate-pulse">
               <div className="h-3 w-24 bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 rounded mb-2" />
               <div className="h-6 w-32 bg-[#FFBC80]/20 dark:bg-[#EFBAE1]/20 rounded mb-1" />
@@ -913,6 +940,13 @@ export default function ItemPerformance() {
               sub={data.summary.highestVolumeSku?.productName}
               note={`SKU: ${data.summary.highestVolumeSku?.sku ?? "—"}`}
               onClick={() => setModalType("revenue")}
+            />
+            <KpiCard
+              title="Total Sell-In Revenue"
+              value={fmtCurrency(data.totalSellInRevenue)}
+              sub={data.sellInVsPriorPct != null ? "NetSuite shipments this period" : "No prior period to compare"}
+              badge={data.sellInVsPriorPct}
+              badgeLabel="vs prior period"
             />
             <KpiCard
               title="Biggest Opportunity"

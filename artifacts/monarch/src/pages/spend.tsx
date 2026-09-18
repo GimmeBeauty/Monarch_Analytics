@@ -23,6 +23,13 @@ interface SpendApiResponse {
   organicRevenue: number;
   channelStatus?: Record<string, string>;
   isEmpty: boolean;
+  prior: { totalSpend: number; totalAttributedRevenue: number; organicRevenue: number } | null;
+}
+
+// 0% (not NaN/Infinity) when the prior value is 0 — same safe-division idiom
+// used across the rest of the dashboard's period-over-period comparisons.
+function pctChange(current: number, prior: number): number {
+  return prior === 0 ? 0 : Math.round(((current - prior) / prior) * 1000) / 10;
 }
 
 const CHANNEL_STATUS_LABELS: Record<string, string> = {
@@ -39,11 +46,12 @@ export default function Spend() {
   const hasStoreSelection = selectedIds.length > 0;
 
   const { data: spendApiData, isLoading, error, refetch, isRefetching } = useQuery<SpendApiResponse>({
-    queryKey: ["spend-data", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
+    queryKey: ["spend-data", dateRange.startDate, dateRange.endDate, selectedIds.join(","), dateRange.compareStart, dateRange.compareEnd],
     queryFn: async () => {
       const storeParam = `&storeIds=${selectedIds.join(",")}`;
+      const priorParam = `&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`;
       const res = await fetch(
-        `${API_BASE}/api/data/spend?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}`,
+        `${API_BASE}/api/data/spend?start=${dateRange.startDate}&end=${dateRange.endDate}${storeParam}${priorParam}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -105,6 +113,24 @@ export default function Spend() {
     () => aggregateChannels(filteredChannels, data?.totalBaseRevenue ?? 0),
     [filteredChannels, data]
   );
+
+  // "vs prior period" comparison for the summary bar. The prior totals are
+  // computed server-side over ALL channels/stores in scope (matching the
+  // storeIds filter but not the client-side channel-family filter), so this
+  // approximates the family-filtered view; it's still a real, apples-to-apples
+  // comparison whenever no family filter narrows the current totals further.
+  const priorSummary = useMemo(() => {
+    const prior = spendApiData?.prior;
+    if (!prior) return null;
+    const priorOverallMer = prior.totalSpend > 0
+      ? (prior.totalAttributedRevenue + prior.organicRevenue) / prior.totalSpend
+      : 0;
+    return {
+      totalSpendPct:   pctChange(filteredSummary.totalSpend, prior.totalSpend),
+      attRevenuePct:   pctChange(filteredSummary.totalAttributedRevenue, prior.totalAttributedRevenue),
+      overallMerPct:   pctChange(filteredSummary.overallMer, priorOverallMer),
+    };
+  }, [spendApiData?.prior, filteredSummary]);
 
   const filteredInsights = useMemo(() => {
     if (!data) return [];
@@ -200,7 +226,7 @@ export default function Spend() {
               </div>
             ) : (
               <>
-                <SpendSummaryBar summary={filteredSummary} />
+                <SpendSummaryBar summary={filteredSummary} prior={priorSummary} />
                 <BudgetAllocation channels={filteredChannels} summary={filteredSummary} />
                 <ChannelDeepDive channels={filteredChannels} />
                 <ScenarioSimulator

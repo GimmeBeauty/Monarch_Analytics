@@ -16,8 +16,25 @@ import {
 import ErrorState from "@/components/ErrorState";
 import { useTheme } from "@/context/ThemeContext";
 import { brandGradient } from "@/lib/brandGradient";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
+
+function ChangeBadge({ change }: { change: number }) {
+  const isUp = change > 0;
+  const isDown = change < 0;
+  const cls = isUp
+    ? "text-emerald-600 dark:text-emerald-700 bg-emerald-50 dark:bg-emerald-100"
+    : isDown
+    ? "text-red-600 dark:text-red-700 bg-red-50 dark:bg-red-100"
+    : "text-[#3A3A3A]/50 dark:text-[#003349]/50 bg-[#3A3A3A]/5 dark:bg-[#003349]/5";
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums ${cls}`}>
+      {isUp ? <TrendingUp className="w-2.5 h-2.5" /> : isDown ? <TrendingDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+      {Math.abs(change).toFixed(1)}%
+    </span>
+  );
+}
 
 function fmt$(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -54,6 +71,8 @@ interface ForecastSummary {
   monthlyActuals: MonthBucket[];
   monthlyGoals: GoalBucket[];
   totalMonthlyGoal: number;
+  priorYtdRevenue: number | null;
+  ytdVsPriorYearPct: number | null;
 }
 
 interface ChartPoint {
@@ -169,7 +188,15 @@ export default function Forecast() {
   }, [s]);
 
   // KPI card data
-  const kpiCards = s ? [
+  interface KpiCardData {
+    label: string;
+    value: string;
+    sub: string;
+    color: string;
+    badge?: number | null;
+    badgeLabel?: string;
+  }
+  const kpiCards: KpiCardData[] = s ? [
     {
       label: "Projected Revenue",
       value: s.projectedRevenue == null ? "—" : fmt$(s.projectedRevenue),
@@ -201,6 +228,8 @@ export default function Forecast() {
       value: pctAnnual != null ? `${pctAnnual}%` : s.annualGoal === 0 ? "Set goal ↗" : "—",
       sub:   s.ytdRevenue > 0 ? `${fmt$(s.ytdRevenue)} YTD` : "No annual goal set",
       color: pctColor(pctAnnual),
+      badge: s.ytdVsPriorYearPct,
+      badgeLabel: `vs ${selectedYear - 1} YTD`,
     },
   ] : [];
 
@@ -291,6 +320,12 @@ export default function Forecast() {
                   {kpi.value}
                 </p>
                 <p className="text-xs text-[#3A3A3A]/40 dark:text-[#003349]/30">{kpi.sub}</p>
+                {kpi.badge != null && (
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <ChangeBadge change={kpi.badge} />
+                    <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">{kpi.badgeLabel}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
