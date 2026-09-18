@@ -159,6 +159,7 @@ export default function Traffic() {
   const includesTarget = selectedIds.includes("target");
   const isWalmartSelected = selectedIds.includes("walmart");
   const hasShopify = selectedIds.includes("shopify");
+  const isAmazonSelected = selectedIds.includes("amazon");
   const CIRCANA_STORE_IDS = ["meijer", "cvs", "walgreens", "publix"];
   const includesCircana = selectedIds.some(id => CIRCANA_STORE_IDS.includes(id));
   const [circanaBannerDismissed, setCircanaBannerDismissed] = useState(false);
@@ -428,13 +429,34 @@ export default function Traffic() {
       });
     } else {
       const shopifyRows = hasShopify
-        ? apiData.products.map((p, i) => ({
+        ? apiData.products.filter(p => !p.id?.startsWith("amazon-")).map((p, i) => ({
             id:              `shopify-${p.id || p.sku || i}`,
             productName:     p.productName,
             sku:             p.sku ?? "",
             storeId:         "shopify",
             storeName:       "Shopify",
             storeColor:      "#96BF48",
+            sales:           p.revenue,
+            formattedSales:  fmtCurrency(p.revenue),
+            salesPrior:      p.salesPrior ?? 0,
+            units:           p.units,
+            unitsPrior:      p.unitsPrior ?? 0,
+            avgSellPrice:    p.units > 0 ? p.revenue / p.units : 0,
+            changeInSales:   p.changeInSales ?? 0,
+            conversionRate:  0,
+            pageViews:       0,
+            isTop10:         false,
+          }))
+        : [];
+
+      const amazonRows = isAmazonSelected
+        ? apiData.products.filter(p => p.id?.startsWith("amazon-")).map((p, i) => ({
+            id:              `amazon-${p.id || p.sku || i}`,
+            productName:     p.productName,
+            sku:             p.sku ?? "",
+            storeId:         "amazon",
+            storeName:       "Amazon",
+            storeColor:      "#FF9900",
             sales:           p.revenue,
             formattedSales:  fmtCurrency(p.revenue),
             salesPrior:      p.salesPrior ?? 0,
@@ -522,7 +544,7 @@ export default function Traffic() {
             })
         : [];
 
-      products = [...shopifyRows, ...targetRows, ...walmartRows, ...circanaRows]
+      products = [...shopifyRows, ...amazonRows, ...targetRows, ...walmartRows, ...circanaRows]
         .sort((a, b) => b.sales - a.sales)
         .map((p, i) => ({ ...p, isTop10: i < 10 }));
     }
