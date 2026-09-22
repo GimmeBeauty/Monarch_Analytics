@@ -28,7 +28,7 @@ const ENTITY_MAP: Record<number, string> = {
 const STORE_COUNTS_BY_ENTITY: Record<number, number> = {
   229:  2202,   // Target
   231:  4604,   // Walmart
-  230:  1350,   // Ulta Beauty
+  230:  1334,   // Ulta Beauty
   228:  2800,   // Kroger
   222:  9000,   // CVS
   633:  1400,   // Publix

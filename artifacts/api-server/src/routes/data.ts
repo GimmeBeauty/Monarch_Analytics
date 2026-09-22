@@ -690,6 +690,16 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    // Ulta sell-through (Alloy.ai feed) — MSRP mode only. Ulta previously only had
+    // NetSuite wholesale sell-in data; this is true POS revenue.
+    const ultaSummaryQuery = (isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(sales_net_usd) AS ulta_revenue, SUM(sales_units_net) AS ulta_units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     const targetDailyQuery = (includesTarget && !isTargetOnly)
       ? querySnowflake(`
           SELECT summary_date, SUM(sale_amount) AS total_revenue
@@ -717,6 +727,16 @@ router.get("/overview", authenticate, async (req, res) => {
           WHERE week_date BETWEEN '${start}' AND '${end}'
           GROUP BY week_date
           ORDER BY week_date ASC
+        `)
+      : Promise.resolve([]);
+
+    const ultaDailyQuery = (isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT sale_date AS summary_date, SUM(sales_net_usd) AS total_revenue
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+          GROUP BY sale_date
+          ORDER BY sale_date ASC
         `)
       : Promise.resolve([]);
 
@@ -768,6 +788,14 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    const priorUltaQuery = (hasPrior && isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(sales_net_usd) AS ulta_revenue, SUM(sales_units_net) AS ulta_units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
     // Prior-period ad spend/revenue — needed to compute genuine spend/MER/ROAS
     // period-over-period comparisons (previously these KPIs always showed 0% change).
     const priorAdSpendQuery = (hasPrior && activeChannels.length > 0)
@@ -810,7 +838,7 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, priorAmazonRows, priorWalmartRows, targetDpswRows, priorAdSpendRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, ultaSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, ultaDailyRows, priorAmazonRows, priorWalmartRows, priorUltaRows, targetDpswRows, priorAdSpendRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value and spend from DAILY_AD_SUMMARY (filtered to active channels)
@@ -847,6 +875,7 @@ router.get("/overview", authenticate, async (req, res) => {
       targetSummaryQuery,
       walmartSummaryQuery,
       amazonSummaryQuery,
+      ultaSummaryQuery,
       targetDailyQuery,
       shopifySummaryQuery,
       priorShopifyQuery,
@@ -855,8 +884,10 @@ router.get("/overview", authenticate, async (req, res) => {
       priorWebOrdersQuery,
       amazonDailyQuery,
       walmartDailyQuery,
+      ultaDailyQuery,
       priorAmazonQuery,
       priorWalmartQuery,
+      priorUltaQuery,
       targetDpswQuery,
       priorAdSpendQuery,
     ]);
@@ -922,6 +953,16 @@ router.get("/overview", authenticate, async (req, res) => {
       dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (walmartDailyMap[d.date] ?? 0) }));
     }
 
+    if (isUltaSelected && !isWholesaleMode && !isTargetOnly) {
+      const ultaDailyMap: Record<string, number> = {};
+      for (const row of ultaDailyRows) {
+        const date = toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]);
+        const rev  = Number(row["TOTAL_REVENUE"]  ?? row["total_revenue"]  ?? 0);
+        if (date) { ultaDailyMap[date] = rev; }
+      }
+      dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (ultaDailyMap[d.date] ?? 0) }));
+    }
+
     // Channel breakdown with metadata mapping
     const channelBreakdown = channelRows
       .map(row => {
@@ -970,12 +1011,16 @@ router.get("/overview", authenticate, async (req, res) => {
     const amazonRev   = (isAmazonSelected && !isWholesaleMode && !isTargetOnly) ? Math.round(Number(amazonSummaryAgg["AMAZON_REVENUE"] ?? amazonSummaryAgg["amazon_revenue"] ?? 0) * 100) / 100 : 0;
     const amazonUnits = (isAmazonSelected && !isWholesaleMode && !isTargetOnly) ? Number(amazonSummaryAgg["AMAZON_UNITS"] ?? amazonSummaryAgg["amazon_units"] ?? 0) : 0;
 
-    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev + walmartRev + amazonRev;
+    const ultaSummaryAgg = (ultaSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const ultaRev   = (isUltaSelected && !isWholesaleMode && !isTargetOnly) ? Math.round(Number(ultaSummaryAgg["ULTA_REVENUE"] ?? ultaSummaryAgg["ulta_revenue"] ?? 0) * 100) / 100 : 0;
+    const ultaUnits = (isUltaSelected && !isWholesaleMode && !isTargetOnly) ? Number(ultaSummaryAgg["ULTA_UNITS"] ?? ultaSummaryAgg["ulta_units"] ?? 0) : 0;
+
+    const effectiveTotalRevenue = isTargetOnly ? totalRevenue : shopifyRev + targetRev + walmartRev + amazonRev + ultaRev;
     const mer = totalDailyAdSpend > 0 ? effectiveTotalRevenue / totalDailyAdSpend : 0;
     const effectiveOrders = isShopifySelected ? shopifyOrders : 0;
     const effectiveUnits  = isTargetOnly
       ? totalUnits
-      : (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0) + (isWalmartSelected ? walmartUnits : 0) + amazonUnits;
+      : (isShopifySelected ? shopifyUnits : 0) + (includesTarget ? targetUnits : 0) + (isWalmartSelected ? walmartUnits : 0) + amazonUnits + ultaUnits;
     const asp = effectiveUnits > 0 ? effectiveTotalRevenue / effectiveUnits : 0;
 
     const pct = (c: number, p: number) => p > 0 ? Math.round((c - p) / p * 1000) / 10 : 0;
@@ -998,7 +1043,11 @@ router.get("/overview", authenticate, async (req, res) => {
     const priorWalmartRev = (hasPrior && isWalmartSelected && !isTargetOnly)
       ? Math.round(Number(priorWalmartAgg["WALMART_REVENUE"] ?? priorWalmartAgg["walmart_revenue"] ?? 0) * 100) / 100
       : 0;
-    const priorRevenue = isTargetOnly ? priorTargetRev : priorShopifyRev + priorTargetRev + priorAmazonRev + priorWalmartRev;
+    const priorUltaAgg = (priorUltaRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorUltaRev = (hasPrior && isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? Math.round(Number(priorUltaAgg["ULTA_REVENUE"] ?? priorUltaAgg["ulta_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const priorRevenue = isTargetOnly ? priorTargetRev : priorShopifyRev + priorTargetRev + priorAmazonRev + priorWalmartRev + priorUltaRev;
     const priorOrders  = isShopifySelected ? priorShopifyOrders : 0;
     const priorShopifyUnits = (hasPrior && isShopifySelected && !isTargetOnly)
       ? Number(priorShopifyAgg["SHOPIFY_UNITS"] ?? priorShopifyAgg["shopify_units"] ?? 0)
@@ -1012,7 +1061,10 @@ router.get("/overview", authenticate, async (req, res) => {
     const priorAmazonUnitsAgg = (hasPrior && isAmazonSelected && !isWholesaleMode && !isTargetOnly)
       ? Number(priorAmazonAgg["AMAZON_UNITS"] ?? priorAmazonAgg["amazon_units"] ?? 0)
       : 0;
-    const priorUnits = (isShopifySelected ? priorShopifyUnits : 0) + (includesTarget ? priorTargetUnits : 0) + priorWalmartUnitsAgg + priorAmazonUnitsAgg;
+    const priorUltaUnitsAgg = (hasPrior && isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? Number(priorUltaAgg["ULTA_UNITS"] ?? priorUltaAgg["ulta_units"] ?? 0)
+      : 0;
+    const priorUnits = (isShopifySelected ? priorShopifyUnits : 0) + (includesTarget ? priorTargetUnits : 0) + priorWalmartUnitsAgg + priorAmazonUnitsAgg + priorUltaUnitsAgg;
     const priorAsp   = priorUnits > 0 ? priorRevenue / priorUnits : 0;
     const priorGa4Agg  = (priorGa4Rows as Array<Record<string, unknown>>)[0] ?? {};
     const priorSessions = Number(priorGa4Agg["TOTAL_SESSIONS"] ?? priorGa4Agg["total_sessions"] ?? 0);
@@ -1038,6 +1090,7 @@ router.get("/overview", authenticate, async (req, res) => {
           ...(targetRev   > 0 ? [{ storeId: "target",   revenue: targetRev   }] : []),
           ...(walmartRev  > 0 ? [{ storeId: "walmart",  revenue: walmartRev  }] : []),
           ...(amazonRev   > 0 ? [{ storeId: "amazon",   revenue: amazonRev   }] : []),
+          ...(ultaRev     > 0 ? [{ storeId: "ulta",     revenue: ultaRev     }] : []),
         ];
 
     const isEmpty = effectiveTotalRevenue === 0 && totalDailyAdSpend === 0;
@@ -1233,6 +1286,7 @@ router.get("/traffic", authenticate, async (req, res) => {
   const isShopifySelected = storeIds.length === 0 || storeIds.includes("shopify");
   const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
   const isAmazonSelected  = storeIds.length === 0 || storeIds.includes("amazon");
+  const isUltaSelected    = storeIds.length === 0 || storeIds.includes("ulta");
   const isWholesaleMode   = isWholesaleRaw === "true";
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
   const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
@@ -1266,6 +1320,16 @@ router.get("/traffic", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    // Ulta has no true per-SKU breakdown — the Product Performance table renders
+    // this as a single aggregated row rather than individual products.
+    const ultaTrafficSummaryQuery = (isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(sales_net_usd) AS ulta_revenue, SUM(sales_units_net) AS ulta_units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+        `)
+      : Promise.resolve([]);
+
     const priorSummaryQuery = hasPrior
       ? (isTargetOnly
         ? querySnowflake(`
@@ -1293,6 +1357,14 @@ router.get("/traffic", authenticate, async (req, res) => {
           SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
           FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
           WHERE week_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    const priorTrafficUltaQuery = (hasPrior && isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT SUM(sales_net_usd) AS ulta_revenue, SUM(sales_units_net) AS ulta_units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
       : Promise.resolve([]);
 
@@ -1346,7 +1418,7 @@ router.get("/traffic", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficWalmartRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows, targetDpswRows, priorProductRows, priorAmazonProductRows] = await Promise.all([
+    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, ultaTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficWalmartRows, priorTrafficUltaRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows, targetDpswRows, priorProductRows, priorAmazonProductRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
@@ -1401,9 +1473,11 @@ router.get("/traffic", authenticate, async (req, res) => {
       `),
       targetTrafficSummaryQuery,
       walmartTrafficSummaryQuery,
+      ultaTrafficSummaryQuery,
       priorSummaryQuery,
       priorTrafficTargetQuery,
       priorTrafficWalmartQuery,
+      priorTrafficUltaQuery,
       priorTrafficGa4Query,
       priorTrafficWebOrdersQuery,
       targetDpswQuery,
@@ -1422,6 +1496,9 @@ router.get("/traffic", authenticate, async (req, res) => {
     const walmartTrafficAgg = (walmartTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
     const walmartTrafficRev   = (isWalmartSelected && !isTargetOnly) ? Math.round(Number(walmartTrafficAgg["WALMART_REVENUE"] ?? walmartTrafficAgg["walmart_revenue"] ?? 0) * 100) / 100 : 0;
     const walmartTrafficUnits = (isWalmartSelected && !isTargetOnly) ? Number(walmartTrafficAgg["WALMART_UNITS"] ?? walmartTrafficAgg["walmart_units"] ?? 0) : 0;
+    const ultaTrafficAgg = (ultaTrafficSummaryRows as Array<Record<string, unknown>>)[0] ?? {};
+    const ultaTrafficRev   = (isUltaSelected && !isWholesaleMode && !isTargetOnly) ? Math.round(Number(ultaTrafficAgg["ULTA_REVENUE"] ?? ultaTrafficAgg["ulta_revenue"] ?? 0) * 100) / 100 : 0;
+    const ultaTrafficUnits = (isUltaSelected && !isWholesaleMode && !isTargetOnly) ? Number(ultaTrafficAgg["ULTA_UNITS"] ?? ultaTrafficAgg["ulta_units"] ?? 0) : 0;
     const shopifyTrafficRev = isShopifySelected && !isTargetOnly ? totalRevenue : 0;
 
     const targetDpswAgg = (targetDpswRows as Array<Record<string, unknown>>)[0] ?? {};
@@ -1437,12 +1514,12 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const effectiveRevenue = isTargetOnly
       ? totalRevenue
-      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0) + (isWalmartSelected ? walmartTrafficRev : 0) + amazonTrafficRev;
+      : shopifyTrafficRev + (includesTarget ? targetTrafficRev : 0) + (isWalmartSelected ? walmartTrafficRev : 0) + amazonTrafficRev + ultaTrafficRev;
 
     const effectiveOrders = isShopifySelected ? totalOrders : 0;
     const effectiveUnits  = isTargetOnly
       ? totalOrders
-      : (isShopifySelected ? totalUnits : 0) + (includesTarget ? targetTrafficUnits : 0) + (isWalmartSelected ? walmartTrafficUnits : 0) + amazonTrafficUnits;
+      : (isShopifySelected ? totalUnits : 0) + (includesTarget ? targetTrafficUnits : 0) + (isWalmartSelected ? walmartTrafficUnits : 0) + amazonTrafficUnits + ultaTrafficUnits;
     const asp = effectiveUnits > 0 ? effectiveRevenue / effectiveUnits : 0;
 
     const ga4Agg        = ga4Rows[0] ?? {};
@@ -1469,14 +1546,21 @@ router.get("/traffic", authenticate, async (req, res) => {
     const priorAmazonUnits  = (isAmazonSelected && !isWholesaleMode && !isTargetOnly)
       ? (priorAmazonProductRows as Array<Record<string, unknown>>).reduce((s, r) => s + Number(r["UNITS"] ?? r["units"] ?? 0), 0)
       : 0;
+    const priorUltaAgg = (priorTrafficUltaRows as Array<Record<string, unknown>>)[0] ?? {};
+    const priorUltaRev = (isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? Math.round(Number(priorUltaAgg["ULTA_REVENUE"] ?? priorUltaAgg["ulta_revenue"] ?? 0) * 100) / 100
+      : 0;
+    const priorUltaUnits = (isUltaSelected && !isWholesaleMode && !isTargetOnly)
+      ? Number(priorUltaAgg["ULTA_UNITS"] ?? priorUltaAgg["ulta_units"] ?? 0)
+      : 0;
     const priorShopifyRev   = isShopifySelected && !isTargetOnly ? priorTotalRevenue : 0;
     const priorEffectiveRevenue = isTargetOnly
       ? priorTotalRevenue
-      : priorShopifyRev + (includesTarget ? priorTargetRev : 0) + (isWalmartSelected ? priorWalmartRev : 0) + priorAmazonRev;
+      : priorShopifyRev + (includesTarget ? priorTargetRev : 0) + (isWalmartSelected ? priorWalmartRev : 0) + priorAmazonRev + priorUltaRev;
     const priorEffectiveOrders = isShopifySelected ? priorTotalOrders : 0;
     const priorEffectiveUnits = isTargetOnly
       ? priorTotalOrders
-      : (isShopifySelected ? priorTotalUnits : 0) + (includesTarget ? priorTargetUnits : 0) + (isWalmartSelected ? priorWalmartUnits : 0) + priorAmazonUnits;
+      : (isShopifySelected ? priorTotalUnits : 0) + (includesTarget ? priorTargetUnits : 0) + (isWalmartSelected ? priorWalmartUnits : 0) + priorAmazonUnits + priorUltaUnits;
     const priorAsp = priorEffectiveUnits > 0 ? priorEffectiveRevenue / priorEffectiveUnits : 0;
     const priorGa4Agg       = (priorTrafficGa4Rows as Array<Record<string, unknown>>)[0] ?? {};
     const priorSessions     = Number(priorGa4Agg["TOTAL_SESSIONS"] ?? priorGa4Agg["total_sessions"] ?? 0);
@@ -1535,7 +1619,25 @@ router.get("/traffic", authenticate, async (req, res) => {
         changeInSales: hasPrior ? pct(revenue, salesPrior) : 0,
       };
     });
-    const products = [...shopifyProducts, ...amazonProducts].sort((a, b) => b.revenue - a.revenue);
+
+    // Ulta's Alloy.ai feed only provides store-level totals, not true per-SKU
+    // granularity, so it's surfaced as a single aggregated row rather than
+    // broken into individual products like Target/Walmart/Amazon.
+    const ultaProducts = (isUltaSelected && !isWholesaleMode && !isTargetOnly && ultaTrafficRev > 0)
+      ? [{
+          id:            "ulta-aggregate",
+          productName:   "Gimme Beauty (Ulta - All Products)",
+          sku:           "",
+          revenue:       ultaTrafficRev,
+          orders:        0,
+          units:         ultaTrafficUnits,
+          salesPrior:    priorUltaRev,
+          unitsPrior:    priorUltaUnits,
+          changeInSales: hasPrior ? pct(ultaTrafficRev, priorUltaRev) : 0,
+        }]
+      : [];
+
+    const products = [...shopifyProducts, ...amazonProducts, ...ultaProducts].sort((a, b) => b.revenue - a.revenue);
 
     const stateRevenue = geoRows.map(row => ({
       stateCode: String(row["STATE"]       ?? row["state"]       ?? "").toUpperCase(),
