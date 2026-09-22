@@ -67,6 +67,21 @@ async function refreshGoogleToken(
 
 const DB_NAME = process.env.SNOWFLAKE_DATABASE ?? "MONARCH_RAW";
 
+// NETSUITE_SALES_BY_PRODUCT contains duplicate/re-loaded rows for the same
+// (ENTITY_ID, TRANDATE, ITEM_ID, SKU) — later LOADED_AT values replace, not
+// append to, earlier ones. Every aggregation query must read through this
+// deduped view instead of the raw table, or wholesale revenue is overstated
+// (confirmed: raw Target YTD summed to $17.0M vs $12.9M deduped). Mirrors the
+// dedup CTE already used in item-performance.ts.
+const NETSUITE_SALES_DEDUPED = `(
+  SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (
+      PARTITION BY ENTITY_ID, TRANDATE, ITEM_ID, SKU ORDER BY LOADED_AT DESC
+    ) AS RN
+    FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+  ) WHERE RN = 1
+)`;
+
 interface AdSourceConfig {
   table: string;
   channelId: string;
@@ -1635,7 +1650,7 @@ router.get("/spend", authenticate, async (req, res) => {
     const wholesaleOrganicQuery = wholesaleStoreNames.length > 0
       ? querySnowflake(`
           SELECT SUM(REVENUE) AS wholesale_organic_revenue
-          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          FROM ${NETSUITE_SALES_DEDUPED} nsp
           WHERE TRANDATE BETWEEN '${start}' AND '${end}'
             AND STORE_NAME IN (${wholesaleStoreNames.map(n => `'${n.replace(/'/g, "''")}'`).join(", ")})
         `)
@@ -1667,7 +1682,7 @@ router.get("/spend", authenticate, async (req, res) => {
     const priorWholesaleOrganicQuery = hasPrior && wholesaleStoreNames.length > 0
       ? querySnowflake(`
           SELECT SUM(REVENUE) AS wholesale_organic_revenue
-          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          FROM ${NETSUITE_SALES_DEDUPED} nsp
           WHERE TRANDATE BETWEEN '${priorStart}' AND '${priorEnd}'
             AND STORE_NAME IN (${wholesaleStoreNames.map(n => `'${n.replace(/'/g, "''")}'`).join(", ")})
         `)
@@ -2359,7 +2374,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
         SELECT
           SUM(REVENUE) AS total_revenue,
           SUM(UNITS)   AS total_units
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
         ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
@@ -2372,7 +2387,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
           SUM(UNITS)      AS units,
           MAX(TRANDATE)   AS last_date,
           COUNT(DISTINCT TRANDATE) AS day_count
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
         ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
@@ -2387,7 +2402,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
           STORE_NAME,
           SUM(REVENUE)   AS revenue,
           SUM(UNITS)     AS units
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
         ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
@@ -2400,7 +2415,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
           TRANDATE,
           SUM(REVENUE) AS daily_revenue,
           SUM(UNITS)   AS daily_units
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
         WHERE TRANDATE BETWEEN '${start}' AND '${end}'
         ${storeWhere}
         ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
@@ -2480,7 +2495,7 @@ router.get("/netsuite/sync-status", authenticate, async (req, res) => {
         SUM(REVENUE)  AS revenue,
         SUM(UNITS)    AS units,
         MAX(TRANDATE) AS last_date
-      FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+      FROM ${NETSUITE_SALES_DEDUPED} nsp
       GROUP BY STORE_NAME, STORE_TYPE
       ORDER BY revenue DESC
     `);
@@ -3032,7 +3047,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
               STORE_NAME,
               SUM(REVENUE) AS revenue,
               SUM(UNITS)   AS units
-            FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+            FROM ${NETSUITE_SALES_DEDUPED} nsp
             WHERE TRANDATE BETWEEN '${start}' AND '${end}'
               AND STORE_NAME IN (${storeNameFilter})
             GROUP BY DATE_TRUNC('month', TRANDATE), STORE_NAME
@@ -3232,7 +3247,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
             STORE_NAME,
             SUM(REVENUE) AS revenue,
             SUM(UNITS)   AS units
-          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          FROM ${NETSUITE_SALES_DEDUPED} nsp
           WHERE TRANDATE BETWEEN '${start}' AND '${end}'
             AND STORE_NAME IN (${storeNameFilter})
           GROUP BY DATE_TRUNC('month', TRANDATE), STORE_NAME
@@ -3527,7 +3542,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       ? `
         WITH src AS (
           SELECT YEAR(TRANDATE) AS yr, MONTH(TRANDATE) AS mo, REVENUE AS rev, UNITS AS units
-          FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+          FROM ${NETSUITE_SALES_DEDUPED} nsp
           WHERE TRANDATE BETWEEN '${historyStart}' AND '${ytdEnd}' ${netsuiteStoreClause}
         )
         SELECT yr AS YR, mo AS MO, SUM(rev) AS REVENUE, SUM(units) AS UNITS
@@ -3581,7 +3596,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       isWholesale ? querySnowflake(`
         SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE,
                COALESCE(SUM(UNITS), 0) AS UNITS
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
         WHERE TRANDATE BETWEEN '${ytdStart}' AND '${ytdEnd}'
           ${netsuiteStoreClause}
       `) : Promise.resolve([]),
@@ -3617,7 +3632,7 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
       `),
       !isWholesale || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE
-        FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
         WHERE TRANDATE BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
           ${netsuiteStoreClause}
       `),
@@ -3867,7 +3882,7 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
         return `
           WITH src (period_start, revenue) AS (
             SELECT DATE_TRUNC('${trunc}', TRANDATE), REVENUE
-            FROM ${DB_NAME}.FINANCE.NETSUITE_SALES_BY_PRODUCT
+            FROM ${NETSUITE_SALES_DEDUPED} nsp
             WHERE YEAR(TRANDATE) = ${y} ${chartNsClause}
           )
           SELECT period_start AS PERIOD_START, SUM(revenue) AS REVENUE
