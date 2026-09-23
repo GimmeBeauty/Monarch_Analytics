@@ -147,7 +147,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
-  walmart_connect: { channelId: "walmart-connect", channelLabel: "Walmart Sponsored Search", color: "#0071CE", channelFamily: "rmn", storeIds: ["walmart"] },
+  walmart_connect: { channelId: "walmart-connect", channelLabel: "Walmart Search", color: "#0071CE", channelFamily: "rmn", storeIds: ["walmart"] },
   walmart_display: { channelId: "walmart-display", channelLabel: "Walmart Display", color: "#004F9A", channelFamily: "rmn", storeIds: ["walmart"] },
   amazon_ads:     { channelId: "amazon-ads",     channelLabel: "Amazon Ads",       color: "#FF9900", channelFamily: "rmn",  storeIds: ["amazon"] },
   ctv_programmatic: { channelId: "ctv-programmatic", channelLabel: "CTV / Programmatic", color: "#6B46C1", channelFamily: "core", storeIds: ["target", "amazon"] },

@@ -138,7 +138,7 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
   },
   {
     channelId: "walmart-connect",
-    channelLabel: "Walmart Sponsored Search",
+    channelLabel: "Walmart Search",
     storeIds: ["walmart"],
     dailySpendBaseline: 5200,
     baseRoas: 4.3,
