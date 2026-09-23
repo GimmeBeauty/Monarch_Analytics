@@ -79,7 +79,7 @@ export const ENTITY_MAP: Record<number, string> = {
 
 export const STORE_COUNTS_BY_ENTITY: Record<number, number> = {
   229:  2000,
-  231:  4700,
+  231:  4770,
   230:  1334,
   228:  2800,
   222:  9000,

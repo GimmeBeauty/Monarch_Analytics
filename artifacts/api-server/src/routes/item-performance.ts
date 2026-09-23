@@ -27,7 +27,7 @@ const ENTITY_MAP: Record<number, string> = {
 
 const STORE_COUNTS_BY_ENTITY: Record<number, number> = {
   229:  2202,   // Target
-  231:  4604,   // Walmart
+  231:  4770,   // Walmart
   230:  1334,   // Ulta Beauty
   228:  2800,   // Kroger
   222:  9000,   // CVS
@@ -144,11 +144,11 @@ function periodToTargetDateFilter(period: Period): string {
 }
 
 function periodToWalmartDateFilter(period: Period): string {
-  if (period === "ytd")  return `week_date >= DATE_TRUNC('year', CURRENT_DATE())`;
-  if (period === "2025") return `week_date BETWEEN '2025-01-01' AND '2025-12-31'`;
-  if (period === "2026") return `week_date >= '2026-01-01'`;
+  if (period === "ytd")  return `sale_date >= DATE_TRUNC('year', CURRENT_DATE())`;
+  if (period === "2025") return `sale_date BETWEEN '2025-01-01' AND '2025-12-31'`;
+  if (period === "2026") return `sale_date >= '2026-01-01'`;
   const weeks = periodToWeeks(period);
-  return `week_date >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
+  return `sale_date >= DATEADD('week', -${weeks}, CURRENT_DATE())`;
 }
 
 function periodLabel(period: Period): string {
@@ -242,7 +242,7 @@ router.get("/", async (req, res) => {
       numWeeks          = Math.max(1, Math.round(days / 7));
       dateFilter        = `TRANDATE BETWEEN '${startParam}' AND '${endParam}'`;
       targetDateFilter  = `summary_date BETWEEN '${startParam}' AND '${endParam}'`;
-      walmartDateFilter = `week_date BETWEEN '${startParam}' AND '${endParam}'`;
+      walmartDateFilter = `sale_date BETWEEN '${startParam}' AND '${endParam}'`;
       if (days <= 35)       circanaTimePeriod = circanaTimePeriods["4w"]!;
       else if (days <= 100) circanaTimePeriod = circanaTimePeriods["13w"]!
       else if (days <= 190) circanaTimePeriod = circanaTimePeriods["26w"]!;
@@ -341,18 +341,23 @@ router.get("/", async (req, res) => {
       FETCH FIRST 2000 ROWS ONLY
     `;
 
-    // ── Sell-through: Walmart (WALMART_STORE_PRODUCT_WEEKLY, keyed by UPC) ───────
+    // ── Sell-through: Walmart (WALMART_ALLOY_SALES_DAILY, keyed by UPC) ──────────
+    // FIXME(alloy): WALMART_ALLOY_SALES_DAILY.walmart_item_number is mislabeled — it
+    // holds the short item description (e.g. 'GME W SCRNCH SLP 4CT'), identical to
+    // walmart_item_desc, not the numeric Walmart item number (confirmed 2026-09-23).
+    // Selected as '' so the "Item #" column renders "—" instead of a description.
+    // Swap back to the real column once Alloy fixes the feed mapping.
     const walmartPosSql = `
       SELECT
         walmart_upc,
-        walmart_item_number,
-        product_description,
-        SUM(revenue)    AS revenue,
-        SUM(units_sold) AS units_sold
-      FROM ${DB_NAME}.RETAIL.WALMART_STORE_PRODUCT_WEEKLY
+        '' AS walmart_item_number,
+        walmart_item_desc AS product_description,
+        SUM(sales_net_usd)   AS revenue,
+        SUM(sales_units_net) AS units_sold
+      FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
       WHERE ${walmartDateFilter}
-      GROUP BY walmart_upc, walmart_item_number, product_description
-      ORDER BY revenue DESC
+      GROUP BY walmart_upc, walmart_item_desc
+      ORDER BY revenue DESC NULLS LAST
       FETCH FIRST 2000 ROWS ONLY
     `;
 

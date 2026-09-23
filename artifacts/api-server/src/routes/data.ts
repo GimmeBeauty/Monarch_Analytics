@@ -674,11 +674,13 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    // Walmart sell-through (Alloy.ai feed, replaces the old WALMART_WEEKLY_SUMMARY
+    // S3-upload pipeline — refreshes daily with real store-level data).
     const walmartSummaryQuery = (isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${start}' AND '${end}'
+          SELECT SUM(sales_net_usd) AS walmart_revenue, SUM(sales_units_net) AS walmart_units
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
 
@@ -722,11 +724,11 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const walmartDailyQuery = (isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT week_date AS summary_date, SUM(revenue) AS total_revenue
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${start}' AND '${end}'
-          GROUP BY week_date
-          ORDER BY week_date ASC
+          SELECT sale_date AS summary_date, SUM(sales_net_usd) AS total_revenue
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+          GROUP BY sale_date
+          ORDER BY sale_date ASC
         `)
       : Promise.resolve([]);
 
@@ -782,9 +784,9 @@ router.get("/overview", authenticate, async (req, res) => {
 
     const priorWalmartQuery = (hasPrior && isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          SELECT SUM(sales_net_usd) AS walmart_revenue, SUM(sales_units_net) AS walmart_units
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
       : Promise.resolve([]);
 
@@ -1314,9 +1316,9 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const walmartTrafficSummaryQuery = (isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${start}' AND '${end}'
+          SELECT SUM(sales_net_usd) AS walmart_revenue, SUM(sales_units_net) AS walmart_units
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
         `)
       : Promise.resolve([]);
 
@@ -1354,9 +1356,9 @@ router.get("/traffic", authenticate, async (req, res) => {
 
     const priorTrafficWalmartQuery = (hasPrior && isWalmartSelected && !isTargetOnly)
       ? querySnowflake(`
-          SELECT SUM(revenue) AS walmart_revenue, SUM(units_sold) AS walmart_units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          SELECT SUM(sales_net_usd) AS walmart_revenue, SUM(sales_units_net) AS walmart_units
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
         `)
       : Promise.resolve([]);
 
@@ -2262,6 +2264,11 @@ router.get("/target/locations", authenticate, async (req, res) => {
 });
 
 // ─── GET /api/data/walmart/summary ────────────────────────────────────────────
+// NOTE: not called by any frontend page (confirmed 2026-09-22). Deliberately left
+// on the old WALMART_WEEKLY_SUMMARY pipeline rather than migrated to
+// WALMART_ALLOY_SALES_DAILY along with the rest of the Walmart routes in this
+// file — dead code, so migrating it added risk for no benefit. Revisit if this
+// route ever gets wired up to something.
 
 router.get("/walmart/summary", authenticate, async (req, res) => {
   const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
@@ -2308,22 +2315,22 @@ router.get("/walmart/products", authenticate, async (req, res) => {
     const [rows, priorRows] = await Promise.all([
       querySnowflake(`
         SELECT
-          product_description,
+          walmart_item_desc AS product_description,
           walmart_upc,
-          SUM(revenue)     AS revenue,
-          SUM(units_sold)  AS units_sold,
-          SUM(store_count) AS store_count
-        FROM ${DB_NAME}.RETAIL.WALMART_PRODUCT_WEEKLY
-        WHERE week_date BETWEEN '${start}' AND '${end}'
-        GROUP BY product_description, walmart_upc
-        ORDER BY revenue DESC
+          SUM(sales_net_usd)              AS revenue,
+          SUM(sales_units_net)            AS units_sold,
+          COUNT(DISTINCT location_id)     AS store_count
+        FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+        WHERE sale_date BETWEEN '${start}' AND '${end}'
+        GROUP BY walmart_item_desc, walmart_upc
+        ORDER BY revenue DESC NULLS LAST
         LIMIT 50
       `),
       hasPrior
         ? querySnowflake(`
-            SELECT walmart_upc, SUM(revenue) AS revenue, SUM(units_sold) AS units_sold
-            FROM ${DB_NAME}.RETAIL.WALMART_PRODUCT_WEEKLY
-            WHERE week_date BETWEEN '${priorStart}' AND '${priorEnd}'
+            SELECT walmart_upc, SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units_sold
+            FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+            WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
             GROUP BY walmart_upc
           `)
         : Promise.resolve([]),
@@ -2375,13 +2382,13 @@ router.get("/walmart/geographic", authenticate, async (req, res) => {
     const rows = await querySnowflake(`
       SELECT
         state,
-        SUM(revenue)     AS revenue,
-        SUM(units_sold)  AS units_sold,
-        SUM(store_count) AS store_count
-      FROM ${DB_NAME}.RETAIL.WALMART_STATE_DAILY
-      WHERE week_date BETWEEN '${start}' AND '${end}'
+        SUM(sales_net_usd)          AS revenue,
+        SUM(sales_units_net)        AS units_sold,
+        COUNT(DISTINCT location_id) AS store_count
+      FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+      WHERE sale_date BETWEEN '${start}' AND '${end}'
       GROUP BY state
-      ORDER BY revenue DESC
+      ORDER BY revenue DESC NULLS LAST
     `);
 
     const locations = rows.map(row => ({
@@ -2407,29 +2414,22 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
 
   const safeState = stateParam ? stateParam.toUpperCase().replace(/[^A-Z]/g, "") : null;
-  const stateWhere = safeState ? `AND loc.state = '${safeState}'` : "";
+  const stateWhere = safeState ? `AND state = '${safeState}'` : "";
 
   try {
+    // Alloy.ai feed — replaces the old WALMART_LOCATION_MASTER / WALMART_STORE_PRODUCT_WEEKLY /
+    // WALMART_STORE_DAILY_RAW join. Note: unlike the old location master, this feed has no
+    // street-level address — only location_name/city/state/postal_code — so streetAddress
+    // below is left blank rather than guessed.
     const sql = `
-      SELECT loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code,
-        SUM(sp.revenue) AS revenue, SUM(sp.units_sold) AS units_sold
-      FROM MONARCH_RAW.RETAIL.WALMART_LOCATION_MASTER loc
-      JOIN (
-        SELECT store_number::STRING as store_number, SUM(revenue) as revenue, SUM(units_sold) as units_sold
-        FROM MONARCH_RAW.RETAIL.WALMART_STORE_PRODUCT_WEEKLY
-        WHERE week_date BETWEEN '${start}' AND '${end}'
-        GROUP BY store_number
-        UNION ALL
-        SELECT STORE_NUMBER::STRING,
-          SUM(TRY_TO_NUMBER(REPLACE(REPLACE(POS_SALES_THIS_YEAR,'$',''),',',''))) as revenue,
-          SUM(TRY_TO_NUMBER(REPLACE(REPLACE(POS_QUANTITY_THIS_YEAR,'$',''),',',''))) as units_sold
-        FROM MONARCH_RAW.RETAIL.WALMART_STORE_DAILY_RAW
-        WHERE BUSINESS_DATE::DATE BETWEEN '${start}' AND '${end}'
-        GROUP BY STORE_NUMBER::STRING
-      ) sp ON sp.store_number = loc.store_number
+      SELECT location_id, location_name, city, state, postal_code, latitude, longitude,
+        SUM(sales_net_usd)   AS revenue,
+        SUM(sales_units_net) AS units_sold
+      FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+      WHERE sale_date BETWEEN '${start}' AND '${end}'
       ${stateWhere}
-      GROUP BY loc.store_number, loc.store_name, loc.street_address, loc.city, loc.state, loc.zip_code
-      ORDER BY revenue DESC
+      GROUP BY location_id, location_name, city, state, postal_code, latitude, longitude
+      ORDER BY revenue DESC NULLS LAST
     `;
     req.log.debug({ sql }, "[DEBUG walmart/stores] SQL");
     let rows: Awaited<ReturnType<typeof querySnowflake>>;
@@ -2442,12 +2442,14 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
     }
 
     const stores = rows.map(row => ({
-      storeNumber:   String(row["STORE_NUMBER"]   ?? row["store_number"]   ?? ""),
-      storeName:     String(row["STORE_NAME"]     ?? row["store_name"]     ?? ""),
-      streetAddress: String(row["STREET_ADDRESS"] ?? row["street_address"] ?? ""),
-      city:          String(row["CITY"]           ?? row["city"]           ?? ""),
-      stateCode:     String(row["STATE"]          ?? row["state"]          ?? "").toUpperCase(),
-      zipCode:       String(row["ZIP_CODE"]       ?? row["zip_code"]       ?? ""),
+      storeNumber:   String(row["LOCATION_ID"]   ?? row["location_id"]   ?? ""),
+      storeName:     String(row["LOCATION_NAME"] ?? row["location_name"] ?? ""),
+      streetAddress: "",
+      city:          String(row["CITY"]          ?? row["city"]          ?? ""),
+      stateCode:     String(row["STATE"]         ?? row["state"]         ?? "").toUpperCase(),
+      zipCode:       String(row["POSTAL_CODE"]   ?? row["postal_code"]   ?? ""),
+      latitude:      Number(row["LATITUDE"]  ?? row["latitude"]  ?? 0),
+      longitude:     Number(row["LONGITUDE"] ?? row["longitude"] ?? 0),
       revenue:       Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100,
       unitsSold:     Number(row["UNITS_SOLD"] ?? row["units_sold"] ?? 0),
     }));
@@ -3256,10 +3258,11 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     if (!isWholesale && has("walmart")) {
       queries.push(
         querySnowflake(`
-          SELECT week_date, revenue, units_sold AS units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${start}' AND '${end}'
-          ORDER BY week_date ASC
+          SELECT sale_date AS week_date, SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+          GROUP BY sale_date
+          ORDER BY sale_date ASC
         `).then(rows => {
           results.push({
             storeId: "walmart",
@@ -3633,9 +3636,9 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
           FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
           WHERE summary_date BETWEEN '${historyStart}' AND '${ytdEnd}'`);
     if (includeWalmart) msrpHistoryParts.push(`
-          SELECT YEAR(week_date) AS yr, MONTH(week_date) AS mo, revenue AS rev, units_sold AS units
-          FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-          WHERE week_date BETWEEN '${historyStart}' AND '${ytdEnd}'`);
+          SELECT YEAR(sale_date) AS yr, MONTH(sale_date) AS mo, sales_net_usd AS rev, sales_units_net AS units
+          FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${historyStart}' AND '${ytdEnd}'`);
     const msrpHistoryUnion = msrpHistoryParts.length > 0
       ? msrpHistoryParts.join(" UNION ALL ")
       : `SELECT NULL AS yr, NULL AS mo, 0 AS rev, 0 AS units WHERE 1=0`;
@@ -3690,10 +3693,10 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         WHERE summary_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
       isWholesale || !includeWalmart ? Promise.resolve([]) : querySnowflake(`
-        SELECT COALESCE(SUM(revenue), 0) AS REVENUE,
-               COALESCE(SUM(units_sold), 0) AS UNITS
-        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-        WHERE week_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
+        SELECT COALESCE(SUM(sales_net_usd), 0) AS REVENUE,
+               COALESCE(SUM(sales_units_net), 0) AS UNITS
+        FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+        WHERE sale_date BETWEEN '${ytdStart}' AND '${ytdEnd}'
       `),
       isWholesale ? querySnowflake(`
         SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE,
@@ -3728,9 +3731,9 @@ router.get("/forecast/summary", authenticate, async (req, res) => {
         WHERE summary_date BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
       `),
       isWholesale || !includeWalmart || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
-        SELECT COALESCE(SUM(revenue), 0) AS REVENUE
-        FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY
-        WHERE week_date BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
+        SELECT COALESCE(SUM(sales_net_usd), 0) AS REVENUE
+        FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+        WHERE sale_date BETWEEN '${priorYtdStart}' AND '${priorYtdEnd}'
       `),
       !isWholesale || !hasPriorYtdWindow ? Promise.resolve([]) : querySnowflake(`
         SELECT COALESCE(SUM(REVENUE), 0) AS REVENUE
@@ -4001,8 +4004,8 @@ router.get("/forecast/chart", authenticate, async (req, res) => {
             SELECT DATE_TRUNC('${trunc}', summary_date) AS period_start, sale_amount AS revenue
             FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY WHERE YEAR(summary_date) = ${y}`);
       if (incWalmart) parts.push(`
-            SELECT DATE_TRUNC('${trunc}', week_date) AS period_start, revenue
-            FROM ${DB_NAME}.RETAIL.WALMART_WEEKLY_SUMMARY WHERE YEAR(week_date) = ${y}`);
+            SELECT DATE_TRUNC('${trunc}', sale_date) AS period_start, sales_net_usd AS revenue
+            FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY WHERE YEAR(sale_date) = ${y}`);
       const union = parts.length > 0
         ? parts.join(" UNION ALL ")
         : `SELECT NULL AS period_start, 0 AS revenue WHERE 1=0`;
