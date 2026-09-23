@@ -182,14 +182,14 @@ describe("buildRetailerVelocity — best-available mode (dataSource = 'bestAvail
    * For a retailer with sell-in data but no POS data, sell-in is kept (fallback).
    */
 
-  // Kroger (228) has sell-in data but no POS data in any of our maps
-  const entriesWithKroger: SellInEntry[] = [
+  // Synthetic entity 999 has sell-in data but no POS data in any of our maps
+  const entriesWithSellinOnly: SellInEntry[] = [
     ...SELL_IN_ENTRIES,
-    { sku: "SKU-A", entityId: 228, revenue: 4_000, units: 80 }, // Kroger — sell-in only
+    { sku: "SKU-A", entityId: 999, revenue: 4_000, units: 80 }, // sell-in only, no POS
   ];
 
   const results = buildRetailerVelocity({
-    entries:        entriesWithKroger,
+    entries:        entriesWithSellinOnly,
     targetPosByUpc: TARGET_POS,
     walmartPosByUpc: WALMART_POS,
     circanaByUpc:   CIRCANA_BY_UPC,
@@ -211,15 +211,15 @@ describe("buildRetailerVelocity — best-available mode (dataSource = 'bestAvail
     expect(target.dataSource).toBe("pos");
   });
 
-  it("falls back to sell-in for Kroger (no POS data available)", () => {
-    const kroger = results.find(r => r.entityId === 228)!;
-    expect(kroger.totalRevenue).toBe(4_000); // sell-in value preserved
-    expect(kroger.dataSource).toBe("sellin"); // best-available used sell-in as fallback
+  it("falls back to sell-in when no POS data is available", () => {
+    const sellinOnly = results.find(r => r.entityId === 999)!;
+    expect(sellinOnly.totalRevenue).toBe(4_000); // sell-in value preserved
+    expect(sellinOnly.dataSource).toBe("sellin"); // best-available used sell-in as fallback
   });
 
   it("Circana retailers match sell-through figures exactly", () => {
     const posResults = buildRetailerVelocity({
-      entries:        entriesWithKroger,
+      entries:        entriesWithSellinOnly,
       targetPosByUpc: TARGET_POS,
       walmartPosByUpc: WALMART_POS,
       circanaByUpc:   CIRCANA_BY_UPC,

@@ -21,7 +21,6 @@ const NS_STORE_ID: Record<string, string> = {
   "Walmart":           "walmart",
   "CVS":               "cvs",
   "Ulta Beauty":       "ulta",
-  "Kroger":            "kroger",
   "Publix":            "publix",
   "Walgreens":         "walgreens",
   "Meijer":            "meijer",

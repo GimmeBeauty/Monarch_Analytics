@@ -18,7 +18,6 @@ type Grid = Record<number, MonthData>; // month 1–12
 const DEFAULT_STORES: { name: string; type: string }[] = [
   { name: "Amazon", type: "retail" },
   { name: "CVS", type: "retail" },
-  { name: "Kroger", type: "retail" },
   { name: "Publix", type: "retail" },
   { name: "Shopify", type: "shopify" },
   { name: "Target", type: "retail" },

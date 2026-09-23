@@ -56,7 +56,8 @@ for entity,store_name,store_type in [
     ("1068","Walgreens","Retail"),
     ("49270","Amazon (Pattern)","Marketplace"),
     ("633","Publix","Retail"),
-    ("228","Kroger","Retail")
+    # Kroger (228) intentionally excluded — placeholder data being replaced by
+    # an Alloy integration; re-add once that's live.
 ]:
     sync_entity(entity,store_name,store_type)
 

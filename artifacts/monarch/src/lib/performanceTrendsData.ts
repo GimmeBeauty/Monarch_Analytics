@@ -159,7 +159,6 @@ const STORE_REVENUE_CONFIG: Record<string, { baseline: number; seasonality: numb
   amazon:    { baseline: 65000, seasonality: [1.10, 1.00, 0.95, 1.00, 1.05, 1.20, 1.15] },
   walmart:   { baseline: 38000, seasonality: [1.20, 0.90, 0.90, 0.95, 0.95, 1.10, 1.30] },
   target:    { baseline: 32000, seasonality: [1.15, 0.90, 0.90, 0.95, 1.00, 1.10, 1.25] },
-  kroger:    { baseline: 21000, seasonality: [1.10, 0.90, 0.90, 0.95, 1.00, 1.15, 1.20] },
   cvs:       { baseline: 19000, seasonality: [1.05, 1.00, 1.00, 1.00, 1.05, 1.10, 1.10] },
   publix:    { baseline: 16000, seasonality: [1.20, 0.85, 0.85, 0.90, 0.95, 1.10, 1.30] },
   ulta:      { baseline: 13000, seasonality: [1.00, 1.00, 1.00, 1.05, 1.10, 1.15, 1.10] },

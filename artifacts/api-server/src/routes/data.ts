@@ -125,7 +125,6 @@ const WHOLESALE_NS_STORE_NAMES: Record<string, string> = {
   cvs:       "CVS",
   walgreens: "Walgreens",
   publix:    "Publix",
-  kroger:    "Kroger",
   amazon:    "Amazon (Pattern)",
   meijer:    "Meijer",
 };
@@ -3061,7 +3060,6 @@ const TREND_STORE_COLORS: Record<string, string> = {
   amazon:    "#FF9900",
   walmart:   "#0071CE",
   target:    "#CC0000",
-  kroger:    "#005DAA",
   cvs:       "#CC0000",
   publix:    "#007A3D",
   ulta:      "#B5298F",
@@ -3074,7 +3072,6 @@ const TREND_STORE_LABELS: Record<string, string> = {
   amazon:    "Amazon (Pattern)",
   walmart:   "Walmart",
   target:    "Target",
-  kroger:    "Kroger",
   cvs:       "CVS",
   publix:    "Publix",
   ulta:      "Ulta Beauty",
@@ -3089,7 +3086,6 @@ const NS_STORE_NAME_FOR_TRENDS: Record<string, string> = {
   cvs:       "CVS",
   walgreens: "Walgreens",
   publix:    "Publix",
-  kroger:    "Kroger",
   amazon:    "Amazon (Pattern)",
   meijer:    "Meijer",
 };
@@ -3101,7 +3097,6 @@ const NS_STORE_ID_FROM_NAME: Record<string, string> = {
   "CVS":               "cvs",
   "Walgreens":         "walgreens",
   "Publix":            "publix",
-  "Kroger":            "kroger",
   "Amazon (Pattern)":  "amazon",
   "Meijer":            "meijer",
 };
@@ -3124,7 +3119,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
   const has = (id: string) => allStores || storeIds.includes(id);
 
   const CIRCANA_IDS = ["cvs", "walgreens", "publix", "meijer"] as const;
-  const NETSUITE_IDS = ["ulta", "kroger"] as const;
+  const NETSUITE_IDS = ["ulta"] as const;
   const activeCircana = CIRCANA_IDS.filter(id => has(id));
   const activeNetsuite = NETSUITE_IDS.filter(id => has(id));
 
@@ -3138,30 +3133,36 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     if (isWholesale) {
       const wholesaleStoreIds = Object.keys(NS_STORE_NAME_FOR_TRENDS);
       const activeWholesale = wholesaleStoreIds.filter(id => has(id));
-      if (activeWholesale.length > 0) {
-        const storeNameFilter = activeWholesale
+      // Ulta is bucketed by week (its NetSuite invoice cadence is granular enough
+      // to show weekly movement); every other wholesale retailer stays monthly.
+      const weeklyWholesale  = activeWholesale.filter(id => id === "ulta");
+      const monthlyWholesale = activeWholesale.filter(id => id !== "ulta");
+
+      const runWholesaleTrend = (ids: string[], grain: "week" | "month") => {
+        if (ids.length === 0) return;
+        const storeNameFilter = ids
           .map(sid => `'${NS_STORE_NAME_FOR_TRENDS[sid]}'`)
           .join(", ");
         queries.push(
           querySnowflake(`
             SELECT
-              DATE_TRUNC('month', TRANDATE) AS month_date,
+              DATE_TRUNC('${grain}', TRANDATE) AS bucket_date,
               STORE_NAME,
               SUM(REVENUE) AS revenue,
               SUM(UNITS)   AS units
             FROM ${NETSUITE_SALES_DEDUPED} nsp
             WHERE TRANDATE BETWEEN '${start}' AND '${end}'
               AND STORE_NAME IN (${storeNameFilter})
-            GROUP BY DATE_TRUNC('month', TRANDATE), STORE_NAME
-            ORDER BY month_date ASC
+            GROUP BY DATE_TRUNC('${grain}', TRANDATE), STORE_NAME
+            ORDER BY bucket_date ASC
           `).then(rows => {
             const byStore: Record<string, TrendPoint[]> = {};
             for (const row of rows) {
               const storeName = String(row["STORE_NAME"] ?? row["store_name"] ?? "");
               const sid = NS_STORE_ID_FROM_NAME[storeName];
-              if (!sid || !activeWholesale.includes(sid)) continue;
+              if (!sid || !ids.includes(sid)) continue;
               if (!byStore[sid]) byStore[sid] = [];
-              const raw = row["MONTH_DATE"] ?? row["month_date"] ?? "";
+              const raw = row["BUCKET_DATE"] ?? row["bucket_date"] ?? "";
               const date = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw).slice(0, 10);
               byStore[sid].push({
                 date,
@@ -3169,7 +3170,7 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
                 units:   Number(row["UNITS"] ?? row["units"] ?? 0),
               });
             }
-            for (const sid of activeWholesale) {
+            for (const sid of ids) {
               results.push({
                 storeId:   sid,
                 storeName: TREND_STORE_LABELS[sid] ?? NS_STORE_NAME_FOR_TRENDS[sid] ?? sid,
@@ -3179,7 +3180,10 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
             }
           }),
         );
-      }
+      };
+
+      runWholesaleTrend(weeklyWholesale, "week");
+      runWholesaleTrend(monthlyWholesale, "month");
     }
 
     if (!isWholesale && has("shopify")) {
@@ -3573,7 +3577,6 @@ const STORE_ID_TO_GOAL_NAME: Record<string, string> = {
   cvs:       "CVS",
   walgreens: "Walgreens",
   publix:    "Publix",
-  kroger:    "Kroger",
   meijer:    "Meijer",
 };
 

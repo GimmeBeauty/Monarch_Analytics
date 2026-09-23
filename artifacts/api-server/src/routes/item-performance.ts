@@ -16,7 +16,6 @@ const ENTITY_MAP: Record<number, string> = {
   229:   "Target",
   231:   "Walmart",
   230:   "Ulta Beauty",
-  228:   "Kroger",
   222:   "CVS",
   633:   "Publix",
   1068:  "Walgreens",
@@ -29,7 +28,6 @@ const STORE_COUNTS_BY_ENTITY: Record<number, number> = {
   229:  2202,   // Target
   231:  4604,   // Walmart
   230:  1334,   // Ulta Beauty
-  228:  2800,   // Kroger
   222:  9000,   // CVS
   633:  1400,   // Publix
   1068: 8700,   // Walgreens
@@ -41,7 +39,6 @@ const VELOCITY_FACTORS: Record<number, number> = {
   229:  1.00,  // Target — baseline
   231:  0.70,  // Walmart
   230:  0.70,  // Ulta Beauty
-  228:  0.50,  // Kroger (grocery)
   633:  0.50,  // Publix (grocery)
   222:  0.20,  // CVS (drug)
   1068: 0.20,  // Walgreens (drug)
@@ -113,6 +110,12 @@ async function getCircanaTimePeriods(): Promise<Record<string, string>> {
 
 // Retailers to exclude from DPSW (DTC channels)
 const DTC_ENTITY_IDS = [850, 49270]; // Shopify, Amazon Pattern
+
+// Retailers to exclude entirely — data placeholder, not a real reporting
+// relationship yet. Kroger (228) is a NetSuite entity with sell-in data but
+// will be sourced through Alloy once that integration is live; until then it
+// is excluded from all item-performance results, not just the retailer picker.
+const EXCLUDED_ENTITY_IDS = [228]; // Kroger
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -259,7 +262,8 @@ router.get("/", async (req, res) => {
 
     // Build optional retailer filter
     const dtcList = DTC_ENTITY_IDS.join(", ");
-    let retailerFilter = `AND d.ENTITY_ID NOT IN (${dtcList})`;
+    const excludedList = EXCLUDED_ENTITY_IDS.join(", ");
+    let retailerFilter = `AND d.ENTITY_ID NOT IN (${dtcList}) AND d.ENTITY_ID NOT IN (${excludedList})`;
     if (retailerIds.length > 0) {
       retailerFilter += ` AND d.ENTITY_ID IN (${retailerIds.join(", ")})`;
     }

@@ -47,14 +47,6 @@ export const STORES: StoreDefinition[] = [
     integrationIds: ["target_roundel", "alloy_ai"],
   },
   {
-    id: "kroger",
-    label: "Kroger",
-    group: "retail",
-    weight: 0.05,
-    color: "#005DAA",
-    integrationIds: [],
-  },
-  {
     id: "cvs",
     label: "CVS",
     group: "retail",

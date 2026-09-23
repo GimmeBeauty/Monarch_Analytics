@@ -51,7 +51,7 @@ export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
 
 export const SALES_CHANNELS = [
   "Shopify", "Amazon", "Target", "Walmart",
-  "Kroger", "CVS", "Publix", "Ulta Beauty", "Walgreens",
+  "CVS", "Publix", "Ulta Beauty", "Walgreens",
 ] as const;
 
 export const TRAFFIC_CHANNELS = [

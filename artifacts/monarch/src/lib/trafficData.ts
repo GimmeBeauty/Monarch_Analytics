@@ -162,7 +162,6 @@ const STORE_PRODUCTS: Record<string, string[]> = {
   amazon:    ["p01","p02","p03","p04","p05","p06","p08","p09","p10","p11","p12","p13","p14","p15","p16","p17","p18","p19","p20"],
   walmart:   ["p01","p03","p06","p07","p08","p09","p10","p11","p13","p14","p15","p16","p17","p18"],
   target:    ["p01","p02","p03","p05","p06","p07","p08","p09","p14","p15","p16","p17","p18","p19","p20"],
-  kroger:    ["p01","p03","p09","p10","p11","p12","p13","p15","p16","p17","p18"],
   cvs:       ["p01","p02","p05","p06","p08","p09","p10","p11","p13","p18","p19","p20"],
   publix:    ["p01","p03","p09","p10","p11","p13","p15","p16","p17","p18"],
   ulta:      ["p01","p02","p03","p04","p05","p06","p07","p08","p09","p14","p19","p20"],
@@ -172,7 +171,7 @@ const STORE_PRODUCTS: Record<string, string[]> = {
 // Store weight multipliers (revenue share relative to full catalog)
 const STORE_SALES_MULTIPLIER: Record<string, number> = {
   shopify: 1.0, amazon: 1.35, walmart: 0.72, target: 0.68,
-  kroger: 0.42, cvs: 0.38, publix: 0.32, ulta: 0.28, walgreens: 0.18,
+  cvs: 0.38, publix: 0.32, ulta: 0.28, walgreens: 0.18,
 };
 
 // ─── Build Products ───────────────────────────────────────────────────────────
@@ -342,15 +341,6 @@ const RAW_LOCATIONS: Array<{
   { storeId:"target", address:"1850 W 49th St",        city:"Hialeah",       stateCode:"FL", zip:"33012", lat:25.88, lon:-80.31 },
   { storeId:"target", address:"7100 NE 45th St",       city:"Kansas City",   stateCode:"MO", zip:"64117", lat:39.10, lon:-94.54 },
   { storeId:"target", address:"1420 S Congress Ave",   city:"Austin",        stateCode:"TX", zip:"78704", lat:30.25, lon:-97.75 },
-  // Kroger
-  { storeId:"kroger", address:"1014 Vine St",          city:"Cincinnati",    stateCode:"OH", zip:"45202", lat:39.11, lon:-84.51 },
-  { storeId:"kroger", address:"4500 Six Forks Rd",     city:"Raleigh",       stateCode:"NC", zip:"27609", lat:35.85, lon:-78.64 },
-  { storeId:"kroger", address:"2620 N Central Expwy",  city:"Plano",         stateCode:"TX", zip:"75075", lat:33.03, lon:-96.73 },
-  { storeId:"kroger", address:"1275 Caroline St NE",   city:"Atlanta",       stateCode:"GA", zip:"30307", lat:33.77, lon:-84.36 },
-  { storeId:"kroger", address:"6900 Lake Ellenor Dr",  city:"Orlando",       stateCode:"FL", zip:"32809", lat:28.48, lon:-81.39 },
-  { storeId:"kroger", address:"3535 Park East Dr",     city:"Beachwood",     stateCode:"OH", zip:"44122", lat:41.47, lon:-81.51 },
-  { storeId:"kroger", address:"3840 Wards Corner Rd",  city:"Louisville",    stateCode:"KY", zip:"40241", lat:38.30, lon:-85.56 },
-  { storeId:"kroger", address:"9150 Leesburg Pike",    city:"Vienna",        stateCode:"VA", zip:"22182", lat:38.90, lon:-77.26 },
   // CVS
   { storeId:"cvs", address:"1 CVS Dr",                 city:"Woonsocket",    stateCode:"RI", zip:"02895", lat:41.99, lon:-71.51 },
   { storeId:"cvs", address:"225 Water St",             city:"New York",      stateCode:"NY", zip:"10038", lat:40.71, lon:-74.01 },
@@ -455,7 +445,7 @@ function buildKPIs(
 
 const STORE_REVENUE_BASELINE: Record<string, number> = {
   shopify:52000, amazon:65000, walmart:38000, target:32000,
-  kroger:21000, cvs:19000, publix:16000, ulta:13000, walgreens:9000,
+  cvs:19000, publix:16000, ulta:13000, walgreens:9000,
 };
 
 // Adstock trend (same as overviewData)

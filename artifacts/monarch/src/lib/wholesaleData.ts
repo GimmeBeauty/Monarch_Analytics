@@ -16,7 +16,7 @@ export type PricingMode = "msrp" | "wholesale";
 
 /** Stores that participate in wholesale pricing (NetSuite-sourced). */
 export const WHOLESALE_ELIGIBLE_STORE_IDS = new Set([
-  "amazon", "walmart", "target", "kroger", "cvs", "publix", "ulta", "walgreens",
+  "amazon", "walmart", "target", "cvs", "publix", "ulta", "walgreens",
 ]);
 
 /**
@@ -28,7 +28,6 @@ export const WHOLESALE_RATES: Record<string, number> = {
   amazon:    0.55,   // Wholesale price shipped to Amazon FBA / Pattern
   walmart:   0.48,   // Retail placement vendor cost
   target:    0.50,   // Target vendor wholesale rate
-  kroger:    0.52,   // Kroger buyer price
   cvs:       0.50,   // CVS pharmacy wholesale
   publix:    0.52,   // Publix wholesale
   ulta:      0.55,   // Ulta prestige beauty premium

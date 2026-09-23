@@ -6,7 +6,7 @@ import { z } from "zod/v4";
 export const storesTable = pgTable("stores", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
-  // "shopify" | "amazon" | "target" | "walmart" | "ulta" | "kroger" | custom
+  // "shopify" | "amazon" | "target" | "walmart" | "ulta" | custom
   type: text("type").notNull().default("retail"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

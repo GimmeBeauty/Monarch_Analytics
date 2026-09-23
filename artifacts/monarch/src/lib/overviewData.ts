@@ -203,7 +203,6 @@ const STORE_DAY_CONFIG: Record<string, StoreDayConfig> = {
   amazon:    { revenueBaseline: 65000, ordersBaseline: 780, sessionsBaseline: 18000, seasonality: [1.10, 1.00, 0.95, 1.00, 1.05, 1.20, 1.15] },
   walmart:   { revenueBaseline: 38000, ordersBaseline: 520, sessionsBaseline:  9000, seasonality: [1.20, 0.90, 0.90, 0.95, 0.95, 1.10, 1.30] },
   target:    { revenueBaseline: 32000, ordersBaseline: 410, sessionsBaseline:  7500, seasonality: [1.15, 0.90, 0.90, 0.95, 1.00, 1.10, 1.25] },
-  kroger:    { revenueBaseline: 21000, ordersBaseline: 280, sessionsBaseline:  5000, seasonality: [1.10, 0.90, 0.90, 0.95, 1.00, 1.15, 1.20] },
   cvs:       { revenueBaseline: 19000, ordersBaseline: 310, sessionsBaseline:  4500, seasonality: [1.05, 1.00, 1.00, 1.00, 1.05, 1.10, 1.10] },
   publix:    { revenueBaseline: 16000, ordersBaseline: 220, sessionsBaseline:  3800, seasonality: [1.20, 0.85, 0.85, 0.90, 0.95, 1.10, 1.30] },
   ulta:      { revenueBaseline: 13000, ordersBaseline: 180, sessionsBaseline:  3200, seasonality: [1.00, 1.00, 1.00, 1.05, 1.10, 1.15, 1.10] },

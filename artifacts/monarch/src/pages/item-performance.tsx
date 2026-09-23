@@ -139,7 +139,6 @@ const RETAILER_OPTIONS = [
   { value: 229,  label: "Target" },
   { value: 231,  label: "Walmart" },
   { value: 230,  label: "Ulta Beauty" },
-  { value: 228,  label: "Kroger" },
   { value: 222,  label: "CVS" },
   { value: 633,  label: "Publix" },
   { value: 1068, label: "Walgreens" },

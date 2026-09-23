@@ -110,7 +110,7 @@ export const EXPORT_DIMENSIONS: Record<string, { label: string }> = {
 
 export const EXPORT_STORES = [
   "Shopify", "Amazon", "Target", "Walmart",
-  "Kroger", "CVS", "Publix", "Ulta Beauty", "Walgreens",
+  "CVS", "Publix", "Ulta Beauty", "Walgreens",
 ] as const;
 
 export const EXPORT_CHANNELS = [

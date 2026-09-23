@@ -10,3 +10,5 @@
 - [TikTok Shop historical backfill design](tiktok-shop-historical-backfill.md) — chunked, resumable-via-persisted-checkpoint backfill that treats an API-rejected older date range as the history boundary, since no documented lookback limit exists.
 - [Monarch period-over-period comparison scope rule](monarch-period-comparison-scope.md) — only fix a "vs prior" slot that already exists and is fed fake data; never add new comparison UI where none exists.
 - [Circana "vs prior period" design](circana-prior-period-design.md) — Circana time_period labels are single-snapshot rolling windows; prior period is derived by subtracting nested buckets and normalizing to a per-day rate.
+- [Kroger excluded pending Alloy](kroger-alloy-exclusion.md) — Kroger (NetSuite entity 228) has real revenue but is deliberately excluded everywhere; it's a placeholder until an Alloy integration replaces it.
+- [Daily ad-summary full-history rebuild bug](daily-ad-summary-duplication.md) — a scheduler script that re-aggregates a channel's entire history on every run must fully delete that channel before re-inserting, not just the last N days, or rows silently multiply.
