@@ -75,7 +75,7 @@ interface WalmartGeographicApiResponse {
 }
 
 interface WalmartStoresApiResponse {
-  stores: Array<{ storeNumber: string; storeName: string; streetAddress: string; city: string; stateCode: string; zipCode: string; revenue: number; unitsSold: number }>;
+  stores: Array<{ storeNumber: string; storeName: string; streetAddress: string; city: string; stateCode: string; zipCode: string; latitude: number; longitude: number; revenue: number; unitsSold: number }>;
   isEmpty: boolean;
 }
 
@@ -650,8 +650,8 @@ export default function Traffic() {
             city:           s.city,
             stateCode:      s.stateCode,
             zipCode:        s.zipCode,
-            lat:            0,
-            lon:            0,
+            lat:            s.latitude,
+            lon:            s.longitude,
           }))
       : [];
 

@@ -457,7 +457,7 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                           <td className="px-3 py-2 text-right text-[#3A3A3A]/60">
                             {RETAILER_OPTIONS.find(o => o.value === opt.value) ? (
                               (({
-                                229: "2,000", 231: "4,700", 230: "1,334",
+                                229: "2,000", 231: "4,770", 230: "1,334",
                                 228: "2,800", 222: "9,000", 633: "1,400",
                                 1068: "8,700", 227: "500",
                               } as Record<number, string>)[opt.value] ?? "—")
