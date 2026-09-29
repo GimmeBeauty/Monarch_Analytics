@@ -3,7 +3,7 @@ name: Monarch owner login credential mismatch
 description: replit.md lists a stale owner password for MONARCH; the real seeded credential lives in api-server bootstrap code.
 ---
 
-`replit.md` documents the owner login as `nick@gimmebeauty.com` / `Monarch2024!`, but that is not the password actually seeded into the database.
+`replit.md` previously documented an owner password that was not the password actually seeded into the database.
 
 The real bootstrap logic (in `artifacts/api-server/src/index.ts`, `bootstrap()`) inserts the owner user with `onConflictDoNothing`, using a hard-coded bcrypt hash comment-annotated with the plaintext password it corresponds to. That plaintext differs from what `replit.md` states.
 

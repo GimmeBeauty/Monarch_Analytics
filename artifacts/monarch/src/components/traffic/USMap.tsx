@@ -34,6 +34,11 @@ function fmtRevenue(v: number): string {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
+// Store numbers are only unique per retailer (Target/Walmart/Ulta can collide)
+function pinKey(loc: StoreLocation): string {
+  return `${loc.storeId}-${loc.id}`;
+}
+
 
 // ─── Component ────────────────────────────────────────────────────────────────
 interface Props {
@@ -168,9 +173,9 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
 
               {/* ── Store pin markers (shown for selected state) ── */}
               {selectedStateLocs.filter(loc => loc.lon !== 0 || loc.lat !== 0).map(loc => {
-                const isActive = selectedPin === loc.id;
+                const isActive = selectedPin === pinKey(loc);
                 return (
-                  <Marker key={loc.id} coordinates={[loc.lon, loc.lat]}>
+                  <Marker key={pinKey(loc)} coordinates={[loc.lon, loc.lat]}>
                     <circle
                       r={isActive ? 7 : 5}
                       fill={isActive ? "#1D4ED8" : "#3B82F6"}
@@ -179,7 +184,7 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                       style={{ cursor: "pointer", transition: "all 0.15s ease" }}
                       onClick={(e: React.MouseEvent) => {
                         e.stopPropagation();
-                        setSelectedPin(isActive ? null : loc.id);
+                        setSelectedPin(isActive ? null : pinKey(loc));
                       }}
                     />
                     {isActive && (
@@ -345,11 +350,11 @@ export default function USMap({ stateRevenue, storeLocations, onStateChange }: P
                 </thead>
                 <tbody>
                   {selectedStateLocs.map((loc, idx) => {
-                    const isActive = selectedPin === loc.id;
+                    const isActive = selectedPin === pinKey(loc);
                     return (
                       <tr
-                        key={loc.id}
-                        onClick={() => setSelectedPin(isActive ? null : loc.id)}
+                        key={pinKey(loc)}
+                        onClick={() => setSelectedPin(isActive ? null : pinKey(loc))}
                         className={`border-b border-[#FFBC80]/8 dark:border-[#9BDBF3]/8 cursor-pointer transition-colors hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 ${
                           isActive ? "bg-blue-50 dark:bg-blue-100" : ""
                         }`}

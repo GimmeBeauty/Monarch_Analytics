@@ -33,7 +33,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `artifacts/api-server` — Express API server (port 8080)
 
 **Authentication:**
-- Owner login: `nick@gimmebeauty.com` / `Monarch2024!`
+- Owner login: `nick@gimmebeauty.com` — password is not stored in this repo (see Replit Secrets / the team password manager)
 - JWT session cookie (`monarch_session`, 7 day expiry)
 - Roles: `owner` (master), `admin` (can edit settings), `user` (read-only)
 
