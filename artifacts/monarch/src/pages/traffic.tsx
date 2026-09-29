@@ -293,6 +293,43 @@ export default function Traffic() {
     enabled: isWalmartSelected && hasStoreSelection,
   });
 
+  // Ulta store-level map (Alloy.ai POS) — MSRP mode only, matching the Ulta summary logic.
+  const { data: ultaGeoData, isLoading: isUltaGeoLoading } = useQuery<WalmartGeographicApiResponse>({
+    queryKey: ["ulta-geographic", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/ulta/geographic?start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<WalmartGeographicApiResponse>;
+    },
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+    enabled: isUltaSelected && hasStoreSelection && !isWholesale,
+  });
+
+  const { data: ultaStoresData } = useQuery<WalmartStoresApiResponse>({
+    queryKey: ["ulta-stores", selectedMapState, dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `${API_BASE}/api/data/ulta/stores?state=${selectedMapState}&start=${dateRange.startDate}&end=${dateRange.endDate}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<WalmartStoresApiResponse>;
+    },
+    staleTime: 1000 * 60 * 60,
+    retry: false,
+    enabled: isUltaSelected && hasStoreSelection && !isWholesale && !!selectedMapState,
+  });
+
   const { data: circanaSummaryData, isLoading: isCircanaSummaryLoading } = useQuery<CircanaSummaryResponse>({
     queryKey: ["circana-summary", dateRange.startDate, dateRange.endDate, selectedIds.join(",")],
     queryFn: async () => {
@@ -349,7 +386,7 @@ export default function Traffic() {
     enabled: isWholesale,
   });
 
-  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && (isWalmartLoading || isWalmartGeoLoading)) || (isWholesale && isWholesaleLoading) || (includesCircana && (isCircanaSummaryLoading || isCircanaProductLoading));
+  const effectiveIsLoading = isLoading || (includesTarget && (isTargetLoading || isTargetGeoLoading)) || (isWalmartSelected && (isWalmartLoading || isWalmartGeoLoading)) || (isUltaSelected && !isWholesale && isUltaGeoLoading) || (isWholesale && isWholesaleLoading) || (includesCircana && (isCircanaSummaryLoading || isCircanaProductLoading));
 
   const data = useMemo(() => {
     if (!apiData || apiData.isEmpty) return null;
@@ -594,6 +631,14 @@ export default function Traffic() {
         geoMap[loc.stateCode].storeCount += loc.storeCount ?? 0;
       }
     }
+    if (isUltaSelected && !isWholesale && ultaGeoData?.locations) {
+      for (const loc of ultaGeoData.locations) {
+        if (!geoMap[loc.stateCode]) geoMap[loc.stateCode] = { revenue: 0, orders: 0, storeCount: 0 };
+        geoMap[loc.stateCode].revenue    += loc.revenue;
+        geoMap[loc.stateCode].orders     += loc.unitsSold;
+        geoMap[loc.stateCode].storeCount += loc.storeCount ?? 0;
+      }
+    }
     const totalStateRevenue = Object.values(geoMap).reduce((s, x) => s + x.revenue, 0);
     const stateEntries = Object.entries(geoMap).map(([code, d]) => {
       const contrib = totalStateRevenue > 0 ? (d.revenue / totalStateRevenue) * 100 : 0;
@@ -655,10 +700,29 @@ export default function Traffic() {
           }))
       : [];
 
-    const storeLocations: StoreLocation[] = [...targetLocs, ...walmartLocs];
+    const ultaLocs: StoreLocation[] = (isUltaSelected && !isWholesale && !!selectedMapState)
+      ? (ultaStoresData?.stores ?? [])
+          .map(s => ({
+            id:             s.storeNumber,
+            storeId:        "ulta",
+            storeName:      s.storeName,
+            storeColor:     "#000000",
+            sales:          s.revenue,
+            formattedSales: fmtCurrencyFull(s.revenue),
+            units:          s.unitsSold,
+            address:        s.streetAddress,
+            city:           s.city,
+            stateCode:      s.stateCode,
+            zipCode:        s.zipCode,
+            lat:            s.latitude,
+            lon:            s.longitude,
+          }))
+      : [];
+
+    const storeLocations: StoreLocation[] = [...targetLocs, ...walmartLocs, ...ultaLocs];
 
     return { kpis, products, stateRevenue, storeLocations };
-  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana, hasShopify, dateRange]);
+  }, [apiData, selectedIds, targetProductData, targetGeoData, targetLocationsData, selectedMapState, walmartProductData, walmartGeoData, walmartStoresData, isWalmartSelected, ultaGeoData, ultaStoresData, isUltaSelected, isWholesale, wholesaleData, circanaSummaryData, circanaProductData, includesCircana, hasShopify, dateRange]);
 
   const isEmpty = !effectiveIsLoading && hasStoreSelection && (!apiData || apiData.isEmpty || !data);
 

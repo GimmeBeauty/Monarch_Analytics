@@ -2460,6 +2460,94 @@ router.get("/walmart/stores", authenticate, async (req, res) => {
   }
 });
 
+// Physical Ulta stores only: excludes ULTA.COM INVENTORY (3445428) explicitly, plus
+// locations with no state/coordinates (unmapped Alloy locations).
+const ULTA_PHYSICAL_STORE_WHERE = `
+  AND location_id <> 3445428
+  AND state IS NOT NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
+`;
+
+// ─── GET /api/data/ulta/geographic ───────────────────────────────────────────
+
+router.get("/ulta/geographic", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  try {
+    const rows = await querySnowflake(`
+      SELECT
+        state,
+        SUM(sales_net_usd)          AS revenue,
+        SUM(sales_units_net)        AS units_sold,
+        COUNT(DISTINCT location_id) AS store_count
+      FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+      WHERE sale_date BETWEEN '${start}' AND '${end}'
+      ${ULTA_PHYSICAL_STORE_WHERE}
+      GROUP BY state
+      ORDER BY revenue DESC NULLS LAST
+    `);
+
+    const locations = rows.map(row => ({
+      stateCode:  String(row["STATE"]       ?? row["state"]       ?? "").toUpperCase(),
+      revenue:    Math.round(Number(row["REVENUE"]     ?? row["revenue"]     ?? 0) * 100) / 100,
+      unitsSold:  Number(row["UNITS_SOLD"]  ?? row["units_sold"]  ?? 0),
+      storeCount: Number(row["STORE_COUNT"] ?? row["store_count"] ?? 0),
+    }));
+
+    res.json({ locations, isEmpty: locations.length === 0 });
+  } catch (e) {
+    req.log.error({ err: e }, "[data/ulta/geographic] Error:");
+    res.status(500).json({ error: "Failed to query Ulta geographic data" });
+  }
+});
+
+// ─── GET /api/data/ulta/stores ───────────────────────────────────────────────
+
+router.get("/ulta/stores", authenticate, async (req, res) => {
+  const { start: _startRaw, end: _endRaw, state: stateParam } = req.query as Record<string, string>;
+  let start: string, end: string;
+  try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
+  catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+
+  const safeState = stateParam ? stateParam.toUpperCase().replace(/[^A-Z]/g, "") : null;
+  const stateWhere = safeState ? `AND state = '${safeState}'` : "";
+
+  try {
+    // Store-level totals only — Ulta's feed has a single aggregate PRODUCT_ID, so no per-SKU split.
+    const rows = await querySnowflake(`
+      SELECT location_id, location_name, street_address, city, state, postal_code, latitude, longitude,
+        SUM(sales_net_usd)   AS revenue,
+        SUM(sales_units_net) AS units_sold
+      FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+      WHERE sale_date BETWEEN '${start}' AND '${end}'
+      ${ULTA_PHYSICAL_STORE_WHERE}
+      ${stateWhere}
+      GROUP BY location_id, location_name, street_address, city, state, postal_code, latitude, longitude
+      ORDER BY revenue DESC NULLS LAST
+    `);
+
+    const stores = rows.map(row => ({
+      storeNumber:   String(row["LOCATION_ID"]    ?? row["location_id"]    ?? ""),
+      storeName:     String(row["LOCATION_NAME"]  ?? row["location_name"]  ?? ""),
+      streetAddress: String(row["STREET_ADDRESS"] ?? row["street_address"] ?? ""),
+      city:          String(row["CITY"]           ?? row["city"]           ?? ""),
+      stateCode:     String(row["STATE"]          ?? row["state"]          ?? "").toUpperCase(),
+      zipCode:       String(row["POSTAL_CODE"]    ?? row["postal_code"]    ?? ""),
+      latitude:      Number(row["LATITUDE"]  ?? row["latitude"]  ?? 0),
+      longitude:     Number(row["LONGITUDE"] ?? row["longitude"] ?? 0),
+      revenue:       Math.round(Number(row["REVENUE"]    ?? row["revenue"]    ?? 0) * 100) / 100,
+      unitsSold:     Number(row["UNITS_SOLD"] ?? row["units_sold"] ?? 0),
+    }));
+
+    res.json({ stores, isEmpty: stores.length === 0 });
+  } catch (e) {
+    req.log.error({ err: e }, "[data/ulta/stores] Error:");
+    res.status(500).json({ error: "Failed to query Ulta store data" });
+  }
+});
+
 // ─── GET /api/data/netsuite/sales ────────────────────────────────────────────
 
 router.get("/netsuite/sales", authenticate, async (req, res) => {
