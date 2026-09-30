@@ -18,6 +18,15 @@ import { useAuth } from "@/context/AuthContext";
 import { MetricTooltip } from "@/components/ui/MetricTooltip";
 
 type Metric = "revenue" | "volume" | "efficiency";
+type Grain = "day" | "week" | "month";
+
+const GRAIN_LABELS: Record<Grain, string> = { day: "Daily", week: "Weekly", month: "Monthly" };
+const GRAIN_ADJECTIVE: Record<Grain, string> = { day: "daily", week: "weekly", month: "monthly" };
+
+// Ranges longer than this default to Weekly; 90 daily points is the most that stays readable.
+const AUTO_WEEKLY_MIN_DAYS = 91;
+// Monthly view reaches back at least this many calendar months so the trend has shape.
+const MIN_MONTHLY_BUCKETS = 6;
 
 interface TrendPoint {
   date: string;
@@ -30,6 +39,10 @@ interface StoreTrend {
   storeId: string;
   storeName: string;
   color: string;
+  /** Granularity this store is actually shown at — never finer than its data supports. */
+  grain: Grain;
+  /** Set when the store has no chartable series (e.g. Circana). */
+  note?: string;
   data: TrendPoint[];
 }
 
@@ -72,6 +85,52 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function formatMonth(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+function formatBucket(dateStr: string, grain: Grain) {
+  if (grain === "month") return formatMonth(dateStr);
+  if (grain === "week")  return `Week of ${formatDate(dateStr)}`;
+  return formatDate(dateStr);
+}
+
+function parseDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00");
+}
+
+function toDateStr(d: Date) {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// Mirrors the API's bucketing: weeks run Sunday–Saturday, months start on the 1st.
+function bucketStart(dateStr: string, grain: Grain) {
+  if (grain === "day") return dateStr;
+  const d = parseDate(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  if (grain === "week") d.setDate(d.getDate() - d.getDay());
+  else d.setDate(1);
+  return toDateStr(d);
+}
+
+// Snaps the start back to a full first bucket, and for Monthly reaches back far
+// enough to show at least MIN_MONTHLY_BUCKETS months.
+function queryWindowStart(startDate: string, endDate: string, grain: Grain) {
+  if (grain !== "month") return bucketStart(startDate, grain);
+  const end = parseDate(endDate);
+  const minStart = toDateStr(new Date(end.getFullYear(), end.getMonth() - (MIN_MONTHLY_BUCKETS - 1), 1));
+  const snapped = bucketStart(startDate, "month");
+  return snapped < minStart ? snapped : minStart;
+}
+
+function daySpan(startDate: string, endDate: string) {
+  return Math.round((parseDate(endDate).getTime() - parseDate(startDate).getTime()) / 86_400_000) + 1;
+}
+
 function formatDateTime(dateStr: string) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
@@ -81,15 +140,15 @@ function formatDateTime(dateStr: string) {
 // ── Chart tooltip ─────────────────────────────────────────────────────────────
 
 function CustomTooltip({
-  active, payload, label, metric, trends, onAddNote,
-}: TooltipProps<number, string> & { metric: Metric; trends: StoreTrend[] | undefined; onAddNote: (date: string) => void }) {
+  active, payload, label, metric, grain, trends, onAddNote,
+}: TooltipProps<number, string> & { metric: Metric; grain: Grain; trends: StoreTrend[] | undefined; onAddNote: (date: string) => void }) {
   if (!active || !payload?.length) return null;
   const dataLines = payload.filter(e => String(e.dataKey ?? "") !== "__note__");
   if (!dataLines.length) return null;
   const date = String(label);
   return (
     <div className="rounded-xl border border-border bg-card/95 backdrop-blur-sm shadow-lg px-3 py-2.5">
-      <p className="text-xs text-muted-foreground mb-1.5">{formatDate(date)}</p>
+      <p className="text-xs text-muted-foreground mb-1.5">{formatBucket(date, grain)}</p>
       {dataLines.map((entry) => {
         const key = String(entry.dataKey ?? "");
         const isRev = key.endsWith("_revenue") || key.endsWith("_dpsw");
@@ -99,7 +158,8 @@ function CustomTooltip({
           : metric === "efficiency"
             ? (key.endsWith("_revenue") ? " Rev" : " DPSW")
             : "";
-        const name = store ? store.storeName + suffix : key;
+        const clamped = store && store.grain !== grain ? ` (${GRAIN_ADJECTIVE[store.grain]})` : "";
+        const name = store ? store.storeName + clamped + suffix : key;
         const val = Number(entry.value ?? 0);
         return (
           <p key={key} className="text-sm font-semibold" style={{ color: entry.color }}>
@@ -350,37 +410,44 @@ function NoteDetail({ notes, trends, onClose, onDeleted }: NoteDetailProps) {
 
 export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, endDate, isWholesale }: Props) {
   const [metric, setMetric] = useState<Metric>("revenue");
+  // null = follow the range-based default until the user picks a view.
+  const [grainChoice, setGrainChoice] = useState<Grain | null>(null);
   const [addNoteDate, setAddNoteDate] = useState<string | null>(null);
   const [detailNotes, setDetailNotes] = useState<Note[] | null>(null);
   const [hoveredNoteDot, setHoveredNoteDot] = useState<{ date: string; cx: number; cy: number } | null>(null);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const grain: Grain = grainChoice ?? (daySpan(startDate, endDate) >= AUTO_WEEKLY_MIN_DAYS ? "week" : "day");
+  const queryStart = queryWindowStart(startDate, endDate, grain);
+
   const storeParam = selectedStoreIds.length ? `&storeIds=${selectedStoreIds.join(",")}` : "";
 
   const { data: trends, isLoading } = useQuery<StoreTrend[]>({
-    queryKey: ["traffic-trends", startDate, endDate, selectedStoreIds.join(","), isWholesale],
+    queryKey: ["traffic-trends", queryStart, endDate, grain, selectedStoreIds.join(","), isWholesale],
     queryFn: async () => {
       const wholesaleParam = isWholesale ? "&isWholesale=true" : "";
       const res = await fetch(
-        `${API_BASE}/api/data/traffic/trends?start=${startDate}&end=${endDate}${storeParam}${wholesaleParam}`,
+        `${API_BASE}/api/data/traffic/trends?start=${queryStart}&end=${endDate}&grain=${grain}${storeParam}${wholesaleParam}`,
         { credentials: "include" },
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
-      return res.json() as Promise<StoreTrend[]>;
+      const rows = await res.json() as Array<Omit<StoreTrend, "grain"> & { grain?: Grain }>;
+      // An API that predates per-store grain omits it; treat such stores as shown at the requested grain.
+      return rows.map(s => ({ ...s, grain: s.grain ?? grain }));
     },
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
   const { data: notes } = useQuery<Note[]>({
-    queryKey: ["traffic-notes", startDate, endDate, selectedStoreIds.join(",")],
+    queryKey: ["traffic-notes", queryStart, endDate, selectedStoreIds.join(",")],
     queryFn: async () => {
       const res = await fetch(
-        `${API_BASE}/api/data/notes?start=${startDate}&end=${endDate}${storeParam}`,
+        `${API_BASE}/api/data/notes?start=${queryStart}&end=${endDate}${storeParam}`,
         { credentials: "include" },
       );
       if (!res.ok) return [];
@@ -390,20 +457,32 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
     retry: false,
   });
 
+  // Keyed by bucket start so notes land on the matching week/month point.
   const notesByDate = useMemo(() => {
     const map = new Map<string, Note[]>();
     for (const n of notes ?? []) {
-      const arr = map.get(n.noteDate) ?? [];
+      const key = bucketStart(n.noteDate, grain);
+      const arr = map.get(key) ?? [];
       arr.push(n);
-      map.set(n.noteDate, arr);
+      map.set(key, arr);
     }
     return map;
-  }, [notes]);
+  }, [notes, grain]);
+
+  const chartedTrends = useMemo(() => (trends ?? []).filter(s => s.data.length > 0), [trends]);
+  const storeNotes = useMemo(() => {
+    const lines: string[] = [];
+    for (const s of trends ?? []) {
+      if (s.note) lines.push(`${s.storeName}: ${s.note}`);
+      else if (s.grain !== grain) lines.push(`${s.storeName}: ${GRAIN_ADJECTIVE[s.grain]} data only — shown ${GRAIN_ADJECTIVE[s.grain]}`);
+    }
+    return lines;
+  }, [trends, grain]);
 
   const chartData = useMemo(() => {
-    if (!trends?.length) return [];
+    if (!chartedTrends.length) return [];
     const dateMap = new Map<string, Record<string, number | undefined>>();
-    for (const store of trends) {
+    for (const store of chartedTrends) {
       for (const point of store.data) {
         if (!dateMap.has(point.date)) dateMap.set(point.date, {});
         const entry = dateMap.get(point.date)!;
@@ -419,14 +498,15 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
         ...vals,
         __note__: notesByDate.has(date) ? 1 : undefined,
       }));
-  }, [trends, notesByDate]);
+  }, [chartedTrends, notesByDate]);
 
-  const isSingleStore = (trends?.length ?? 0) === 1;
-  const isTargetOnlyChart = selectedStoreIds.length === 1 && selectedStoreIds[0] === "target";
+  const isSingleStore = chartedTrends.length === 1;
+  const hasTargetDpsw = chartedTrends.some(s => s.storeId === "target" && s.data.some(p => p.dpsw != null));
   const hasData = chartData.length > 0;
+  const showRightAxis = metric === "volume" || (metric === "efficiency" && hasTargetDpsw);
 
   function invalidateNotes() {
-    void queryClient.invalidateQueries({ queryKey: ["traffic-notes", startDate, endDate, selectedStoreIds.join(",")] });
+    void queryClient.invalidateQueries({ queryKey: ["traffic-notes", queryStart, endDate, selectedStoreIds.join(",")] });
   }
 
   function renderNoteDot(props: DotProps & { payload?: { date?: string } }) {
@@ -459,10 +539,28 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
 
   return (
     <div className="rounded-2xl p-6 monarch-card">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-base font-semibold text-[#3A3A3A] dark:text-[#003349]">
-          Performance Over Time
-        </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-4">
+          <h2 className="text-base font-semibold text-[#3A3A3A] dark:text-[#003349]">
+            Performance Over Time
+          </h2>
+          {/* Granularity toggle — the date range itself comes from the page's date selector */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#003349]/5">
+            {(["day", "week", "month"] as Grain[]).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGrainChoice(g)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  grain === g
+                    ? "bg-white dark:bg-[#FFFFFF] text-[#3A3A3A] dark:text-[#003349] shadow-sm"
+                    : "text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#003349]/60"
+                }`}
+              >
+                {GRAIN_LABELS[g]}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           {/* Add Note button */}
           {hasData && (
@@ -477,8 +575,8 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
           <div className="flex items-center gap-1 p-1 rounded-lg bg-[#3A3A3A]/5 dark:bg-[#003349]/5">
             {(["revenue", "volume", "efficiency"] as Metric[]).map((m) => {
               const tooltips: Record<Metric, string> = {
-                revenue:    "Total net revenue per day across selected stores.",
-                volume:     "Units sold per day alongside revenue — dual-axis view.",
+                revenue:    `Total net revenue per ${grain} across selected stores.`,
+                volume:     `Units sold per ${grain} alongside revenue — dual-axis view.`,
                 efficiency: "$ Per Store Per Week (Target only) alongside revenue — Target in-store sales per store per week, weighted by each SKU's store distribution. Approximately within 9% of Target's internal reporting.",
               };
               return (
@@ -516,7 +614,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               style={{ left: hoveredNoteDot.cx, top: hoveredNoteDot.cy + 14, transform: "translateX(-50%)" }}
             >
               <div className="rounded-lg border border-border bg-card/95 backdrop-blur-sm shadow-md px-2.5 py-1.5 text-xs text-foreground whitespace-nowrap">
-                <span className="font-semibold">{formatDate(hoveredNoteDot.date)}</span>
+                <span className="font-semibold">{formatBucket(hoveredNoteDot.date, grain)}</span>
                 {" · "}
                 {notesByDate.get(hoveredNoteDot.date)?.length ?? 0} note{(notesByDate.get(hoveredNoteDot.date)?.length ?? 0) !== 1 ? "s" : ""}
                 <span className="text-muted-foreground ml-1">· click to view</span>
@@ -527,7 +625,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart
               data={chartData}
-              margin={{ top: 16, right: metric === "volume" || metric === "efficiency" ? 64 : 16, left: 0, bottom: 0 }}
+              margin={{ top: 16, right: showRightAxis ? 64 : 16, left: 0, bottom: 0 }}
             >
               <CartesianGrid
                 strokeDasharray="3 3"
@@ -537,7 +635,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               />
               <XAxis
                 dataKey="date"
-                tickFormatter={formatDate}
+                tickFormatter={grain === "month" ? formatMonth : formatDate}
                 tick={{ fontSize: 11, fill: "currentColor", className: "text-[#3A3A3A]/40 dark:text-[#003349]/30" }}
                 axisLine={false}
                 tickLine={false}
@@ -551,7 +649,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                 tickLine={false}
                 width={64}
               />
-              {(metric === "volume" || metric === "efficiency") && (
+              {showRightAxis && (
                 <YAxis
                   yAxisId="right"
                   orientation="right"
@@ -565,17 +663,18 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
               {/* Hidden axis for note dot positioning at top of chart */}
               <YAxis yAxisId="notes" hide domain={[0, 1]} />
 
-              <Tooltip content={(props) => <CustomTooltip {...(props as TooltipProps<number, string>)} metric={metric} trends={trends} onAddNote={setAddNoteDate} />} />
+              <Tooltip content={(props) => <CustomTooltip {...(props as TooltipProps<number, string>)} metric={metric} grain={grain} trends={chartedTrends} onAddNote={setAddNoteDate} />} />
               <Legend
                 wrapperStyle={{ fontSize: 12, paddingTop: 16 }}
                 formatter={(value) => {
                   const key = String(value);
                   if (key === "__note__") return null;
-                  const store = trends?.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_dpsw`);
+                  const store = chartedTrends.find(s => key === `${s.storeId}_revenue` || key === `${s.storeId}_units` || key === `${s.storeId}_dpsw`);
                   if (!store) return key;
-                  if (metric === "revenue") return store.storeName;
-                  if (metric === "volume") return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (Units)");
-                  return store.storeName + (key.endsWith("_revenue") ? " (Rev)" : " (DPSW)");
+                  const name = store.storeName + (store.grain !== grain ? ` (${GRAIN_ADJECTIVE[store.grain]})` : "");
+                  if (metric === "revenue") return name;
+                  if (metric === "volume") return name + (key.endsWith("_revenue") ? " (Rev)" : " (Units)");
+                  return name + (key.endsWith("_revenue") ? " (Rev)" : " (DPSW)");
                 }}
               />
 
@@ -590,9 +689,13 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                 isAnimationActive={false}
               />
 
-              {trends?.flatMap((store) => {
+              {chartedTrends.flatMap((store) => {
                 const els = [];
-                if (metric === "efficiency" && store.storeId === "target" && isTargetOnlyChart) {
+                // Stores shown coarser than the chart, or with very few points, get dots —
+                // a lone point on a line with dot={false} renders nothing at all.
+                const showDots = store.grain !== grain || store.data.length < 3;
+                // DPSW exists for Target only; other stores get no bars rather than $0.
+                if (metric === "efficiency" && store.storeId === "target" && hasTargetDpsw) {
                   els.push(
                     <Bar
                       key={`${store.storeId}_dpsw`}
@@ -612,7 +715,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                     dataKey={`${store.storeId}_revenue`}
                     stroke={store.color}
                     strokeWidth={2}
-                    dot={false}
+                    dot={showDots ? { r: 3, strokeWidth: 0, fill: store.color } : false}
                     activeDot={{ r: 4, strokeWidth: 0, fill: store.color }}
                     connectNulls
                   />,
@@ -627,7 +730,7 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
                       stroke={store.color}
                       strokeWidth={1.5}
                       strokeDasharray="4 3"
-                      dot={false}
+                      dot={showDots ? { r: 2.5, strokeWidth: 0, fill: store.color } : false}
                       activeDot={{ r: 4, strokeWidth: 0, fill: store.color }}
                       connectNulls
                     />,
@@ -649,10 +752,22 @@ export default function PerformanceOverTimeChart({ selectedStoreIds, startDate, 
       )}
       {metric === "efficiency" && hasData && (
         <p className="mt-3 text-xs text-muted-foreground text-center">
-          {isTargetOnlyChart
-            ? "Solid line = Revenue (left axis) · Bars = $ Per Store Per Week (right axis, Target only)"
-            : "$ Per Store Per Week is available for Target only — select Target alone to view DPSW bars."}
+          {hasTargetDpsw
+            ? `${isSingleStore ? "Solid line" : "Solid lines"} = Revenue (left axis) · Bars = $ Per Store Per Week (right axis, Target only — N/A for other stores)`
+            : "$ Per Store Per Week is available for Target only — include Target to view DPSW bars."}
         </p>
+      )}
+      {(storeNotes.length > 0 || queryStart < startDate) && (
+        <div className="mt-2 space-y-0.5 text-xs text-muted-foreground text-center">
+          {queryStart < startDate && (
+            <p>
+              {grain === "month"
+                ? `Monthly view starts ${formatMonth(queryStart)} to show full months (at least ${MIN_MONTHLY_BUCKETS}).`
+                : `Weekly view starts ${formatDate(queryStart)} to show full Sunday–Saturday weeks.`}
+            </p>
+          )}
+          {storeNotes.map(n => <p key={n}>{n}</p>)}
+        </div>
       )}
 
       {/* Add Note modal */}

@@ -3191,17 +3191,35 @@ const NS_STORE_ID_FROM_NAME: Record<string, string> = {
   "Meijer":            "meijer",
 };
 
-function circanaEndDate(period: string): string {
-  const m = period.match(/Ending (\d{2})-(\d{2})-(\d{2})$/);
-  if (!m) return "2026-01-01";
-  return `20${m[3]}-${m[1]}-${m[2]}`;
+type TrendGrain = "day" | "week" | "month";
+const TREND_GRAINS: readonly TrendGrain[] = ["day", "week", "month"];
+
+// A store is never shown finer than its native granularity: the effective grain
+// is whichever of (requested, native) is coarser.
+function coarserGrain(a: TrendGrain, b: TrendGrain): TrendGrain {
+  return TREND_GRAINS.indexOf(a) >= TREND_GRAINS.indexOf(b) ? a : b;
+}
+
+// Buckets a DATE column to the start of its day / week / month. Weeks run
+// Sunday–Saturday (Target and Ulta fiscal weeks; Ulta's Alloy feed posts each
+// week's sales on its Sunday). Computed with DAYOFWEEKISO rather than
+// DATE_TRUNC('week') so it doesn't depend on the session's WEEK_START.
+function trendBucketSql(col: string, grain: TrendGrain): string {
+  if (grain === "day")  return col;
+  if (grain === "week") return `DATEADD(day, -(DAYOFWEEKISO(${col}) % 7), ${col})`;
+  return `DATE_TRUNC('month', ${col})`;
 }
 
 router.get("/traffic/trends", authenticate, async (req, res) => {
-  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, isWholesale: isWholesaleRaw } = req.query as Record<string, string>;
+  const { start: _startRaw, end: _endRaw, storeIds: storeIdsRaw, isWholesale: isWholesaleRaw, grain: grainRaw } = req.query as Record<string, string>;
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  if (grainRaw && !TREND_GRAINS.includes(grainRaw as TrendGrain)) {
+    res.status(400).json({ error: `grain must be one of ${TREND_GRAINS.join(", ")}` });
+    return;
+  }
+  const grain = (grainRaw as TrendGrain | undefined) ?? "day";
 
   const isWholesale = isWholesaleRaw === "true";
   const storeIds = parseStoreIds(storeIdsRaw);
@@ -3209,13 +3227,17 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
   const has = (id: string) => allStores || storeIds.includes(id);
 
   const CIRCANA_IDS = ["cvs", "walgreens", "publix", "meijer"] as const;
-  const NETSUITE_IDS = ["ulta"] as const;
   const activeCircana = CIRCANA_IDS.filter(id => has(id));
-  const activeNetsuite = NETSUITE_IDS.filter(id => has(id));
 
   type TrendPoint = { date: string; revenue: number; units: number; dpsw?: number };
-  type StoreTrend = { storeId: string; storeName: string; color: string; data: TrendPoint[] };
+  type StoreTrend = { storeId: string; storeName: string; color: string; grain: TrendGrain; note?: string; data: TrendPoint[] };
   const results: StoreTrend[] = [];
+
+  const toPoint = (r: Record<string, unknown>): TrendPoint => ({
+    date:    toDateStr(r["BUCKET_DATE"] ?? r["bucket_date"]),
+    revenue: Math.round(Number(r["REVENUE"] ?? r["revenue"] ?? 0) * 100) / 100,
+    units:   Number(r["UNITS"] ?? r["units"] ?? 0),
+  });
 
   try {
     const queries: Promise<void>[] = [];
@@ -3223,27 +3245,28 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     if (isWholesale) {
       const wholesaleStoreIds = Object.keys(NS_STORE_NAME_FOR_TRENDS);
       const activeWholesale = wholesaleStoreIds.filter(id => has(id));
-      // Ulta is bucketed by week (its NetSuite invoice cadence is granular enough
-      // to show weekly movement); every other wholesale retailer stays monthly.
+      // Ulta's NetSuite invoice cadence is granular enough to show weekly
+      // movement; every other wholesale retailer is monthly at its finest.
       const weeklyWholesale  = activeWholesale.filter(id => id === "ulta");
       const monthlyWholesale = activeWholesale.filter(id => id !== "ulta");
 
-      const runWholesaleTrend = (ids: string[], grain: "week" | "month") => {
+      const runWholesaleTrend = (ids: string[], nativeGrain: TrendGrain) => {
         if (ids.length === 0) return;
+        const g = coarserGrain(grain, nativeGrain);
         const storeNameFilter = ids
           .map(sid => `'${NS_STORE_NAME_FOR_TRENDS[sid]}'`)
           .join(", ");
         queries.push(
           querySnowflake(`
             SELECT
-              DATE_TRUNC('${grain}', TRANDATE) AS bucket_date,
+              ${trendBucketSql("TRANDATE", g)} AS bucket_date,
               STORE_NAME,
               SUM(REVENUE) AS revenue,
               SUM(UNITS)   AS units
             FROM ${NETSUITE_SALES_DEDUPED} nsp
             WHERE TRANDATE BETWEEN '${start}' AND '${end}'
               AND STORE_NAME IN (${storeNameFilter})
-            GROUP BY DATE_TRUNC('${grain}', TRANDATE), STORE_NAME
+            GROUP BY 1, STORE_NAME
             ORDER BY bucket_date ASC
           `).then(rows => {
             const byStore: Record<string, TrendPoint[]> = {};
@@ -3252,19 +3275,14 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
               const sid = NS_STORE_ID_FROM_NAME[storeName];
               if (!sid || !ids.includes(sid)) continue;
               if (!byStore[sid]) byStore[sid] = [];
-              const raw = row["BUCKET_DATE"] ?? row["bucket_date"] ?? "";
-              const date = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw).slice(0, 10);
-              byStore[sid].push({
-                date,
-                revenue: Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
-                units:   Number(row["UNITS"] ?? row["units"] ?? 0),
-              });
+              byStore[sid].push(toPoint(row));
             }
             for (const sid of ids) {
               results.push({
                 storeId:   sid,
                 storeName: TREND_STORE_LABELS[sid] ?? NS_STORE_NAME_FOR_TRENDS[sid] ?? sid,
                 color:     TREND_STORE_COLORS[sid] ?? "#888888",
+                grain:     g,
                 data:      (byStore[sid] ?? []).sort((a, b) => a.date.localeCompare(b.date)),
               });
             }
@@ -3279,21 +3297,18 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     if (!isWholesale && has("shopify")) {
       queries.push(
         querySnowflake(`
-          SELECT summary_date, SUM(revenue) AS revenue, SUM(units_sold) AS units
+          SELECT ${trendBucketSql("summary_date", grain)} AS bucket_date, SUM(revenue) AS revenue, SUM(units_sold) AS units
           FROM ${DB_NAME}.COMMERCE.SHOPIFY_PRODUCT_DAILY
           WHERE summary_date BETWEEN '${start}' AND '${end}'
-          GROUP BY summary_date
-          ORDER BY summary_date ASC
+          GROUP BY 1
+          ORDER BY 1 ASC
         `).then(rows => {
           results.push({
             storeId: "shopify",
             storeName: "Shopify",
             color: TREND_STORE_COLORS["shopify"],
-            data: rows.map(r => ({
-              date:    toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
-              revenue: Math.round(Number(r["REVENUE"]  ?? r["revenue"]  ?? 0) * 100) / 100,
-              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
-            })),
+            grain,
+            data: rows.map(toPoint),
           });
         }),
       );
@@ -3303,26 +3318,27 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
       queries.push(
         Promise.all([
           querySnowflake(`
-            SELECT summary_date, SUM(sale_amount) AS revenue, SUM(sale_quantity) AS units
+            SELECT ${trendBucketSql("summary_date", grain)} AS bucket_date, SUM(sale_amount) AS revenue, SUM(sale_quantity) AS units
             FROM ${DB_NAME}.RETAIL.TARGET_DAILY_SUMMARY
             WHERE summary_date BETWEEN '${start}' AND '${end}'
-            GROUP BY summary_date
-            ORDER BY summary_date ASC
+            GROUP BY 1
+            ORDER BY 1 ASC
           `),
           // $ Per Store Per Week (DPSW) — Target only, validated against Target's internal reporting.
+          // Summed per bucket then divided, matching the DPSW KPI tile's formula.
           querySnowflake(`
             SELECT
-              summary_date,
+              ${trendBucketSql("summary_date", grain)} AS bucket_date,
               SUM(revenue - COALESCE(drive_up_revenue,0) - COALESCE(shipt_revenue,0)) AS instore_revenue,
               SUM(store_count) AS store_count
             FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY
             WHERE summary_date BETWEEN '${start}' AND '${end}'
-            GROUP BY summary_date
-            ORDER BY summary_date ASC
+            GROUP BY 1
+            ORDER BY 1 ASC
           `),
         ]).then(([revenueRows, dpswRows]) => {
           const dpswByDate = new Map(dpswRows.map(r => [
-            toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]),
+            toDateStr(r["BUCKET_DATE"] ?? r["bucket_date"]),
             {
               instoreRevenue: Number(r["INSTORE_REVENUE"] ?? r["instore_revenue"] ?? 0),
               storeCount:     Number(r["STORE_COUNT"]     ?? r["store_count"]     ?? 0),
@@ -3332,14 +3348,13 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
             storeId: "target",
             storeName: "Target",
             color: TREND_STORE_COLORS["target"],
+            grain,
             data: revenueRows.map(r => {
-              const date = toDateStr(r["SUMMARY_DATE"] ?? r["summary_date"]);
-              const d = dpswByDate.get(date);
+              const point = toPoint(r);
+              const d = dpswByDate.get(point.date);
               return {
-                date,
-                revenue: Math.round(Number(r["REVENUE"]  ?? r["revenue"]  ?? 0) * 100) / 100,
-                units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
-                dpsw:    (d && d.storeCount > 0) ? Math.round((d.instoreRevenue / d.storeCount) * 100) / 100 : undefined,
+                ...point,
+                dpsw: (d && d.storeCount > 0) ? Math.round((d.instoreRevenue / d.storeCount) * 100) / 100 : undefined,
               };
             }),
           });
@@ -3350,21 +3365,18 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     if (!isWholesale && has("walmart")) {
       queries.push(
         querySnowflake(`
-          SELECT sale_date AS week_date, SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units
+          SELECT ${trendBucketSql("sale_date", grain)} AS bucket_date, SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units
           FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
           WHERE sale_date BETWEEN '${start}' AND '${end}'
-          GROUP BY sale_date
-          ORDER BY sale_date ASC
+          GROUP BY 1
+          ORDER BY 1 ASC
         `).then(rows => {
           results.push({
             storeId: "walmart",
             storeName: "Walmart",
             color: TREND_STORE_COLORS["walmart"],
-            data: rows.map(r => ({
-              date:    toDateStr(r["WEEK_DATE"] ?? r["week_date"]),
-              revenue: Math.round(Number(r["REVENUE"] ?? r["revenue"] ?? 0) * 100) / 100,
-              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
-            })),
+            grain,
+            data: rows.map(toPoint),
           });
         }),
       );
@@ -3373,105 +3385,60 @@ router.get("/traffic/trends", authenticate, async (req, res) => {
     if (!isWholesale && has("amazon")) {
       queries.push(
         querySnowflake(`
-          SELECT sale_date, SUM(revenue) AS revenue, SUM(units_shipped) AS units
+          SELECT ${trendBucketSql("sale_date", grain)} AS bucket_date, SUM(revenue) AS revenue, SUM(units_shipped) AS units
           FROM ${DB_NAME}.COMMERCE.AMAZON_SALES_DAILY
           WHERE sale_date BETWEEN '${start}' AND '${end}'
-          GROUP BY sale_date
-          ORDER BY sale_date ASC
+          GROUP BY 1
+          ORDER BY 1 ASC
         `).then(rows => {
           results.push({
             storeId:   "amazon",
             storeName: "Amazon (Pattern)",
             color:     TREND_STORE_COLORS["amazon"],
-            data: rows.map(r => ({
-              date:    toDateStr(r["SALE_DATE"] ?? r["sale_date"]),
-              revenue: Math.round(Number(r["REVENUE"] ?? r["revenue"] ?? 0) * 100) / 100,
-              units:   Number(r["UNITS"]    ?? r["units"]    ?? 0),
-            })),
+            grain,
+            data: rows.map(toPoint),
           });
         }),
       );
     }
 
-    if (!isWholesale && activeCircana.length > 0) {
-      const retailerFilter = Object.entries(CIRCANA_RETAILER_TO_STORE)
-        .filter(([, sid]) => activeCircana.includes(sid as typeof CIRCANA_IDS[number]))
-        .map(([retailer]) => `'${retailer.replace(/'/g, "\\'")}'`)
-        .join(", ");
-      queries.push(
-        querySnowflake(`
-          SELECT time_period, retailer, SUM(dollar_sales) AS revenue, SUM(unit_sales) AS units
-          FROM ${DB_NAME}.RETAIL.CIRCANA_POS_RAW
-          WHERE retailer IN (${retailerFilter})
-          GROUP BY time_period, retailer
-          ORDER BY time_period ASC
-        `).then(rows => {
-          const byStore: Record<string, TrendPoint[]> = {};
-          for (const row of rows) {
-            const retailer = String(row["RETAILER"] ?? row["retailer"] ?? "");
-            const sid = CIRCANA_RETAILER_TO_STORE[retailer] ?? retailer.toLowerCase().replace(/\s+/g, "-");
-            const period = String(row["TIME_PERIOD"] ?? row["time_period"] ?? "");
-            const date = circanaEndDate(period);
-            if (!byStore[sid]) byStore[sid] = [];
-            byStore[sid].push({
-              date,
-              revenue: Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
-              units:   Number(row["UNITS"] ?? row["units"] ?? 0),
-            });
-          }
-          for (const sid of activeCircana) {
-            const allPoints = (byStore[sid] ?? []).sort((a, b) => a.date.localeCompare(b.date));
-            const filtered = allPoints.filter(p => p.date >= start && p.date <= end);
-            results.push({
-              storeId:   sid,
-              storeName: TREND_STORE_LABELS[sid] ?? sid,
-              color:     TREND_STORE_COLORS[sid] ?? "#888888",
-              data:      filtered,
-            });
-          }
-        }),
-      );
+    // CIRCANA_POS_RAW holds only overlapping rolling-window totals (Latest 4/12/13/
+    // 24/26/52 Week, calendar YTD), not a weekly series, so there is nothing that
+    // can be plotted over time. Return the stores with a note instead of data.
+    if (!isWholesale) {
+      for (const sid of activeCircana) {
+        results.push({
+          storeId:   sid,
+          storeName: TREND_STORE_LABELS[sid] ?? sid,
+          color:     TREND_STORE_COLORS[sid] ?? "#888888",
+          grain:     coarserGrain(grain, "week"),
+          note:      "Circana provides rolling-period totals only — no weekly series to chart",
+          data:      [],
+        });
+      }
     }
 
-    if (!isWholesale && activeNetsuite.length > 0) {
-      const storeNameFilter = activeNetsuite
-        .map(sid => `'${NS_STORE_NAME_FOR_TRENDS[sid]}'`)
-        .join(", ");
+    // Ulta retail trend reads Alloy POS, the same source as the Traffic KPIs and
+    // Product Performance table. The feed is weekly (sales posted on each week's
+    // Sunday; other days carry NULL sales), so Ulta is never shown finer than weekly.
+    if (!isWholesale && has("ulta")) {
+      const ultaGrain = coarserGrain(grain, "week");
       queries.push(
         querySnowflake(`
-          SELECT
-            DATE_TRUNC('month', TRANDATE) AS month_date,
-            STORE_NAME,
-            SUM(REVENUE) AS revenue,
-            SUM(UNITS)   AS units
-          FROM ${NETSUITE_SALES_DEDUPED} nsp
-          WHERE TRANDATE BETWEEN '${start}' AND '${end}'
-            AND STORE_NAME IN (${storeNameFilter})
-          GROUP BY DATE_TRUNC('month', TRANDATE), STORE_NAME
-          ORDER BY month_date ASC
+          SELECT ${trendBucketSql("sale_date", ultaGrain)} AS bucket_date, SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+            AND sales_net_usd IS NOT NULL
+          GROUP BY 1
+          ORDER BY 1 ASC
         `).then(rows => {
-          const byStore: Record<string, TrendPoint[]> = {};
-          for (const row of rows) {
-            const storeName = String(row["STORE_NAME"] ?? row["store_name"] ?? "");
-            const sid = NS_STORE_ID_FROM_NAME[storeName] ?? storeName.toLowerCase().replace(/\s+/g, "-");
-            if (!activeNetsuite.includes(sid as typeof NETSUITE_IDS[number])) continue;
-            if (!byStore[sid]) byStore[sid] = [];
-            const raw = row["MONTH_DATE"] ?? row["month_date"] ?? "";
-            const date = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw).slice(0, 10);
-            byStore[sid].push({
-              date,
-              revenue: Math.round(Number(row["REVENUE"] ?? row["revenue"] ?? 0) * 100) / 100,
-              units:   Number(row["UNITS"] ?? row["units"] ?? 0),
-            });
-          }
-          for (const sid of activeNetsuite) {
-            results.push({
-              storeId:   sid,
-              storeName: TREND_STORE_LABELS[sid] ?? sid,
-              color:     TREND_STORE_COLORS[sid] ?? "#888888",
-              data:      byStore[sid] ?? [],
-            });
-          }
+          results.push({
+            storeId:   "ulta",
+            storeName: TREND_STORE_LABELS["ulta"],
+            color:     TREND_STORE_COLORS["ulta"],
+            grain:     ultaGrain,
+            data:      rows.map(toPoint),
+          });
         }),
       );
     }
