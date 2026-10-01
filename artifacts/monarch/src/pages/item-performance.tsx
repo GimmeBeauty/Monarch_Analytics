@@ -751,6 +751,30 @@ export default function ItemPerformance() {
 
   const includesSellIn = dataSource === "all" || dataSource === "sellin";
 
+  // The Revenue/Units column always reflects ONLY the currently selected
+  // toggle — "Sell-In" shows sell-in only, "Sell-Through" shows sell-through
+  // only (no fallback), and "Best Available" shows the merged effective
+  // figure (sell-through preferred, sell-in fallback). Never show more than
+  // one of these at once in the main table, or the toggle looks like a no-op.
+  const revenueColumnLabel =
+    dataSource === "sellin" ? "Sell-In" :
+    dataSource === "pos"    ? "Sell-Through" :
+    "Best Available";
+  const revenueColumnTooltip =
+    dataSource === "sellin" ? "NetSuite shipments to the retailer — not consumer purchases. A new launch can show a large sell-in number from initial pipeline fill before any sell-through exists." :
+    dataSource === "pos"    ? "Consumer POS scans from Target, Walmart, and Circana only. Shows $0 if no sell-through data exists yet, even if the SKU has been shipped." :
+    "Sell-through (consumer POS) when available, otherwise sell-in (shipments) as a fallback. Open a SKU for the Sell-In vs Sell-Through breakdown.";
+  function effectiveRevenue(row: { sellInRevenue?: number; sellThroughRevenue?: number; totalRevenue: number }): number {
+    if (dataSource === "sellin") return row.sellInRevenue ?? 0;
+    if (dataSource === "pos")    return row.sellThroughRevenue ?? 0;
+    return row.totalRevenue;
+  }
+  function effectiveUnits(row: { sellInUnits?: number; sellThroughUnits?: number; totalUnits: number }): number {
+    if (dataSource === "sellin") return row.sellInUnits ?? 0;
+    if (dataSource === "pos")    return row.sellThroughUnits ?? 0;
+    return row.totalUnits;
+  }
+
   const retailerLabel = retailers.length === 0
     ? "All Retailers"
     : RETAILER_OPTIONS.filter(o => retailers.includes(o.value)).map(o => o.label).join(", ");
@@ -1042,25 +1066,14 @@ export default function ItemPerformance() {
                   onClick={() => toggleSort("totalRevenue")}
                 >
                   <span className="inline-flex items-center gap-1 justify-end">
-                    Sell-In
+                    {revenueColumnLabel}
                     <UITooltip>
                       <TooltipTrigger asChild>
                         <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
-                      <TooltipContent>NetSuite shipments to the retailer — not consumer purchases. A new launch can show a large sell-in number from initial pipeline fill before any sell-through exists.</TooltipContent>
+                      <TooltipContent>{revenueColumnTooltip}</TooltipContent>
                     </UITooltip>
                     <SortIcon col="totalRevenue" />
-                  </span>
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">
-                  <span className="inline-flex items-center gap-1 justify-end">
-                    Sell-Through
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
-                      </TooltipTrigger>
-                      <TooltipContent>Consumer POS scans from Target, Walmart, and Circana. "—" means no sell-through data exists yet for this SKU.</TooltipContent>
-                    </UITooltip>
                   </span>
                 </th>
                 <th
@@ -1145,7 +1158,7 @@ export default function ItemPerformance() {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : isError ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12">
+                  <td colSpan={10} className="px-4 py-12">
                     <ErrorState
                       message="Unable to load data — check your data connections."
                       onRetry={() => refetch()}
@@ -1155,7 +1168,7 @@ export default function ItemPerformance() {
                 </tr>
               ) : sortedSkus.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
+                  <td colSpan={10} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
                     No SKUs found for the selected filters.
                   </td>
                 </tr>
@@ -1170,18 +1183,15 @@ export default function ItemPerformance() {
                       <div className="font-medium text-[#3A3A3A] dark:text-[#003349] text-sm leading-tight">{sku.productName}</div>
                       <div className="text-[10px] text-[#3A3A3A]/45 mt-0.5">{sku.sku}</div>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
-                      {fmtCurrency(sku.sellInRevenue ?? 0)}
-                    </td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums">
-                      {(sku.sellThroughRevenue ?? 0) > 0 ? (
-                        <span className="text-[#3A3A3A]/80 dark:text-[#003349]/70">{fmtCurrency(sku.sellThroughRevenue ?? 0)}</span>
+                      {effectiveRevenue(sku) > 0 ? (
+                        <span className="text-[#3A3A3A]/80 dark:text-[#003349]/70">{fmtCurrency(effectiveRevenue(sku))}</span>
                       ) : (
                         <span className="text-[#3A3A3A]/30 dark:text-[#003349]/25">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">
-                      {fmtUnits(sku.totalUnits)}
+                      {fmtUnits(effectiveUnits(sku))}
                     </td>
                     <td className={`px-4 py-3 text-right text-sm tabular-nums ${dpswColor(sku.vsRetailAvg)}`}>
                       {fmtDpsw(sku.avgDpsw)}
@@ -1222,8 +1232,7 @@ export default function ItemPerformance() {
               <thead>
                 <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFF9F2]/50 dark:bg-[#FFFFFF]/30">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Retailer</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Sell-In</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Sell-Through</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">{revenueColumnLabel}</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Total Units</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40"># SKUs</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Avg DPSW (all SKUs)</th>
@@ -1237,12 +1246,9 @@ export default function ItemPerformance() {
                     <tr key={r.entityId} className="border-b border-[#FFBC80]/08 dark:border-[#9BDBF3]/08 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 transition-colors">
                       <td className="px-4 py-3 font-medium text-[#3A3A3A] dark:text-[#003349]">{r.name}</td>
                       <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
-                        {r.sellInRevenue > 0 ? fmtCurrency(r.sellInRevenue) : <span className="text-[#3A3A3A]/30">—</span>}
+                        {effectiveRevenue(r) > 0 ? fmtCurrency(effectiveRevenue(r)) : <span className="text-[#3A3A3A]/30">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
-                        {r.sellThroughRevenue > 0 ? fmtCurrency(r.sellThroughRevenue) : <span className="text-[#3A3A3A]/30">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">{fmtUnits(r.totalUnits)}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">{fmtUnits(effectiveUnits(r))}</td>
                       <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60">{r.skuCount}</td>
                       <td className={`px-4 py-3 text-right tabular-nums ${r.avgDpsw != null ? dpswColor((r.avgDpsw ?? 0) - crossAvg) : "text-[#3A3A3A]/40"}`}>
                         {fmtDpsw(r.avgDpsw)}
