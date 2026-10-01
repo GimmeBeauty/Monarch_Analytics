@@ -205,10 +205,14 @@ describe("buildRetailerVelocity — best-available mode (dataSource = 'bestAvail
     expect(ids.has(227)).toBe(true);  // Meijer
   });
 
-  it("uses POS figures for Target (POS available)", () => {
+  it("uses POS figures for Target (POS available), labeled as having both sources", () => {
     const target = results.find(r => r.entityId === 229)!;
     expect(target.totalRevenue).toBe(27_000); // Target POS: 18_000 + 9_000
-    expect(target.dataSource).toBe("pos");
+    // Target has sell-in ($15,000) AND POS ($27,000) — the label must say so,
+    // not collapse to "pos" and hide that sell-in data also exists for it.
+    expect(target.dataSource).toBe("sellin+pos");
+    expect(target.sellInRevenue).toBe(15_000);
+    expect(target.sellThroughRevenue).toBe(27_000);
   });
 
   it("falls back to sell-in when no POS data is available", () => {

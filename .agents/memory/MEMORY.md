@@ -12,3 +12,4 @@
 - [Circana "vs prior period" design](circana-prior-period-design.md) — Circana time_period labels are single-snapshot rolling windows; prior period is derived by subtracting nested buckets and normalizing to a per-day rate.
 - [Kroger excluded pending Alloy](kroger-alloy-exclusion.md) — Kroger (NetSuite entity 228) has real revenue but is deliberately excluded everywhere; it's a placeholder until an Alloy integration replaces it.
 - [Daily ad-summary full-history rebuild bug](daily-ad-summary-duplication.md) — a scheduler script that re-aggregates a channel's entire history on every run must fully delete that channel before re-inserting, not just the last N days, or rows silently multiply.
+- [Item Performance sell-in/sell-through separation](item-performance-sellin-sellthrough-separation.md) — sell-in and sell-through must always be shown as two distinct numbers, never merged into one "revenue" figure.

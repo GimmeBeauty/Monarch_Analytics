@@ -387,8 +387,6 @@ router.get("/", async (req, res) => {
       FETCH FIRST 5000 ROWS ONLY
     `;
 
-    const includePOS = dataSource !== "sellin";
-
     // ── Current + prior period sell-in revenue totals (for "vs prior period"
     // comparison) ───────────────────────────────────────────────────────────
     // Both sides use the identical dedup + retailer filter and an uncapped
@@ -441,9 +439,11 @@ router.get("/", async (req, res) => {
       [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows, currentSellInRows, priorSellInRows] = await Promise.all([
         querySnowflake(skuRetailerSql),
         querySnowflake(weeklyTrendSql),
-        querySnowflake(targetPosSql),   // always run — needed for title lookup
-        querySnowflake(walmartPosSql),  // always run — needed for title lookup
-        includePOS ? querySnowflake(circanaPosSql) : Promise.resolve([]),
+        querySnowflake(targetPosSql),   // always run — needed for title lookup and so
+                                         // sell-through is visible even in Sell-In mode
+        querySnowflake(walmartPosSql),  // always run — same reason as above
+        querySnowflake(circanaPosSql),  // always run — sell-in and sell-through must be
+                                         // shown side by side regardless of the toggle
         querySnowflake(currentSellInSql),
         priorSellInSql ? querySnowflake(priorSellInSql) : Promise.resolve([]),
       ]);
@@ -593,86 +593,123 @@ router.get("/", async (req, res) => {
       const walmartPos = agg.upc ? walmartPosByUpc.get(agg.upc) : undefined;
       const resolvedTitle = targetPos?.title || walmartPos?.title || agg.productName;
 
-      // Build byRetailer: seed from sell-in, then merge POS
-      const byRetailerMap = new Map<number, {
-        entityId: number; name: string; revenue: number; units: number;
+      // Build byRetailer: track sell-in and sell-through as two SEPARATE numbers
+      // per retailer, always. They must never be silently collapsed into one
+      // figure — a retailer can have shipments (sell-in) with zero consumer
+      // scans yet (sell-through), and showing only the merged number makes
+      // pipeline-fill shipments look like consumer sales. See memory file
+      // item-performance-sellin-sellthrough-separation.md.
+      interface RetailerRow {
+        entityId: number; name: string;
+        sellInRevenue: number; sellInUnits: number;
+        sellThroughRevenue: number; sellThroughUnits: number;
+        revenue: number; units: number; // "effective" value for the selected
+                                         // dataSource toggle — used for DPSW,
+                                         // benchmark, sorting, filtering only.
+                                         // Never render this as THE number;
+                                         // render sellIn/sellThrough instead.
         dpsw: number | null; dataSource: string; itemNumber: string;
-      }>();
+      }
+      const byRetailerMap = new Map<number, RetailerRow>();
 
-      for (const [entityId, rev] of agg.retailerRevenue.entries()) {
-        const stores = STORE_COUNTS_BY_ENTITY[entityId];
-        byRetailerMap.set(entityId, {
-          entityId,
-          name:       ENTITY_MAP[entityId] ?? String(entityId),
-          revenue:    rev,
-          units:      agg.retailerUnits.get(entityId) ?? 0,
-          dpsw:       stores ? rev / stores / numWeeks : null,
-          dataSource: "sellin",
-          itemNumber: "",
-        });
+      function ensureRow(entityId: number, name: string): RetailerRow {
+        let row = byRetailerMap.get(entityId);
+        if (!row) {
+          row = {
+            entityId, name,
+            sellInRevenue: 0, sellInUnits: 0,
+            sellThroughRevenue: 0, sellThroughUnits: 0,
+            revenue: 0, units: 0,
+            dpsw: null, dataSource: "none", itemNumber: "",
+          };
+          byRetailerMap.set(entityId, row);
+        }
+        return row;
       }
 
-      if (includePOS && agg.upc) {
+      for (const [entityId, rev] of agg.retailerRevenue.entries()) {
+        const row = ensureRow(entityId, ENTITY_MAP[entityId] ?? String(entityId));
+        row.sellInRevenue = rev;
+        row.sellInUnits   = agg.retailerUnits.get(entityId) ?? 0;
+      }
+
+      // Sell-through is always attached (Target/Walmart/Circana queries always
+      // run) so it's visible in every mode, independent of the toggle.
+      if (agg.upc) {
         if (targetPos) {
-          const ex = byRetailerMap.get(229);
-          byRetailerMap.set(229, {
-            entityId:   229,
-            name:       "Target",
-            revenue:    ex ? ex.revenue : targetPos.revenue,
-            units:      ex ? ex.units   : targetPos.units,
-            dpsw:       targetPos.revenue / STORE_COUNTS_BY_ENTITY[229] / numWeeks,
-            dataSource: ex ? "sellin+pos" : "pos",
-            itemNumber: targetPos.tcin,
-          });
+          const row = ensureRow(229, "Target");
+          row.sellThroughRevenue = targetPos.revenue;
+          row.sellThroughUnits   = targetPos.units;
+          row.itemNumber = targetPos.tcin;
         }
-
         if (walmartPos) {
-          const ex = byRetailerMap.get(231);
-          byRetailerMap.set(231, {
-            entityId:   231,
-            name:       "Walmart",
-            revenue:    ex ? ex.revenue : walmartPos.revenue,
-            units:      ex ? ex.units   : walmartPos.units,
-            dpsw:       walmartPos.revenue / STORE_COUNTS_BY_ENTITY[231] / numWeeks,
-            dataSource: ex ? "sellin+pos" : "pos",
-            itemNumber: walmartPos.itemNumber,
-          });
+          const row = ensureRow(231, "Walmart");
+          row.sellThroughRevenue = walmartPos.revenue;
+          row.sellThroughUnits   = walmartPos.units;
+          row.itemNumber = walmartPos.itemNumber;
         }
-
         const circanaForUpc = circanaByUpc.get(agg.upc);
         if (circanaForUpc) {
           for (const [entityId, posData] of circanaForUpc.entries()) {
-            const ex     = byRetailerMap.get(entityId);
-            const stores = STORE_COUNTS_BY_ENTITY[entityId] ?? posData.storeCount;
-            byRetailerMap.set(entityId, {
-              entityId,
-              name:       ENTITY_MAP[entityId] ?? String(entityId),
-              revenue:    ex ? ex.revenue : posData.revenue,
-              units:      ex ? ex.units   : posData.units,
-              dpsw:       stores > 0 ? posData.revenue / stores / numWeeks : null,
-              dataSource: ex ? "sellin+pos" : "pos",
-              itemNumber: "",
-            });
+            const row = ensureRow(entityId, ENTITY_MAP[entityId] ?? String(entityId));
+            row.sellThroughRevenue = posData.revenue;
+            row.sellThroughUnits   = posData.units;
           }
         }
       }
 
+      // The dataSource toggle controls only the "effective" number used for
+      // DPSW/benchmark/sorting math — never which of sellIn/sellThrough is
+      // displayed, since both are always rendered separately.
+      //   - "sellin": effective = sell-in only.
+      //   - "pos":    effective = sell-through only, with NO sell-in fallback
+      //     — a SKU with shipments but no scans yet correctly shows $0 here,
+      //     instead of silently inheriting the sell-in figure.
+      //   - "all" (Best Available): prefer sell-through when it exists
+      //     (it reflects real consumer demand), else fall back to sell-in.
+      for (const row of byRetailerMap.values()) {
+        const hasSellIn      = row.sellInRevenue > 0 || row.sellInUnits > 0;
+        const hasSellThrough = row.sellThroughRevenue > 0 || row.sellThroughUnits > 0;
+
+        if (dataSource === "sellin") {
+          row.revenue = row.sellInRevenue;
+          row.units   = row.sellInUnits;
+          row.dataSource = hasSellIn ? "sellin" : "none";
+        } else if (dataSource === "pos") {
+          row.revenue = row.sellThroughRevenue;
+          row.units   = row.sellThroughUnits;
+          row.dataSource = hasSellThrough ? "pos" : "none";
+        } else {
+          if (hasSellThrough) {
+            row.revenue = row.sellThroughRevenue;
+            row.units   = row.sellThroughUnits;
+            row.dataSource = hasSellIn ? "sellin+pos" : "pos";
+          } else {
+            row.revenue = row.sellInRevenue;
+            row.units   = row.sellInUnits;
+            row.dataSource = hasSellIn ? "sellin" : "none";
+          }
+        }
+
+        const stores = STORE_COUNTS_BY_ENTITY[row.entityId];
+        row.dpsw = stores && row.revenue > 0 ? row.revenue / stores / numWeeks : null;
+      }
+
       const byRetailerArr = Array.from(byRetailerMap.values());
-      const hasPOS    = byRetailerArr.some(r => r.dataSource.includes("pos"));
-      const hasSellIn = byRetailerArr.some(r => r.dataSource.includes("sellin"));
+      const hasPOSAny    = byRetailerArr.some(r => r.sellThroughRevenue > 0);
+      const hasSellInAny = byRetailerArr.some(r => r.sellInRevenue > 0);
       const dataSources: string[] = [];
-      if (hasSellIn) dataSources.push("sellin");
-      if (hasPOS)    dataSources.push("pos");
+      if (hasSellInAny) dataSources.push("sellin");
+      if (hasPOSAny)    dataSources.push("pos");
       if (!dataSources.length) dataSources.push("sellin");
 
-      // Data-source-aware totals: in "sellin" mode byRetailerMap is seeded purely
-      // from sell-in so this equals agg.totalRevenue unchanged; in "pos"/"all" mode
-      // it reflects the POS-preferred (with sell-in fallback) merge above. Every
-      // metric below is derived from this merged view so the data-source toggle
-      // actually changes revenue, DPSW, benchmark and retailer count — previously
-      // these were always computed from sell-in only, making the toggle a no-op.
-      const mergedTotalRevenue = byRetailerArr.reduce((s, r) => s + r.revenue, 0);
-      const mergedTotalUnits   = byRetailerArr.reduce((s, r) => s + r.units, 0);
+      // Data-source-aware totals: every metric below is derived from the
+      // per-retailer "effective" value (row.revenue), computed above per the
+      // selected dataSource toggle.
+      const mergedTotalRevenue   = byRetailerArr.reduce((s, r) => s + r.revenue, 0);
+      const mergedTotalUnits     = byRetailerArr.reduce((s, r) => s + r.units, 0);
+      const totalSellThroughRevenue = byRetailerArr.reduce((s, r) => s + r.sellThroughRevenue, 0);
+      const totalSellThroughUnits   = byRetailerArr.reduce((s, r) => s + r.sellThroughUnits, 0);
       const activeRetailers    = byRetailerArr.filter(r => r.revenue > 0);
 
       const adjDenom = computeVelocityAdjustedDenom(activeRetailers.map(r => r.entityId));
@@ -699,8 +736,10 @@ router.get("/", async (req, res) => {
         upc:              agg.upc,
         totalRevenue:     mergedTotalRevenue,
         totalUnits:       mergedTotalUnits,
-        sellInRevenue:    agg.totalRevenue,
-        sellInUnits:      agg.totalUnits,
+        sellInRevenue:        agg.totalRevenue,
+        sellInUnits:          agg.totalUnits,
+        sellThroughRevenue:   totalSellThroughRevenue,
+        sellThroughUnits:     totalSellThroughUnits,
         avgDpsw,
         targetDpsw,
         velocityBenchmark,

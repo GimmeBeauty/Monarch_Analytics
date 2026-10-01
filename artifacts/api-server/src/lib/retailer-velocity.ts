@@ -57,6 +57,12 @@ export interface RetailerResult {
   name: string;
   totalRevenue: number;
   totalUnits: number;
+  /** Always-populated NetSuite sell-in total, independent of `dataSource`. */
+  sellInRevenue: number;
+  sellInUnits: number;
+  /** Always-populated sell-through (POS) total, independent of `dataSource`. */
+  sellThroughRevenue: number;
+  sellThroughUnits: number;
   skuCount: number;
   avgDpsw: number | null;
   dataSource: string;
@@ -155,53 +161,59 @@ export function buildRetailerVelocity(input: RetailerAggInput): RetailerResult[]
     }
   }
 
-  // 3. Compute final revenue/units per retailer (POS override if applicable)
+  // 3. Compute sell-through (POS) totals per retailer — ALWAYS, independent of
+  // `dataSource`, so sell-in and sell-through can be shown side by side rather
+  // than one silently standing in for the other.
+  function posTotalsFor(entityId: number): { revenue: number; units: number } {
+    let revenue = 0, units = 0;
+    if (entityId === 229) {
+      for (const v of targetPosByUpc.values()) { revenue += v.revenue; units += v.units; }
+    } else if (entityId === 231) {
+      for (const v of walmartPosByUpc.values()) { revenue += v.revenue; units += v.units; }
+    } else {
+      for (const entityMap of circanaByUpc.values()) {
+        const entry = entityMap.get(entityId);
+        if (entry) { revenue += entry.revenue; units += entry.units; }
+      }
+    }
+    return { revenue, units };
+  }
+
+  // 4. Compute final effective revenue/units per retailer (used only for
+  // DPSW/sorting, per the selected dataSource toggle) alongside the always-
+  // populated sellIn/sellThrough fields.
   return Array.from(retailerMap.values()).map(r => {
     const stores = STORE_COUNTS_BY_ENTITY[r.entityId];
+    const pos = posTotalsFor(r.entityId);
+
     let revenue = r.totalRevenue;
     let units   = r.totalUnits;
-    let src     = "sellin";
+    let src     = r.totalRevenue > 0 ? "sellin" : "none";
 
     if (includePOS) {
-      let posRevenue = 0;
-      let posUnits   = 0;
-
-      if (r.entityId === 229) {
-        for (const v of targetPosByUpc.values()) {
-          posRevenue += v.revenue;
-          posUnits   += v.units;
-        }
-      } else if (r.entityId === 231) {
-        for (const v of walmartPosByUpc.values()) {
-          posRevenue += v.revenue;
-          posUnits   += v.units;
-        }
-      } else {
-        // Circana retailer
-        for (const entityMap of circanaByUpc.values()) {
-          const entry = entityMap.get(r.entityId);
-          if (entry) {
-            posRevenue += entry.revenue;
-            posUnits   += entry.units;
-          }
-        }
-      }
-
-      if (posRevenue > 0 || dataSource === "pos") {
-        revenue = posRevenue;
-        units   = posUnits;
-        src     = "pos";
+      if (dataSource === "pos") {
+        revenue = pos.revenue;
+        units   = pos.units;
+        src     = pos.revenue > 0 ? "pos" : "none";
+      } else if (pos.revenue > 0) {
+        revenue = pos.revenue;
+        units   = pos.units;
+        src     = r.totalRevenue > 0 ? "sellin+pos" : "pos";
       }
     }
 
     return {
-      entityId:     r.entityId,
-      name:         r.name,
-      totalRevenue: revenue,
-      totalUnits:   units,
-      skuCount:     r.skuSet.size,
-      avgDpsw:      stores && numWeeks > 0 ? revenue / stores / numWeeks : null,
-      dataSource:   src,
+      entityId:           r.entityId,
+      name:               r.name,
+      totalRevenue:       revenue,
+      totalUnits:         units,
+      sellInRevenue:      r.totalRevenue,
+      sellInUnits:        r.totalUnits,
+      sellThroughRevenue: pos.revenue,
+      sellThroughUnits:   pos.units,
+      skuCount:           r.skuSet.size,
+      avgDpsw:            stores && numWeeks > 0 && revenue > 0 ? revenue / stores / numWeeks : null,
+      dataSource:         src,
     };
   }).sort((a, b) => b.totalRevenue - a.totalRevenue);
 }

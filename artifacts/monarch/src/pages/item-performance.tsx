@@ -40,6 +40,10 @@ interface RetailerBreakdown {
   name: string;
   revenue: number;
   units: number;
+  sellInRevenue: number;
+  sellInUnits: number;
+  sellThroughRevenue: number;
+  sellThroughUnits: number;
   dpsw: number | null;
   dataSource: string;
   itemNumber: string;
@@ -52,6 +56,8 @@ interface SkuRow {
   totalUnits: number;
   sellInRevenue?: number;
   sellInUnits?: number;
+  sellThroughRevenue?: number;
+  sellThroughUnits?: number;
   avgDpsw: number;
   targetDpsw: number;
   vsTargetBenchmark: number;
@@ -66,6 +72,10 @@ interface RetailerRow {
   name: string;
   totalRevenue: number;
   totalUnits: number;
+  sellInRevenue: number;
+  sellInUnits: number;
+  sellThroughRevenue: number;
+  sellThroughUnits: number;
   skuCount: number;
   avgDpsw: number | null;
   dataSource: string;
@@ -365,11 +375,10 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                     <tr className="bg-[#FFBC80]/10 dark:bg-[#EFBAE1]/10">
                       <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Retailer</th>
                       <th className="px-3 py-2 text-left font-semibold text-[#3A3A3A]/60">Item #</th>
-                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Revenue</th>
-                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Units</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Sell-In</th>
+                      <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">Sell-Through</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">DPSW</th>
                       <th className="px-3 py-2 text-right font-semibold text-[#3A3A3A]/60">vs Avg</th>
-                      <th className="px-3 py-2 text-center font-semibold text-[#3A3A3A]/60">Src</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -377,14 +386,25 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                       <tr key={r.entityId} className="border-t border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5">
                         <td className="px-3 py-2 font-medium text-[#3A3A3A] dark:text-[#003349]">{r.name}</td>
                         <td className="px-3 py-2 text-[#3A3A3A]/50 text-[10px] font-mono">{r.itemNumber || "—"}</td>
-                        <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtCurrency(r.revenue)}</td>
-                        <td className="px-3 py-2 text-right text-[#3A3A3A]/70">{fmtUnits(r.units)}</td>
+                        <td className="px-3 py-2 text-right text-[#3A3A3A]/70">
+                          {r.sellInRevenue > 0 ? (
+                            <>
+                              {fmtCurrency(r.sellInRevenue)}
+                              <div className="text-[9px] text-[#3A3A3A]/40 font-normal">{fmtUnits(r.sellInUnits)} units</div>
+                            </>
+                          ) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[#3A3A3A]/70">
+                          {r.sellThroughRevenue > 0 ? (
+                            <>
+                              {fmtCurrency(r.sellThroughRevenue)}
+                              <div className="text-[9px] text-[#3A3A3A]/40 font-normal">{fmtUnits(r.sellThroughUnits)} units</div>
+                            </>
+                          ) : "—"}
+                        </td>
                         <td className="px-3 py-2 text-right">{fmtDpsw(r.dpsw)}</td>
                         <td className="px-3 py-2 text-right">
                           {r.dpsw != null ? <DeltaBadge value={r.dpsw - retailAvgDpsw} /> : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <DataSourceBadges sources={[r.dataSource]} />
                         </td>
                       </tr>
                     ))}
@@ -1021,7 +1041,27 @@ export default function ItemPerformance() {
                   className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
                   onClick={() => toggleSort("totalRevenue")}
                 >
-                  <span className="inline-flex items-center gap-1 justify-end">Revenue <SortIcon col="totalRevenue" /></span>
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Sell-In
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
+                      </TooltipTrigger>
+                      <TooltipContent>NetSuite shipments to the retailer — not consumer purchases. A new launch can show a large sell-in number from initial pipeline fill before any sell-through exists.</TooltipContent>
+                    </UITooltip>
+                    <SortIcon col="totalRevenue" />
+                  </span>
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Sell-Through
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
+                      </TooltipTrigger>
+                      <TooltipContent>Consumer POS scans from Target, Walmart, and Circana. "—" means no sell-through data exists yet for this SKU.</TooltipContent>
+                    </UITooltip>
+                  </span>
                 </th>
                 <th
                   className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40 cursor-pointer hover:text-[#3A3A3A] transition-colors select-none"
@@ -1105,7 +1145,7 @@ export default function ItemPerformance() {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : isError ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12">
+                  <td colSpan={11} className="px-4 py-12">
                     <ErrorState
                       message="Unable to load data — check your data connections."
                       onRetry={() => refetch()}
@@ -1115,7 +1155,7 @@ export default function ItemPerformance() {
                 </tr>
               ) : sortedSkus.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
+                  <td colSpan={11} className="px-4 py-12 text-center text-[#3A3A3A]/40 text-sm">
                     No SKUs found for the selected filters.
                   </td>
                 </tr>
@@ -1131,14 +1171,13 @@ export default function ItemPerformance() {
                       <div className="text-[10px] text-[#3A3A3A]/45 mt-0.5">{sku.sku}</div>
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
-                      {fmtCurrency(sku.totalRevenue)}
-                      {dataSource === "sellin" && (
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <Info size={10} className="inline ml-1 text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3] cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>Sell-in data — reflects shipments to retailer, not consumer purchases.</TooltipContent>
-                        </UITooltip>
+                      {fmtCurrency(sku.sellInRevenue ?? 0)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums">
+                      {(sku.sellThroughRevenue ?? 0) > 0 ? (
+                        <span className="text-[#3A3A3A]/80 dark:text-[#003349]/70">{fmtCurrency(sku.sellThroughRevenue ?? 0)}</span>
+                      ) : (
+                        <span className="text-[#3A3A3A]/30 dark:text-[#003349]/25">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">
@@ -1183,11 +1222,11 @@ export default function ItemPerformance() {
               <thead>
                 <tr className="border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 bg-[#FFF9F2]/50 dark:bg-[#FFFFFF]/30">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Retailer</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Total Revenue</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Sell-In</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Sell-Through</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Total Units</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40"># SKUs</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Avg DPSW (all SKUs)</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3A3A3A]/50 dark:text-[#003349]/40">Data Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -1197,7 +1236,12 @@ export default function ItemPerformance() {
                   return data.retailers.map(r => (
                     <tr key={r.entityId} className="border-b border-[#FFBC80]/08 dark:border-[#9BDBF3]/08 hover:bg-[#FFBC80]/5 dark:hover:bg-[#EFBAE1]/5 transition-colors">
                       <td className="px-4 py-3 font-medium text-[#3A3A3A] dark:text-[#003349]">{r.name}</td>
-                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">{fmtCurrency(r.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
+                        {r.sellInRevenue > 0 ? fmtCurrency(r.sellInRevenue) : <span className="text-[#3A3A3A]/30">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[#3A3A3A]/80 dark:text-[#003349]/70 tabular-nums">
+                        {r.sellThroughRevenue > 0 ? fmtCurrency(r.sellThroughRevenue) : <span className="text-[#3A3A3A]/30">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60 tabular-nums">{fmtUnits(r.totalUnits)}</td>
                       <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60">{r.skuCount}</td>
                       <td className={`px-4 py-3 text-right tabular-nums ${r.avgDpsw != null ? dpswColor((r.avgDpsw ?? 0) - crossAvg) : "text-[#3A3A3A]/40"}`}>
