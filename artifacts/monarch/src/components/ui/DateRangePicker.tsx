@@ -152,7 +152,7 @@ interface Props {
 
 export function DateRangePicker({ onClose }: Props) {
   const { theme } = useTheme();
-  const { dateRange, setRange, setPreset, toggleCompare, setCompareRange } = useDateRange();
+  const { dateRange, setRange, toggleCompare, setCompareMode } = useDateRange();
 
   // Pending selection (before Apply)
   const [pendingStart, setPendingStart] = useState<Date | null>(() => parseDate(dateRange.startDate));
@@ -179,7 +179,7 @@ export function DateRangePicker({ onClose }: Props) {
 
   // Comparison
   const [compareEnabled, setCompareEnabled] = useState(dateRange.compareEnabled);
-  const [comparePreset, setComparePreset] = useState<"previous_period" | "previous_year" | "custom">("previous_period");
+  const [comparePreset, setComparePreset] = useState<"previous_period" | "previous_year">(dateRange.compareMode);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -231,6 +231,7 @@ export function DateRangePicker({ onClose }: Props) {
     const label = buildPreset(preset)?.label ?? `${fmtLabel(pendingStart)} – ${fmtLabel(pendingEnd ?? pendingStart)}`;
     setRange(s, e, label, preset);
     if (compareEnabled !== dateRange.compareEnabled) toggleCompare();
+    if (comparePreset !== dateRange.compareMode) setCompareMode(comparePreset);
     onClose();
   };
 

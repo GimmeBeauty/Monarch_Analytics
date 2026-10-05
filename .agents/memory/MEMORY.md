@@ -13,3 +13,4 @@
 - [Kroger excluded pending Alloy](kroger-alloy-exclusion.md) — Kroger (NetSuite entity 228) has real revenue but is deliberately excluded everywhere; it's a placeholder until an Alloy integration replaces it.
 - [Daily ad-summary full-history rebuild bug](daily-ad-summary-duplication.md) — a scheduler script that re-aggregates a channel's entire history on every run must fully delete that channel before re-inserting, not just the last N days, or rows silently multiply.
 - [Item Performance sell-in/sell-through separation](item-performance-sellin-sellthrough-separation.md) — sell-in and sell-through must always be shown as two distinct numbers, never merged into one "revenue" figure.
+- [Monarch compare-mode toggle disconnected state](monarch-compare-mode-toggle.md) — a UI toggle writing to component-local state instead of shared context looks interactive but never reaches the data layer; check the state's owner, not just its UI.
