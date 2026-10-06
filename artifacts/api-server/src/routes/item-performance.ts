@@ -3,6 +3,9 @@ import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
 import { buildRetailerVelocity } from "../lib/retailer-velocity.js";
 import { GIMME_ASSORTMENT_SKU_SQL_FILTER } from "../lib/sku-filter.js";
+import { SKU_CATEGORY_MAP, SKU_CATEGORIES } from "../lib/sku-categories.js";
+
+const SKU_CATEGORIES_SET = new Set<string>(SKU_CATEGORIES);
 
 const router = Router();
 router.use(authenticate);
@@ -534,7 +537,11 @@ router.get("/", async (req, res) => {
       entityId:    Number(row["ENTITY_ID"]    ?? 0),
       revenue:     safeNum(row["TOTAL_REVENUE"]),
       units:       safeNum(row["TOTAL_UNITS"]),
-    })).filter(e => e.sku);
+    }))
+      // Only SKUs present in the Gimme product-category mastersheet are shown —
+      // per product decision, a SKU with no category mapping is hidden rather
+      // than guessed or bucketed as "Other". See sku-categories.ts.
+      .filter(e => e.sku && SKU_CATEGORY_MAP[e.sku]);
 
     // Per-SKU aggregation
     interface SkuAgg {
@@ -733,6 +740,7 @@ router.get("/", async (req, res) => {
       return {
         sku:              agg.sku,
         productName:      resolvedTitle,
+        category:         SKU_CATEGORY_MAP[agg.sku],
         upc:              agg.upc,
         totalRevenue:     mergedTotalRevenue,
         totalUnits:       mergedTotalUnits,
@@ -762,12 +770,12 @@ router.get("/", async (req, res) => {
       sku.vsTargetBenchmark = sku.avgDpsw - sku.velocityBenchmark;
     }
 
-    // Apply skuFilter
-    let filtered = skuResults;
-    if (skuFilter === "above_avg")    filtered = skuResults.filter(s => s.avgDpsw > retailAvgDpsw);
-    if (skuFilter === "below_avg")    filtered = skuResults.filter(s => s.avgDpsw < retailAvgDpsw);
-    if (skuFilter === "above_target") filtered = skuResults.filter(s => s.vsTargetBenchmark > 0);
-    if (skuFilter === "below_target") filtered = skuResults.filter(s => s.vsTargetBenchmark < 0);
+    // Apply category filter (replaces the old, non-functional avg/benchmark
+    // skuFilter toggles). "all" — or anything not a known category — shows
+    // every mapped SKU.
+    const filtered = skuFilter === "all" || !SKU_CATEGORIES_SET.has(skuFilter)
+      ? skuResults
+      : skuResults.filter(s => s.category === skuFilter);
 
     // ── Summary KPI cards ─────────────────────────────────────────────────────
     const sorted        = [...skuResults].sort((a, b) => b.avgDpsw - a.avgDpsw);
@@ -829,6 +837,7 @@ router.get("/", async (req, res) => {
     return res.json({
       summary,
       skus:            filtered,
+      categories:      SKU_CATEGORIES,
       retailers,
       storeCountsUsed: STORE_COUNTS_BY_ENTITY,
       periodLabel:     periodLabel(period),

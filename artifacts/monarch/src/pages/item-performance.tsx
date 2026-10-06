@@ -51,6 +51,7 @@ interface RetailerBreakdown {
 interface SkuRow {
   sku: string;
   productName: string;
+  category: string;
   upc: string;
   totalRevenue: number;
   totalUnits: number;
@@ -89,6 +90,7 @@ interface Summary {
 interface ApiResponse {
   summary: Summary;
   skus: SkuRow[];
+  categories?: string[];
   retailers: RetailerRow[];
   storeCountsUsed: Record<string, number>;
   periodLabel: string;
@@ -166,12 +168,18 @@ function ttStyle(theme: Theme) {
   };
 }
 
-const SKU_TABS = [
-  { value: "all",           label: "All SKUs" },
-  { value: "above_avg",     label: "Above Retail Avg" },
-  { value: "below_avg",     label: "Below Retail Avg" },
-  { value: "above_target",  label: "Above Target Benchmark" },
-  { value: "below_target",  label: "Below Target Benchmark" },
+// Replaces the old (non-functional) Above/Below Retail Avg + Target
+// Benchmark toggles. Categories come from the Gimme product mastersheet
+// (see api-server/src/lib/sku-categories.ts); kept as a fixed list here as a
+// fallback, but the API's `categories` field (when present) is authoritative.
+const DEFAULT_SKU_CATEGORIES = [
+  "Hair Ties",
+  "Claw Clips",
+  "Hair Brush",
+  "Curling / Sleep",
+  "Elastics",
+  "Accessories",
+  "Scrunchies",
 ];
 
 // ─── Delta Badge ──────────────────────────────────────────────────────────────
@@ -660,7 +668,7 @@ export default function ItemPerformance() {
   const [periodOpen,   setPeriodOpen]   = useState(false);
 
   const queryParams = useMemo(() => {
-    const p = new URLSearchParams({ dataSource });
+    const p = new URLSearchParams({ dataSource, skuFilter });
     if (period === "lw") {
       const today = new Date();
       const dow = today.getDay(); // 0=Sun
@@ -680,7 +688,7 @@ export default function ItemPerformance() {
     }
     if (retailers.length) p.set("retailers", retailers.join(","));
     return p;
-  }, [dateMode, period, customStart, customEnd, dataSource, retailers]);
+  }, [dateMode, period, customStart, customEnd, dataSource, skuFilter, retailers]);
 
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<ApiResponse>({
     queryKey: ["item-performance", queryParams.toString()],
@@ -748,6 +756,11 @@ export default function ItemPerformance() {
     if (!data?.skus?.length) return 0;
     return data.skus.reduce((s, r) => s + r.avgDpsw, 0) / data.skus.length;
   }, [data?.skus]);
+
+  const skuTabs = useMemo(() => {
+    const cats = data?.categories?.length ? data.categories : DEFAULT_SKU_CATEGORIES;
+    return [{ value: "all", label: "All SKUs" }, ...cats.map(c => ({ value: c, label: c }))];
+  }, [data?.categories]);
 
   const includesSellIn = dataSource === "all" || dataSource === "sellin";
 
@@ -1030,9 +1043,10 @@ export default function ItemPerformance() {
             </div>
           </div>
 
-          {/* Quick-filter tabs */}
+          {/* Quick-filter tabs — one per product category from the Gimme
+              mastersheet, plus "All SKUs" */}
           <div className="flex gap-1 mt-3 flex-wrap">
-            {SKU_TABS.map(tab => (
+            {skuTabs.map(tab => (
               <button
                 key={tab.value}
                 onClick={() => setSkuFilter(tab.value)}
