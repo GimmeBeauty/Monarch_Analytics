@@ -1,7 +1,6 @@
 // Auto-generated from attached_assets/Gimme_Beauty_Retail_Mastersheet_Monarch_deduped_1791317031129.csv
 // Maps each known SKU to its product category per the Gimme Beauty mastersheet.
-// Regenerate by re-running the source CSV through this same SKU -> Product Type
-// extraction whenever the user supplies an updated mastersheet.
+// Regenerate with: node artifacts/api-server/scripts/generate-sku-categories.mjs <path-to-updated-mastersheet.csv>
 //
 // Categories present in the mapping (every visible SKU must map to one of these;
 // SKUs absent from this map are hidden from Item Performance rather than guessed):

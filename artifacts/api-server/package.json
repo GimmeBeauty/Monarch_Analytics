@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:sku-categories": "node scripts/generate-sku-categories.mjs"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
