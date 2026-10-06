@@ -3,7 +3,7 @@ import { authenticate } from "../middlewares/authenticate.js";
 import { querySnowflake } from "../lib/snowflake.js";
 import { buildRetailerVelocity } from "../lib/retailer-velocity.js";
 import { GIMME_ASSORTMENT_SKU_SQL_FILTER } from "../lib/sku-filter.js";
-import { SKU_CATEGORY_MAP, SKU_CATEGORIES } from "../lib/sku-categories.js";
+import { SKU_CATEGORY_MAP, SKU_CATEGORIES, SKU_TITLE_MAP } from "../lib/sku-categories.js";
 
 const SKU_CATEGORIES_SET = new Set<string>(SKU_CATEGORIES);
 
@@ -595,10 +595,14 @@ router.get("/", async (req, res) => {
     const skuResults = Array.from(skuMap.values()).map(agg => {
       const weeklyTrend = weeklyBySku.get(agg.sku) ?? [];
 
-      // Product title: Target POS > Walmart POS > NetSuite
+      // Product title: Gimme mastersheet (source of truth) > Target POS >
+      // Walmart POS > NetSuite. Every visible SKU is already required to have
+      // a mastersheet category entry, so SKU_TITLE_MAP covers virtually all
+      // rows; the POS/NetSuite fallbacks only cover a SKU missing a Title
+      // value in the CSV.
       const targetPos  = agg.upc ? targetPosByUpc.get(agg.upc)  : undefined;
       const walmartPos = agg.upc ? walmartPosByUpc.get(agg.upc) : undefined;
-      const resolvedTitle = targetPos?.title || walmartPos?.title || agg.productName;
+      const resolvedTitle = SKU_TITLE_MAP[agg.sku] || targetPos?.title || walmartPos?.title || agg.productName;
 
       // Build byRetailer: track sell-in and sell-through as two SEPARATE numbers
       // per retailer, always. They must never be silently collapsed into one

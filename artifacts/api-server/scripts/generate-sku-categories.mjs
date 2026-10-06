@@ -117,6 +117,7 @@ function main() {
   const header = rows[0].map((h) => h.trim());
   const skuIdx = header.indexOf("SKU");
   const typeIdx = header.indexOf("Product Type");
+  const titleIdx = header.indexOf("Title");
   if (skuIdx === -1 || typeIdx === -1) {
     console.error(
       `CSV header must include "SKU" and "Product Type" columns. Found: ${header.join(", ")}`,
@@ -125,11 +126,13 @@ function main() {
   }
 
   const categoryMap = {};
+  const titleMap = {};
   let skippedInvalidSku = 0;
 
   for (const row of rows.slice(1)) {
     const rawSku = (row[skuIdx] ?? "").trim();
     const rawType = (row[typeIdx] ?? "").trim();
+    const rawTitle = titleIdx === -1 ? "" : (row[titleIdx] ?? "").trim();
 
     if (!/^\d+$/.test(rawSku)) {
       skippedInvalidSku += 1;
@@ -139,6 +142,7 @@ function main() {
 
     const category = NORMALIZE[rawType] ?? rawType;
     categoryMap[rawSku] = category;
+    if (rawTitle) titleMap[rawSku] = rawTitle;
   }
 
   const categories = Array.from(new Set(Object.values(categoryMap))).sort();
@@ -176,6 +180,23 @@ function main() {
   );
   for (const sku of skus) {
     lines.push(`  ${JSON.stringify(sku)}: ${JSON.stringify(categoryMap[sku])},`);
+  }
+  lines.push("};");
+  lines.push("");
+  lines.push(
+    "// Product title per SKU, straight from the mastersheet's \"Title\" column.",
+  );
+  lines.push(
+    "// This is the source of truth for display titles in Item Performance —",
+  );
+  lines.push(
+    "// retailer POS titles are only a fallback for a SKU missing here.",
+  );
+  lines.push("export const SKU_TITLE_MAP: Record<string, string> = {");
+  for (const sku of skus) {
+    if (titleMap[sku]) {
+      lines.push(`  ${JSON.stringify(sku)}: ${JSON.stringify(titleMap[sku])},`);
+    }
   }
   lines.push("};");
   lines.push("");
