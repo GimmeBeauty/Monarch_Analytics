@@ -87,6 +87,7 @@ export interface NetSuiteSalesResponse {
   byStore:     NetSuiteStoreSummary[];
   products:    NetSuiteProductRow[];
   dailySeries: Array<{ date: string; revenue: number; units: number }>;
+  dailyByStore?: Array<{ date: string; storeName: string; revenue: number }>;
   lastSync:    string;
   isEmpty:     boolean;
   source:      string;

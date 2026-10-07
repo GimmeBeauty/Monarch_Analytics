@@ -749,6 +749,18 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
+    // Wholesale chart only: Shopify is DTC (no wholesale markup), so in Wholesale
+    // mode its daily revenue comes straight from SHOPIFY_DAILY_SUMMARY.
+    const shopifyDailyQuery = (isWholesaleMode && isShopifySelected && !isTargetOnly)
+      ? querySnowflake(`
+          SELECT summary_date, SUM(revenue) AS revenue
+          FROM ${DB_NAME}.COMMERCE.SHOPIFY_DAILY_SUMMARY
+          WHERE summary_date BETWEEN '${start}' AND '${end}'
+          GROUP BY summary_date
+          ORDER BY summary_date ASC
+        `)
+      : Promise.resolve([]);
+
     const priorShopifyQuery = (hasPrior && isShopifySelected && !isTargetOnly)
       ? querySnowflake(`
           SELECT SUM(revenue) AS shopify_revenue, SUM(order_count) AS shopify_orders, SUM(units_sold) AS shopify_units
@@ -839,7 +851,7 @@ router.get("/overview", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, ultaSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, ultaDailyRows, priorAmazonRows, priorWalmartRows, priorUltaRows, targetDpswRows, priorAdSpendRows] = await Promise.all([
+    const [summaryRows, dailySummaryRows, adDailyRows, channelRows, ga4Rows, webOrderRows, targetSummaryRows, walmartSummaryRows, amazonSummaryRows, ultaSummaryRows, targetDailyRows, shopifySummaryRows, priorShopifyRows, priorTargetRows, priorGa4Rows, priorWebOrdersRows, amazonDailyRows, walmartDailyRows, ultaDailyRows, priorAmazonRows, priorWalmartRows, priorUltaRows, targetDpswRows, priorAdSpendRows, shopifyDailyRows] = await Promise.all([
       aggregateQuery,
       dailySeriesQuery,
       // Daily conversion value and spend from DAILY_AD_SUMMARY (filtered to active channels)
@@ -891,6 +903,7 @@ router.get("/overview", authenticate, async (req, res) => {
       priorUltaQuery,
       targetDpswQuery,
       priorAdSpendQuery,
+      shopifyDailyQuery,
     ]);
 
     const agg          = summaryRows[0] ?? {};
@@ -963,6 +976,11 @@ router.get("/overview", authenticate, async (req, res) => {
       }
       dailySeries = dailySeries.map(d => ({ ...d, revenue: d.revenue + (ultaDailyMap[d.date] ?? 0) }));
     }
+
+    const shopifyDailySeries = shopifyDailyRows.map(row => ({
+      date:    toDateStr(row["SUMMARY_DATE"] ?? row["summary_date"]),
+      revenue: Number(row["REVENUE"] ?? row["revenue"] ?? 0),
+    }));
 
     // Channel breakdown with metadata mapping
     const channelBreakdown = channelRows
@@ -1121,6 +1139,7 @@ router.get("/overview", authenticate, async (req, res) => {
       storeBreakdown,
       channelBreakdown,
       dailySeries,
+      ...(isWholesaleMode ? { shopifyDailySeries } : {}),
       isEmpty,
       source: "snowflake-summary",
     });
@@ -2560,7 +2579,7 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
   const storeWhere  = storeFilter ? `AND STORE_NAME = '${storeFilter.replace(/'/g, "''")}'` : "";
 
   try {
-    const [totalsRows, byStoreRows, productRows, dailyRows] = await Promise.all([
+    const [totalsRows, byStoreRows, productRows, dailyRows, dailyByStoreRows] = await Promise.all([
       querySnowflake(`
         SELECT
           SUM(REVENUE) AS total_revenue,
@@ -2613,6 +2632,19 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
         GROUP BY TRANDATE
         ORDER BY TRANDATE ASC
       `),
+      // Per-store daily revenue so callers can apply the store filter to a daily trend.
+      querySnowflake(`
+        SELECT
+          TRANDATE,
+          STORE_NAME,
+          SUM(REVENUE) AS daily_revenue
+        FROM ${NETSUITE_SALES_DEDUPED} nsp
+        WHERE TRANDATE BETWEEN '${start}' AND '${end}'
+        ${storeWhere}
+        ${GIMME_ASSORTMENT_SKU_SQL_FILTER}
+        GROUP BY TRANDATE, STORE_NAME
+        ORDER BY TRANDATE ASC
+      `),
     ]);
 
     const totalsAgg    = totalsRows[0] ?? {};
@@ -2660,11 +2692,21 @@ router.get("/netsuite/sales", authenticate, async (req, res) => {
       };
     });
 
+    const dailyByStore = dailyByStoreRows.map(row => {
+      const dateVal = row["TRANDATE"] ?? row["trandate"];
+      return {
+        date:      dateVal instanceof Date ? dateVal.toISOString().slice(0, 10) : String(dateVal ?? "").slice(0, 10),
+        storeName: String(row["STORE_NAME"] ?? row["store_name"] ?? ""),
+        revenue:   Number(row["DAILY_REVENUE"] ?? row["daily_revenue"] ?? 0),
+      };
+    });
+
     res.json({
       totals:   { revenue: totalRevenue, units: totalUnits },
       byStore,
       products,
       dailySeries,
+      dailyByStore,
       lastSync,
       isEmpty:  totalRevenue === 0 && totalUnits === 0,
       source:   "snowflake-netsuite",

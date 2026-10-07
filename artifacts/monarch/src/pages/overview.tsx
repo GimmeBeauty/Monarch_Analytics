@@ -70,6 +70,7 @@ interface OverviewApiResponse {
   storeBreakdown: Array<{ storeId: string; revenue: number }>;
   channelBreakdown: Array<{ channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[]; spend: number; revenue: number }>;
   dailySeries: Array<{ date: string; revenue: number; spend: number; adRevenue: number; adSpend: number }>;
+  shopifyDailySeries?: Array<{ date: string; revenue: number }>;
   isEmpty: boolean;
 }
 
@@ -170,13 +171,19 @@ export default function Overview() {
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
     const wsActive = isWholesale && !!wholesaleData && !wholesaleData.isEmpty;
+    // Shopify is DTC: in Wholesale its revenue comes from SHOPIFY_DAILY_SUMMARY, so
+    // NetSuite "Shopify" rows (a partial 2025 load) are always excluded to avoid double counting.
     const wsStores = wsActive
       ? wholesaleData!.byStore.filter(s => {
           const sid = NS_STORE_ID[s.storeName] ?? s.storeName.toLowerCase().replace(/\s+/g, "-");
-          return selectedIds.includes(sid);
+          return s.storeName !== "Shopify" && selectedIds.includes(sid);
         })
       : [];
-    const wsRevenue = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.revenue, 0) : null;
+    const wsNsRevenue  = wsStores.reduce((sum, s) => sum + s.revenue, 0);
+    const wsShopifyRev = wsActive && selectedIds.includes("shopify")
+      ? (apiData.storeBreakdown.find(s => s.storeId === "shopify")?.revenue ?? 0)
+      : 0;
+    const wsRevenue = wsActive && wsStores.length > 0 ? wsNsRevenue + wsShopifyRev : null;
     const wsUnits   = wsActive && wsStores.length > 0 ? wsStores.reduce((sum, s) => sum + s.units,   0) : null;
     const circanaStale   = circanaData?.isStale ?? true;
     const circanaItems   = (!wsActive && !circanaStale) ? (circanaData?.items ?? []) : [];
@@ -190,7 +197,7 @@ export default function Overview() {
       ? wsRevenue / apiData.spend
       : apiData.spend > 0 ? displayRevenue / apiData.spend : apiData.mer;
     const wsAsp  = wsRevenue != null && displayUnits > 0
-      ? wsRevenue / displayUnits
+      ? wsNsRevenue / displayUnits
       : displayUnits > 0 ? displayRevenue / displayUnits : (apiData.asp ?? 0);
 
     // ── Store Breakdown ───────────────────────────────────────────────────────
@@ -253,17 +260,33 @@ export default function Overview() {
     // ── Trend Series ─────────────────────────────────────────────────────────
     // In wholesale mode, map wholesale revenue onto the full date range from apiData
     // so the chart always has a point for every day (days with no NetSuite transactions = 0).
+    // Revenue = selected NetSuite stores (never NetSuite "Shopify" rows) + Shopify DTC
+    // from SHOPIFY_DAILY_SUMMARY when selected — the same scope as the Wholesale Revenue tile.
+    // Spend, MER and ROAS all use the channel-filtered ad spend, matching the tiles.
     const trendSeries: TrendPoint[] = wsActive
       ? (() => {
-          const wsRevByDate = new Map((wholesaleData!.dailySeries ?? []).map(d => [d.date, d.revenue]));
-          return apiData.dailySeries.map(d => ({
-            date:    d.date,
-            label:   fmtAxisDate(d.date),
-            revenue: wsRevByDate.get(d.date) ?? 0,
-            spend:   0,
-            mer:     0,
-            roas:    0,
-          }));
+          const wsRevByDate = new Map<string, number>();
+          for (const r of wholesaleData!.dailyByStore ?? []) {
+            const sid = NS_STORE_ID[r.storeName] ?? r.storeName.toLowerCase().replace(/\s+/g, "-");
+            if (r.storeName === "Shopify" || !selectedIds.includes(sid)) continue;
+            wsRevByDate.set(r.date, (wsRevByDate.get(r.date) ?? 0) + r.revenue);
+          }
+          if (selectedIds.includes("shopify")) {
+            for (const d of apiData.shopifyDailySeries ?? []) {
+              wsRevByDate.set(d.date, (wsRevByDate.get(d.date) ?? 0) + d.revenue);
+            }
+          }
+          return apiData.dailySeries.map(d => {
+            const revenue = wsRevByDate.get(d.date) ?? 0;
+            return {
+              date:    d.date,
+              label:   fmtAxisDate(d.date),
+              revenue,
+              spend:   d.adSpend,
+              mer:     d.adSpend > 0 ? revenue / d.adSpend : 0,
+              roas:    d.adSpend > 0 ? d.adRevenue / d.adSpend : 0,
+            };
+          });
         })()
       : apiData.dailySeries.map(d => ({
           date:    d.date,
