@@ -410,7 +410,12 @@ function SkuDrawer({ sku, onClose, numWeeks }: { sku: SkuRow; onClose: () => voi
                             </>
                           ) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-right">{fmtDpsw(r.dpsw)}</td>
+                        <td className="px-3 py-2 text-right">
+                          {fmtDpsw(r.dpsw)}
+                          {r.entityId === 230 && r.dpsw != null && (
+                            <div className="text-[9px] text-[#3A3A3A]/40 font-normal">assumes full distribution</div>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right">
                           {r.dpsw != null ? <DeltaBadge value={r.dpsw - retailAvgDpsw} /> : "—"}
                         </td>
@@ -1030,7 +1035,7 @@ export default function ItemPerformance() {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[240px]">
                     DPSW = Total Revenue ÷ Store Count ÷ Weeks in period.
-                    Store counts are estimates.{" "}
+                    Store counts are estimates; Ulta velocity assumes full distribution (1,334 stores).{" "}
                     {includesSellIn && "Sell-in data reflects shipments to retailer, not consumer purchases."}
                   </TooltipContent>
                 </UITooltip>
@@ -1066,7 +1071,7 @@ export default function ItemPerformance() {
         {/* Store counts note */}
         <div className="px-5 py-2 text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30 border-b border-[#FFBC80]/10 dark:border-[#9BDBF3]/10 flex items-center gap-1">
           <Info size={10} />
-          Store counts are estimates used for DPSW calculations. Store-level data will be used automatically when available.
+          Store counts are estimates used for DPSW calculations. Store-level data will be used automatically when available. Ulta velocity = Ulta SKU sales ÷ 1,334 stores ÷ weeks (assumes full distribution).
         </div>
 
         {/* Table */}
@@ -1159,7 +1164,7 @@ export default function ItemPerformance() {
                       <TooltipTrigger asChild>
                         <Info size={11} className="cursor-help text-[#3A3A3A]/25 hover:text-[#FFBC80] dark:hover:text-[#BFA1E3]" />
                       </TooltipTrigger>
-                      <TooltipContent>S = Sell-In (NetSuite shipments to retailer). P = Sell-Through (consumer POS scans from Target, Walmart, Circana).</TooltipContent>
+                      <TooltipContent>S = Sell-In (NetSuite shipments to retailer). P = Sell-Through (consumer POS scans from Target, Walmart, Ulta, Circana).</TooltipContent>
                     </UITooltip>
                   </span>
                 </th>
@@ -1266,6 +1271,9 @@ export default function ItemPerformance() {
                       <td className="px-4 py-3 text-right text-[#3A3A3A]/70 dark:text-[#003349]/60">{r.skuCount}</td>
                       <td className={`px-4 py-3 text-right tabular-nums ${r.avgDpsw != null ? dpswColor((r.avgDpsw ?? 0) - crossAvg) : "text-[#3A3A3A]/40"}`}>
                         {fmtDpsw(r.avgDpsw)}
+                        {r.entityId === 230 && r.avgDpsw != null && (
+                          <div className="text-[9px] text-[#3A3A3A]/40 font-normal">assumes full distribution</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#3A3A3A]/10 text-[#3A3A3A]/60 uppercase tracking-wide">

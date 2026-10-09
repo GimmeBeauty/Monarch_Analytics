@@ -1340,8 +1340,9 @@ router.get("/traffic", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    // Ulta has no true per-SKU breakdown — the Product Performance table renders
-    // this as a single aggregated row rather than individual products.
+    // Ulta tile total. Stays on ULTA_ALLOY_SALES_DAILY — the per-SKU rows in
+    // Product Performance come from ULTA_ALLOY_SKU_DAILY, which itemizes the
+    // same sales and must never be added on top of this total.
     const ultaTrafficSummaryQuery = (isUltaSelected && !isWholesaleMode && !isTargetOnly)
       ? querySnowflake(`
           SELECT SUM(sales_net_usd) AS ulta_revenue, SUM(sales_units_net) AS ulta_units
@@ -1385,6 +1386,53 @@ router.get("/traffic", authenticate, async (req, res) => {
           SELECT SUM(sales_net_usd) AS ulta_revenue, SUM(sales_units_net) AS ulta_units
           FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SALES_DAILY
           WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
+        `)
+      : Promise.resolve([]);
+
+    // Ulta SKU-level sales (ULTA_ALLOY_SKU_DAILY) for the Product Performance
+    // table, summed across all locations (mostly distribution centers, so no
+    // store detail). Display-only: never summed into revenue or the tile.
+    const ultaInScope = isUltaSelected && !isWholesaleMode && !isTargetOnly;
+    const ultaSkuQuery = ultaInScope
+      ? querySnowflake(`
+          SELECT upc, ulta_item_number, ulta_item_desc,
+            SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SKU_DAILY
+          WHERE sale_date BETWEEN '${start}' AND '${end}'
+          GROUP BY upc, ulta_item_number, ulta_item_desc
+          HAVING SUM(sales_net_usd) <> 0 OR SUM(sales_units_net) <> 0
+        `)
+      : Promise.resolve([]);
+
+    const priorUltaSkuQuery = (hasPrior && ultaInScope)
+      ? querySnowflake(`
+          SELECT upc, SUM(sales_net_usd) AS revenue, SUM(sales_units_net) AS units
+          FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SKU_DAILY
+          WHERE sale_date BETWEEN '${priorStart}' AND '${priorEnd}'
+          GROUP BY upc
+        `)
+      : Promise.resolve([]);
+
+    // Title lookup for Ulta SKU rows: Target > Walmart > Ulta description, by
+    // UPC. Both sides are restricted to Ulta's UPCs up front —
+    // WALMART_ALLOY_SALES_DAILY is ~95M rows, so it must not be scanned whole.
+    const ultaTitleLookupQuery = ultaInScope
+      ? querySnowflake(`
+          WITH ulta_upcs AS (
+            SELECT DISTINCT upc FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SKU_DAILY
+          )
+          SELECT 'target' AS src, t.barcode AS upc, MAX(t.item_description) AS title
+          FROM ${DB_NAME}.RETAIL.TARGET_PRODUCT_DAILY t
+          WHERE t.barcode IN (SELECT upc FROM ulta_upcs)
+          GROUP BY t.barcode
+          UNION ALL
+          SELECT 'walmart' AS src, w.upc AS upc, MAX(w.title) AS title
+          FROM (
+            SELECT DISTINCT walmart_upc AS upc, walmart_item_desc AS title
+            FROM ${DB_NAME}.RETAIL.WALMART_ALLOY_SALES_DAILY
+            WHERE walmart_upc IN (SELECT upc FROM ulta_upcs)
+          ) w
+          GROUP BY w.upc
         `)
       : Promise.resolve([]);
 
@@ -1438,7 +1486,7 @@ router.get("/traffic", authenticate, async (req, res) => {
         `)
       : Promise.resolve([]);
 
-    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, ultaTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficWalmartRows, priorTrafficUltaRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows, targetDpswRows, priorProductRows, priorAmazonProductRows] = await Promise.all([
+    const [summaryRows, productRows, amazonProductRows, geoRows, ga4Rows, webOrderRows, targetTrafficSummaryRows, walmartTrafficSummaryRows, ultaTrafficSummaryRows, priorSummaryRows, priorTrafficTargetRows, priorTrafficWalmartRows, priorTrafficUltaRows, priorTrafficGa4Rows, priorTrafficWebOrdersRows, targetDpswRows, priorProductRows, priorAmazonProductRows, ultaSkuRows, priorUltaSkuRows, ultaTitleRows] = await Promise.all([
       summaryQuery,
       // Product performance from SHOPIFY_PRODUCT_DAILY
       querySnowflake(`
@@ -1503,6 +1551,9 @@ router.get("/traffic", authenticate, async (req, res) => {
       targetDpswQuery,
       priorProductQuery,
       priorAmazonProductQuery,
+      ultaSkuQuery,
+      priorUltaSkuQuery,
+      ultaTitleLookupQuery,
     ]);
 
     const summaryAgg   = summaryRows[0] ?? {};
@@ -1640,22 +1691,81 @@ router.get("/traffic", authenticate, async (req, res) => {
       };
     });
 
-    // Ulta's Alloy.ai feed only provides store-level totals, not true per-SKU
-    // granularity, so it's surfaced as a single aggregated row rather than
-    // broken into individual products like Target/Walmart/Amazon.
-    const ultaProducts = (isUltaSelected && !isWholesaleMode && !isTargetOnly && ultaTrafficRev > 0)
-      ? [{
-          id:            "ulta-aggregate",
-          productName:   "Gimme Beauty (Ulta - All Products)",
-          sku:           "",
-          revenue:       ultaTrafficRev,
-          orders:        0,
-          units:         ultaTrafficUnits,
-          salesPrior:    priorUltaRev,
-          unitsPrior:    priorUltaUnits,
-          changeInSales: hasPrior ? pct(ultaTrafficRev, priorUltaRev) : 0,
-        }]
+    // Ulta: one row per SKU from ULTA_ALLOY_SKU_DAILY, plus an "Other / not
+    // itemized" row = tile total (ULTA_ALLOY_SALES_DAILY) − SKU sum, shown only
+    // when positive. If the SKU sum exceeds the tile (e.g. a week present in
+    // the SKU feed but missing from the tile feed), the Other row is hidden
+    // and `ultaReconciliation.otherHidden` tells the UI to flag the gap.
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const targetTitleByUpc  = new Map<string, string>();
+    const walmartTitleByUpc = new Map<string, string>();
+    for (const row of ultaTitleRows as Array<Record<string, unknown>>) {
+      const src   = String(row["SRC"] ?? row["src"] ?? "");
+      const upc   = String(row["UPC"] ?? row["upc"] ?? "").trim();
+      const title = String(row["TITLE"] ?? row["title"] ?? "").trim();
+      if (!upc || !title) continue;
+      (src === "target" ? targetTitleByUpc : walmartTitleByUpc).set(upc, title);
+    }
+    const priorUltaSkuByUpc = new Map<string, { revenue: number; units: number }>();
+    for (const row of priorUltaSkuRows as Array<Record<string, unknown>>) {
+      priorUltaSkuByUpc.set(String(row["UPC"] ?? row["upc"] ?? "").trim(), {
+        revenue: Number(row["REVENUE"] ?? row["revenue"] ?? 0),
+        units:   Number(row["UNITS"]   ?? row["units"]   ?? 0),
+      });
+    }
+
+    const ultaSkuProducts = ultaInScope
+      ? (ultaSkuRows as Array<Record<string, unknown>>).map(row => {
+          const upc     = String(row["UPC"] ?? row["upc"] ?? "").trim();
+          const revenue = round2(Number(row["REVENUE"] ?? row["revenue"] ?? 0));
+          const prior   = hasPrior ? priorUltaSkuByUpc.get(upc) : undefined;
+          const salesPrior = prior ? round2(prior.revenue) : 0;
+          return {
+            id:            `ulta-${upc}`,
+            productName:   targetTitleByUpc.get(upc) || walmartTitleByUpc.get(upc) || String(row["ULTA_ITEM_DESC"] ?? row["ulta_item_desc"] ?? "Ulta Product"),
+            sku:           String(row["ULTA_ITEM_NUMBER"] ?? row["ulta_item_number"] ?? ""),
+            revenue,
+            orders:        0,
+            units:         Number(row["UNITS"] ?? row["units"] ?? 0),
+            salesPrior,
+            unitsPrior:    prior ? prior.units : 0,
+            changeInSales: hasPrior ? pct(revenue, salesPrior) : 0,
+          };
+        })
       : [];
+
+    const ultaSkuSum      = round2(ultaSkuProducts.reduce((s, p) => s + p.revenue, 0));
+    const ultaSkuUnitsSum = ultaSkuProducts.reduce((s, p) => s + p.units, 0);
+    const ultaOther       = round2(ultaTrafficRev - ultaSkuSum);
+    const ultaOtherUnits  = ultaTrafficUnits - ultaSkuUnitsSum;
+    const priorUltaSkuSum = round2(Array.from(priorUltaSkuByUpc.values()).reduce((s, p) => s + p.revenue, 0));
+    const priorUltaSkuUnitsSum = Array.from(priorUltaSkuByUpc.values()).reduce((s, p) => s + p.units, 0);
+    const priorUltaOther  = hasPrior ? Math.max(0, round2(priorUltaRev - priorUltaSkuSum)) : 0;
+    const showUltaOther   = ultaInScope && ultaOther > 0.005;
+
+    const ultaProducts = [
+      ...ultaSkuProducts,
+      ...(showUltaOther ? [{
+        id:            "ulta-other",
+        productName:   "Ulta - Other / not itemized",
+        sku:           "",
+        revenue:       ultaOther,
+        orders:        0,
+        units:         Math.max(0, ultaOtherUnits),
+        salesPrior:    priorUltaOther,
+        unitsPrior:    hasPrior ? Math.max(0, priorUltaUnits - priorUltaSkuUnitsSum) : 0,
+        changeInSales: hasPrior ? pct(ultaOther, priorUltaOther) : 0,
+      }] : []),
+    ];
+
+    const ultaReconciliation = ultaInScope
+      ? {
+          tile:        ultaTrafficRev,
+          skuSum:      ultaSkuSum,
+          other:       showUltaOther ? ultaOther : 0,
+          otherHidden: ultaOther < -0.005,
+        }
+      : null;
 
     const products = [...shopifyProducts, ...amazonProducts, ...ultaProducts].sort((a, b) => b.revenue - a.revenue);
 
@@ -1684,6 +1794,7 @@ router.get("/traffic", authenticate, async (req, res) => {
       targetDistributionPoints,
       products,
       stateRevenue,
+      ultaReconciliation,
       isEmpty,
       source: "snowflake-summary",
     });

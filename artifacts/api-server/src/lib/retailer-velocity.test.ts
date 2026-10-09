@@ -274,3 +274,68 @@ describe("buildRetailerVelocity — DPSW calculation", () => {
     expect(retailer.avgDpsw).toBeNull();
   });
 });
+
+describe("buildRetailerVelocity — Ulta sell-through (ULTA_ALLOY_SKU_DAILY)", () => {
+  const entries: SellInEntry[] = [
+    { sku: "SKU-A", entityId: 230, revenue: 4_000, units: 80 }, // Ulta sell-in
+  ];
+  const ULTA_POS = new Map<string, PosRecord>([
+    [UPC_A, { revenue: 6_000, units: 120 }],
+    [UPC_B, { revenue: 1_000, units:  20 }],
+  ]);
+  const base = {
+    entries,
+    targetPosByUpc: new Map<string, PosRecord>(),
+    walmartPosByUpc: new Map<string, PosRecord>(),
+    ultaPosByUpc: ULTA_POS,
+    ultaSalesWeeks: 3, // e.g. 4 calendar weeks, last date has on-hand but no sales
+    circanaByUpc: new Map() as CircanaByUpc,
+    numWeeks: 4,
+  };
+
+  it("always reports Ulta sell-through alongside sell-in", () => {
+    const ulta = buildRetailerVelocity({ ...base, dataSource: "sellin" }).find(r => r.entityId === 230)!;
+    expect(ulta.sellInRevenue).toBe(4_000);
+    expect(ulta.sellThroughRevenue).toBe(7_000);
+    expect(ulta.sellThroughUnits).toBe(140);
+    expect(ulta.totalRevenue).toBe(4_000);
+  });
+
+  it("best-available prefers Ulta sell-through: 1,334 stores ÷ weeks with sales, not calendar weeks", () => {
+    const ulta = buildRetailerVelocity({ ...base, dataSource: "all" }).find(r => r.entityId === 230)!;
+    expect(ulta.totalRevenue).toBe(7_000);
+    expect(ulta.dataSource).toBe("sellin+pos");
+    expect(ulta.avgDpsw).toBeCloseTo(7_000 / 1334 / 3);
+  });
+
+  it("pos mode also uses Ulta sales weeks", () => {
+    const ulta = buildRetailerVelocity({ ...base, dataSource: "pos" }).find(r => r.entityId === 230)!;
+    expect(ulta.avgDpsw).toBeCloseTo(7_000 / 1334 / 3);
+  });
+
+  it("returns null Ulta DPSW when the range has no dates with Ulta sales", () => {
+    const ulta = buildRetailerVelocity({ ...base, ultaSalesWeeks: 0, dataSource: "all" }).find(r => r.entityId === 230)!;
+    expect(ulta.avgDpsw).toBeNull();
+  });
+
+  it("Ulta sell-in DPSW keeps calendar weeks", () => {
+    const ulta = buildRetailerVelocity({ ...base, dataSource: "sellin" }).find(r => r.entityId === 230)!;
+    expect(ulta.avgDpsw).toBeCloseTo(4_000 / 1334 / 4);
+  });
+
+  it("other retailers keep calendar weeks even when ultaSalesWeeks is set", () => {
+    const target = buildRetailerVelocity({
+      ...base,
+      entries: [...entries, { sku: "SKU-A", entityId: 229, revenue: 8_000, units: 100 }],
+      dataSource: "all",
+    }).find(r => r.entityId === 229)!;
+    expect(target.avgDpsw).toBeCloseTo(8_000 / 2000 / 4); // STORE_COUNTS in retailer-velocity.ts
+  });
+
+  it("leaves Ulta on sell-in when no Ulta POS map is supplied", () => {
+    const { ultaPosByUpc: _omit, ...noUlta } = base;
+    const ulta = buildRetailerVelocity({ ...noUlta, dataSource: "all" }).find(r => r.entityId === 230)!;
+    expect(ulta.sellThroughRevenue).toBe(0);
+    expect(ulta.totalRevenue).toBe(4_000);
+  });
+});

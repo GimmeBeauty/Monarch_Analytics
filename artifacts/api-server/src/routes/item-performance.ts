@@ -368,6 +368,36 @@ router.get("/", async (req, res) => {
       FETCH FIRST 2000 ROWS ONLY
     `;
 
+    // ── Sell-through: Ulta (ULTA_ALLOY_SKU_DAILY, keyed by UPC) ─────────────────
+    // SKU-level Ulta sales summed across all locations (mostly distribution
+    // centers — no store detail), so Ulta DPSW assumes full distribution
+    // (1,334 stores). Uses the same sale_date filter as Walmart.
+    const ultaPosSql = `
+      SELECT
+        upc,
+        ulta_item_number,
+        SUM(sales_net_usd)   AS revenue,
+        SUM(sales_units_net) AS units_sold
+      FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SKU_DAILY
+      WHERE ${walmartDateFilter}
+      GROUP BY upc, ulta_item_number
+    `;
+
+    // Week count for Ulta sell-through DPSW: distinct sale_date values in the
+    // range whose total Ulta sales are > 0. Calendar weeks would also count a
+    // trailing date that carries on-hand units but no sales, understating
+    // velocity. Ulta only — other retailers keep calendar-week math.
+    const ultaSalesWeeksSql = `
+      SELECT COUNT(*) AS sales_weeks
+      FROM (
+        SELECT sale_date
+        FROM ${DB_NAME}.RETAIL.ULTA_ALLOY_SKU_DAILY
+        WHERE ${walmartDateFilter}
+        GROUP BY sale_date
+        HAVING SUM(sales_net_usd) > 0
+      )
+    `;
+
     // ── Sell-through: Circana (CVS, Walgreens, Publix, Meijer) ───────────────────
     const circanaPosSql = `
       SELECT
@@ -435,11 +465,13 @@ router.get("/", async (req, res) => {
     let targetPosRows: Record<string, unknown>[] = [];
     let walmartPosRows: Record<string, unknown>[] = [];
     let circanaRows: Record<string, unknown>[] = [];
+    let ultaPosRows: Record<string, unknown>[] = [];
+    let ultaSalesWeeksRows: Record<string, unknown>[] = [];
     let currentSellInRows: Record<string, unknown>[] = [];
     let priorSellInRows: Record<string, unknown>[] = [];
 
     try {
-      [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows, currentSellInRows, priorSellInRows] = await Promise.all([
+      [skuRetailerRows, weeklyRows, targetPosRows, walmartPosRows, circanaRows, currentSellInRows, priorSellInRows, ultaPosRows, ultaSalesWeeksRows] = await Promise.all([
         querySnowflake(skuRetailerSql),
         querySnowflake(weeklyTrendSql),
         querySnowflake(targetPosSql),   // always run — needed for title lookup and so
@@ -449,6 +481,8 @@ router.get("/", async (req, res) => {
                                          // shown side by side regardless of the toggle
         querySnowflake(currentSellInSql),
         priorSellInSql ? querySnowflake(priorSellInSql) : Promise.resolve([]),
+        querySnowflake(ultaPosSql),     // always run — same reason as Target/Walmart
+        querySnowflake(ultaSalesWeeksSql),
       ]);
     } catch (sfErr) {
       return res.status(503).json({
@@ -458,7 +492,7 @@ router.get("/", async (req, res) => {
         retailers: [],
         storeCountsUsed: STORE_COUNTS_BY_ENTITY,
         periodLabel: periodLabel(period),
-        dataSourceNote: "NetSuite data reflects sell-in (shipments to retailer). Target and Circana data reflects consumer sell-through.",
+        dataSourceNote: "NetSuite data reflects sell-in (shipments to retailer). Target, Walmart, Ulta and Circana data reflects consumer sell-through. Ulta DPSW assumes full distribution (1,334 stores).",
       });
     }
 
@@ -489,6 +523,20 @@ router.get("/", async (req, res) => {
         units:      (prev?.units   ?? 0) + safeNum(row["UNITS_SOLD"] ?? row["units_sold"]),
       });
     }
+
+    const ultaPosByUpc = new Map<string, { itemNumber: string; revenue: number; units: number }>();
+    for (const row of ultaPosRows) {
+      const upc = String(row["UPC"] ?? row["upc"] ?? "").trim();
+      if (!upc) continue;
+      const prev = ultaPosByUpc.get(upc);
+      ultaPosByUpc.set(upc, {
+        itemNumber: String(row["ULTA_ITEM_NUMBER"] ?? row["ulta_item_number"] ?? prev?.itemNumber ?? ""),
+        revenue:    (prev?.revenue ?? 0) + safeNum(row["REVENUE"]    ?? row["revenue"]),
+        units:      (prev?.units   ?? 0) + safeNum(row["UNITS_SOLD"] ?? row["units_sold"]),
+      });
+    }
+
+    const ultaSalesWeeks = safeNum(ultaSalesWeeksRows[0]?.["SALES_WEEKS"] ?? ultaSalesWeeksRows[0]?.["sales_weeks"]);
 
     const circanaByUpc = new Map<string, Map<number, { title: string; revenue: number; units: number; storeCount: number }>>();
     for (const row of circanaRows) {
@@ -659,6 +707,13 @@ router.get("/", async (req, res) => {
           row.sellThroughUnits   = walmartPos.units;
           row.itemNumber = walmartPos.itemNumber;
         }
+        const ultaPos = ultaPosByUpc.get(agg.upc);
+        if (ultaPos && (ultaPos.revenue !== 0 || ultaPos.units !== 0)) {
+          const row = ensureRow(230, "Ulta Beauty");
+          row.sellThroughRevenue = ultaPos.revenue;
+          row.sellThroughUnits   = ultaPos.units;
+          row.itemNumber = ultaPos.itemNumber;
+        }
         const circanaForUpc = circanaByUpc.get(agg.upc);
         if (circanaForUpc) {
           for (const [entityId, posData] of circanaForUpc.entries()) {
@@ -703,7 +758,11 @@ router.get("/", async (req, res) => {
         }
 
         const stores = STORE_COUNTS_BY_ENTITY[row.entityId];
-        row.dpsw = stores && row.revenue > 0 ? row.revenue / stores / numWeeks : null;
+        // Ulta sell-through divides by weeks with Ulta sales (see
+        // ultaSalesWeeksSql); "—" (null) when the range has none.
+        const usesUltaSellThrough = row.entityId === 230 && row.dataSource !== "none" && row.dataSource !== "sellin";
+        const weeks = usesUltaSellThrough ? ultaSalesWeeks : numWeeks;
+        row.dpsw = stores && weeks > 0 && row.revenue > 0 ? row.revenue / stores / weeks : null;
       }
 
       const byRetailerArr = Array.from(byRetailerMap.values());
@@ -833,6 +892,8 @@ router.get("/", async (req, res) => {
       entries,
       targetPosByUpc,
       walmartPosByUpc,
+      ultaPosByUpc,
+      ultaSalesWeeks,
       circanaByUpc,
       dataSource,
       numWeeks,
@@ -845,7 +906,7 @@ router.get("/", async (req, res) => {
       retailers,
       storeCountsUsed: STORE_COUNTS_BY_ENTITY,
       periodLabel:     periodLabel(period),
-      dataSourceNote:  "NetSuite data reflects sell-in (shipments to retailer). Target and Circana data reflects consumer sell-through.",
+      dataSourceNote:  "NetSuite data reflects sell-in (shipments to retailer). Target, Walmart, Ulta and Circana data reflects consumer sell-through. Ulta DPSW assumes full distribution (1,334 stores).",
       totalSellInRevenue,
       priorTotalSellInRevenue,
       sellInVsPriorPct,

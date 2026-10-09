@@ -4,7 +4,7 @@
  * The core of the Retailer Velocity Overview is building a per-retailer revenue
  * total that can come from three sources:
  *   1. NetSuite sell-in (shipments to retailer)
- *   2. Target / Walmart POS data (sell-through, keyed by UPC)
+ *   2. Target / Walmart / Ulta POS data (sell-through, keyed by UPC)
  *   3. Circana POS data (sell-through for CVS, Walgreens, Publix, Meijer)
  *
  * The `dataSource` param controls which data is used:
@@ -44,6 +44,14 @@ export interface RetailerAggInput {
   targetPosByUpc: Map<string, PosRecord>;
   /** Walmart POS totals keyed by UPC */
   walmartPosByUpc: Map<string, PosRecord>;
+  /** Ulta POS totals keyed by UPC (ULTA_ALLOY_SKU_DAILY) */
+  ultaPosByUpc?: Map<string, PosRecord>;
+  /**
+   * Distinct sale dates with Ulta sales > 0 in the range. Used instead of
+   * `numWeeks` for Ulta's DPSW whenever Ulta sell-through is the effective
+   * number; 0 → null DPSW. Other retailers always use `numWeeks`.
+   */
+  ultaSalesWeeks?: number;
   /** Circana POS data: UPC → entityId → PosRecord */
   circanaByUpc: CircanaByUpc;
   /** Whether to include POS data ("sellin" = no, anything else = yes) */
@@ -114,7 +122,7 @@ export const CIRCANA_ENTITY_IDS: Record<string, number> = {
  *   - Circana-only retailers (no sell-in rows) are added to the output.
  */
 export function buildRetailerVelocity(input: RetailerAggInput): RetailerResult[] {
-  const { entries, targetPosByUpc, walmartPosByUpc, circanaByUpc, dataSource, numWeeks } = input;
+  const { entries, targetPosByUpc, walmartPosByUpc, ultaPosByUpc, ultaSalesWeeks = 0, circanaByUpc, dataSource, numWeeks } = input;
   const includePOS = dataSource !== "sellin";
 
   interface RawAgg {
@@ -170,6 +178,8 @@ export function buildRetailerVelocity(input: RetailerAggInput): RetailerResult[]
       for (const v of targetPosByUpc.values()) { revenue += v.revenue; units += v.units; }
     } else if (entityId === 231) {
       for (const v of walmartPosByUpc.values()) { revenue += v.revenue; units += v.units; }
+    } else if (entityId === 230) {
+      for (const v of ultaPosByUpc?.values() ?? []) { revenue += v.revenue; units += v.units; }
     } else {
       for (const entityMap of circanaByUpc.values()) {
         const entry = entityMap.get(entityId);
@@ -202,6 +212,8 @@ export function buildRetailerVelocity(input: RetailerAggInput): RetailerResult[]
       }
     }
 
+    const weeks = r.entityId === 230 && (src === "pos" || src === "sellin+pos") ? ultaSalesWeeks : numWeeks;
+
     return {
       entityId:           r.entityId,
       name:               r.name,
@@ -212,7 +224,7 @@ export function buildRetailerVelocity(input: RetailerAggInput): RetailerResult[]
       sellThroughRevenue: pos.revenue,
       sellThroughUnits:   pos.units,
       skuCount:           r.skuSet.size,
-      avgDpsw:            stores && numWeeks > 0 && revenue > 0 ? revenue / stores / numWeeks : null,
+      avgDpsw:            stores && weeks > 0 && revenue > 0 ? revenue / stores / weeks : null,
       dataSource:         src,
     };
   }).sort((a, b) => b.totalRevenue - a.totalRevenue);

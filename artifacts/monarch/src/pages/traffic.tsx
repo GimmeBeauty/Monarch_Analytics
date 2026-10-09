@@ -46,6 +46,8 @@ interface TrafficApiResponse {
   targetDistributionPoints: number;
   products: Array<{ id: string; productName: string; sku?: string; revenue: number; orders: number; units: number; salesPrior?: number; unitsPrior?: number; changeInSales?: number }>;
   stateRevenue: Array<{ stateCode: string; revenue: number; orders: number }>;
+  // Ulta SKU rows (ULTA_ALLOY_SKU_DAILY) vs the Ulta tile (ULTA_ALLOY_SALES_DAILY).
+  ultaReconciliation?: { tile: number; skuSum: number; other: number; otherHidden: boolean } | null;
   isEmpty: boolean;
 }
 
@@ -802,6 +804,11 @@ export default function Traffic() {
                 products={data.products}
                 selectedStoreIds={selectedIds}
                 isWholesale={isWholesale}
+                footnote={(() => {
+                  const r = apiData?.ultaReconciliation;
+                  if (!isUltaSelected || isWholesale || !r?.otherHidden) return null;
+                  return `Ulta SKU detail (${fmtCurrencyFull(r.skuSum)}) exceeds Ulta total (${fmtCurrencyFull(r.tile)}) by ${fmtCurrencyFull(r.skuSum - r.tile)}; 'Other' row hidden.`;
+                })()}
               />
             )}
             <USMap

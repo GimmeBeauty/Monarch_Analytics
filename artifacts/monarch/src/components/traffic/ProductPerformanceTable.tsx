@@ -65,9 +65,11 @@ interface Props {
   products: ProductRow[];
   selectedStoreIds: string[];
   isWholesale?: boolean;
+  /** Optional data-quality note rendered under the table (e.g. Ulta SKU vs tile gap). */
+  footnote?: string | null;
 }
 
-export default function ProductPerformanceTable({ products, selectedStoreIds, isWholesale = false }: Props) {
+export default function ProductPerformanceTable({ products, selectedStoreIds, isWholesale = false, footnote = null }: Props) {
   const [sortKey, setSortKey]         = useState<SortKey>("sales");
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
   const [filters, setFilters]         = useState<Filters>(defaultFilters);
@@ -513,6 +515,12 @@ export default function ProductPerformanceTable({ products, selectedStoreIds, is
           </div>
         )}
       </div>
+
+      {footnote && (
+        <div className="px-5 py-2 border-t border-[#FFBC80]/15 dark:border-[#9BDBF3]/15 text-[10px] text-[#3A3A3A]/50 dark:text-[#003349]/40">
+          {footnote}
+        </div>
+      )}
 
       {/* See More */}
       {hasMore && (
