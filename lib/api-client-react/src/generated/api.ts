@@ -5,10 +5,13 @@
  * MONARCH Analytics Dashboard API
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
@@ -21,6 +24,8 @@ import type {
   GetSpendDataParams,
   GetTrafficDataParams,
   HealthStatus,
+  MemberRoleResponse,
+  MemberRoleUpdate,
   OverviewSummary,
   PerformanceData,
   SpendData,
@@ -28,13 +33,100 @@ import type {
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
 type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+/**
+ * @summary Owner-only change of an existing member's admin/user role
+ */
+export const getUpdateMemberRoleUrl = (id: string) => {
+  return `/api/auth/users/${id}/role`;
+};
+
+export const updateMemberRole = async (
+  id: string,
+  memberRoleUpdate: MemberRoleUpdate,
+  options?: RequestInit,
+): Promise<MemberRoleResponse> => {
+  return customFetch<MemberRoleResponse>(getUpdateMemberRoleUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(memberRoleUpdate),
+  });
+};
+
+export const getUpdateMemberRoleMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMemberRole>>,
+    TError,
+    { id: string; data: BodyType<MemberRoleUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMemberRole>>,
+  TError,
+  { id: string; data: BodyType<MemberRoleUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateMemberRole"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMemberRole>>,
+    { id: string; data: BodyType<MemberRoleUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateMemberRole(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMemberRoleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMemberRole>>
+>;
+export type UpdateMemberRoleMutationBody = BodyType<MemberRoleUpdate>;
+export type UpdateMemberRoleMutationError = ErrorType<void>;
+
+/**
+ * @summary Owner-only change of an existing member's admin/user role
+ */
+export const useUpdateMemberRole = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMemberRole>>,
+    TError,
+    { id: string; data: BodyType<MemberRoleUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMemberRole>>,
+  TError,
+  { id: string; data: BodyType<MemberRoleUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateMemberRoleMutationOptions(options));
+};
 
 /**
  * @summary Health check

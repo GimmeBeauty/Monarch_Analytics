@@ -5,6 +5,35 @@
  * MONARCH Analytics Dashboard API
  * OpenAPI spec version: 0.1.0
  */
+export type MemberRoleUpdateRole =
+  (typeof MemberRoleUpdateRole)[keyof typeof MemberRoleUpdateRole];
+
+export const MemberRoleUpdateRole = {
+  admin: "admin",
+  user: "user",
+} as const;
+
+export interface MemberRoleUpdate {
+  role: MemberRoleUpdateRole;
+}
+
+export type MemberRoleRole =
+  (typeof MemberRoleRole)[keyof typeof MemberRoleRole];
+
+export const MemberRoleRole = {
+  admin: "admin",
+  user: "user",
+} as const;
+
+export interface MemberRole {
+  id: string;
+  role: MemberRoleRole;
+}
+
+export interface MemberRoleResponse {
+  user: MemberRole;
+}
+
 export interface HealthStatus {
   status: string;
 }

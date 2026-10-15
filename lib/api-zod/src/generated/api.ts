@@ -8,6 +8,24 @@
 import * as zod from "zod";
 
 /**
+ * @summary Owner-only change of an existing member's admin/user role
+ */
+export const UpdateMemberRoleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateMemberRoleBody = zod.object({
+  role: zod.enum(["admin", "user"]),
+});
+
+export const UpdateMemberRoleResponse = zod.object({
+  user: zod.object({
+    id: zod.string(),
+    role: zod.enum(["admin", "user"]),
+  }),
+});
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

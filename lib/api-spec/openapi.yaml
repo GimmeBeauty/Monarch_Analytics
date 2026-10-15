@@ -23,6 +23,39 @@ tags:
   - name: forecast
     description: Forecast data
 paths:
+  /auth/users/{id}/role:
+    patch:
+      operationId: updateMemberRole
+      summary: Owner-only change of an existing member's admin/user role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberRoleUpdate"
+      responses:
+        "200":
+          description: Updated member role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberRoleResponse"
+        "400":
+          description: Invalid role
+        "401":
+          description: Not authenticated
+        "403":
+          description: Owner permission required or protected owner account
+        "404":
+          description: Member not found
+        "409":
+          description: Concurrent member change; refresh and retry
   /healthz:
     get:
       operationId: healthCheck
@@ -160,6 +193,28 @@ paths:
 
 components:
   schemas:
+    MemberRoleUpdate:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, user]
+    MemberRoleResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: "#/components/schemas/MemberRole"
+    MemberRole:
+      type: object
+      required: [id, role]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
     HealthStatus:
       type: object
       properties:

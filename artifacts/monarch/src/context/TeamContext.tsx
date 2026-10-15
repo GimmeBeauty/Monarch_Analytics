@@ -30,6 +30,7 @@ interface TeamContextValue {
   refetch: () => Promise<void>;
   inviteMember: (email: string, role: "admin" | "user") => void;
   removeMember: (id: string) => Promise<void>;
+  changeMemberRole: (id: string, role: "admin" | "user") => Promise<void>;
 }
 
 const TeamContext = createContext<TeamContextValue>({
@@ -40,6 +41,7 @@ const TeamContext = createContext<TeamContextValue>({
   refetch: async () => {},
   inviteMember: () => {},
   removeMember: async () => {},
+  changeMemberRole: async () => {},
 });
 
 export function TeamProvider({ children }: { children: ReactNode }) {
@@ -70,6 +72,9 @@ export function TeamProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchMembers();
+    const refresh = () => { void fetchMembers(); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [fetchMembers]);
 
   // Optimistically add a pending member to the list right after invite API
@@ -102,6 +107,20 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const currentUserId   = user?.id   ?? "";
+  const changeMemberRole = useCallback(async (id: string, role: "admin" | "user") => {
+    const res = await fetch(`${API_BASE}/api/auth/users/${encodeURIComponent(id)}/role`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error ?? "Failed to update role.");
+    setMembers(prev => prev.map(member =>
+      member.id === body.user.id ? { ...member, role: body.user.role } : member,
+    ));
+  }, []);
+
   const currentUserRole = (user?.role ?? "user") as Role;
 
   return (
@@ -114,6 +133,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         refetch: fetchMembers,
         inviteMember,
         removeMember,
+        changeMemberRole,
       }}
     >
       {children}

@@ -7,6 +7,7 @@ import { signToken, COOKIE_NAME, MAX_AGE_SEC } from "../lib/jwt.js";
 import { generateRawToken, hashToken, tokenExpiresAt } from "../lib/tokens.js";
 import { sendInviteEmail, sendPasswordResetEmail } from "../lib/email.js";
 import { authenticate, requireRole } from "../middlewares/authenticate.js";
+import { UpdateMemberRoleBody } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -480,6 +481,40 @@ router.post("/reset-password", async (req: Request, res: Response) => {
     .where(eq(authTokensTable.id, record.id));
 
   res.json({ ok: true, message: "Password updated successfully" });
+});
+
+// ─── PATCH /auth/users/:id/role ─────────────────────────────────────────────────
+// Only the owner may promote/demote an existing member. Ownership is not
+// transferable through this endpoint.
+router.patch("/users/:id/role", authenticate, requireRole("owner"), async (req: Request, res: Response) => {
+  const parsed = UpdateMemberRoleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Role must be admin or user." });
+    return;
+  }
+  const { role } = parsed.data;
+
+  const targetId = req.params.id as string;
+  const [target] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, targetId)).limit(1);
+  if (!target) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+  if (target.role === "owner" || targetId === req.auth!.userId) {
+    res.status(403).json({ error: "The owner account's role cannot be changed." });
+    return;
+  }
+
+  const [user] = await db.update(usersTable)
+    .set({ role, updatedAt: new Date() })
+    .where(and(eq(usersTable.id, targetId), eq(usersTable.role, target.role)))
+    .returning({ id: usersTable.id, role: usersTable.role });
+  if (!user) {
+    res.status(409).json({ error: "This member changed. Refresh the team list and try again." });
+    return;
+  }
+  res.json({ user });
 });
 
 // ─── DELETE /auth/users/:id ────────────────────────────────────────────────────

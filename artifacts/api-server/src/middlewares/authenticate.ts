@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { verifyToken, COOKIE_NAME, type JwtPayload } from "../lib/jwt.js";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 // Extend Express Request to carry the decoded JWT payload
 declare global {
@@ -16,7 +18,7 @@ declare global {
  *
  * On failure, responds 401. Does NOT call next() in that case.
  */
-export function authenticate(req: Request, res: Response, next: NextFunction): void {
+export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
   const token: string | undefined = req.cookies?.[COOKIE_NAME];
 
   if (!token) {
@@ -26,10 +28,24 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
 
   try {
     req.auth = verifyToken(token);
-    next();
   } catch {
     res.status(401).json({ error: "Session expired or invalid" });
+    return;
   }
+
+  // JWT role claims can outlive a promotion/demotion. Authorize using the
+  // current database role, never a stale role from the session cookie.
+  const [user] = await db
+    .select({ role: usersTable.role, status: usersTable.status })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.auth.userId))
+    .limit(1);
+  if (!user || user.status !== "active") {
+    res.status(401).json({ error: "Account is not active" });
+    return;
+  }
+  req.auth.role = user.role;
+  next();
 }
 
 /**

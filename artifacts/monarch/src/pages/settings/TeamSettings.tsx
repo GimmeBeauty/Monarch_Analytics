@@ -95,13 +95,31 @@ function MemberRow({
   isCurrentUser: boolean;
   canManage: boolean;
 }) {
-  const { removeMember } = useTeam();
+  const { removeMember, changeMemberRole, currentUserRole } = useTeam();
   const display = member.name ?? member.email.split("@")[0];
   const [confirming, setConfirming] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
   const [error,      setError]      = useState("");
+  const [savingRole, setSavingRole] = useState(false);
+  const [roleMessage, setRoleMessage] = useState("");
 
   const isDeletable = canManage && !isCurrentUser && member.role !== "owner";
+  const canChangeRole = currentUserRole === "owner" && !isCurrentUser &&
+    member.role !== "owner" && !member.id.startsWith("optimistic_");
+
+  const handleRoleChange = async (role: "admin" | "user") => {
+    setSavingRole(true);
+    setRoleMessage("");
+    setError("");
+    try {
+      await changeMemberRole(member.id, role);
+      setRoleMessage(`Role updated to ${ROLE_META[role].label}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update role.");
+    } finally {
+      setSavingRole(false);
+    }
+  };
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -118,7 +136,7 @@ function MemberRow({
   return (
     <div className="rounded-xl bg-white dark:bg-[#FFFFFF] border border-[#FFBC80]/20 dark:border-[#9BDBF3]/20 overflow-hidden">
       {/* Main row */}
-      <div className="flex items-center gap-3 py-3 px-4">
+      <div className="flex items-center gap-3 py-3 px-4 flex-wrap">
         <MemberAvatar name={member.name} email={member.email} avatarUrl={member.avatarUrl} />
 
         <div className="flex-1 min-w-0">
@@ -139,11 +157,26 @@ function MemberRow({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <RoleBadge role={member.role} />
+          {canChangeRole ? (
+            <>
+              <select
+                aria-label={`Role for ${member.email}`}
+                value={member.role}
+                onChange={e => void handleRoleChange(e.target.value as "admin" | "user")}
+                disabled={savingRole || deleting || confirming}
+                className="rounded-lg border border-[#FFBC80]/40 bg-white px-2 py-1 text-xs font-semibold text-[#3A3A3A] disabled:opacity-50"
+              >
+                <option value="admin">Admin</option>
+                <option value="user">User</option>
+              </select>
+              {savingRole && <Loader2 size={12} className="animate-spin" aria-label="Saving role" />}
+            </>
+          ) : <RoleBadge role={member.role} />}
 
           {isDeletable && !confirming && (
             <button
               onClick={() => setConfirming(true)}
+              disabled={savingRole}
               title="Remove member"
               className="p-1.5 rounded-lg text-[#3A3A3A]/30 dark:text-[#003349]/25 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
@@ -152,6 +185,8 @@ function MemberRow({
           )}
         </div>
       </div>
+      {roleMessage && <p role="status" className="px-4 pb-3 text-xs text-green-700">{roleMessage}</p>}
+      {error && !confirming && <p role="alert" className="px-4 pb-3 text-xs text-red-600">{error}</p>}
 
       {/* Confirmation drawer */}
       {confirming && (

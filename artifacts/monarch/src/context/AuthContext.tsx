@@ -74,6 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check session on mount
   useEffect(() => {
     fetchMe();
+    const refresh = () => { void fetchMe(); };
+    window.addEventListener("focus", refresh);
+    const interval = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(interval);
+    };
   }, [fetchMe]);
 
   const login = useCallback(async (email: string, password: string) => {
