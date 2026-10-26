@@ -97,10 +97,11 @@ def run_roundel_ingestion():
         aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
         region_name='us-west-2')
     bucket = os.environ["ROUNDEL_S3_BUCKET"]
-    response = s3.list_objects_v2(Bucket=bucket)
-    files = response.get('Contents', [])
+    files = []
+    for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket):
+        files += [o for o in page.get('Contents', []) if o['Key'].startswith('Target RMS - Monarch')]
     if not files:
-        print("  No files found"); return
+        print("  No Target RMS files found"); return
     # Only process the most recent file (daily files are cumulative)
     files = sorted(files, key=lambda x: x['LastModified'], reverse=True)[:1]
     print(f"  Processing most recent file: {files[0]['Key']}")
