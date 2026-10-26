@@ -31,7 +31,18 @@ ga_service = client.get_service("GoogleAdsService")
 conn = _get_snowflake_connection(schema="ADS")
 cur = conn.cursor()
 print("Connected to Snowflake")
-months = [(str(__import__("datetime").date.today() - __import__("datetime").timedelta(days=2)), str(__import__("datetime").date.today()))]
+# Default: trailing 30 days (late conversions are credited back to the click date).
+# Restatement: `python3 backfill_google_ads.py 2025-01-01 2026-10-26` pulls month by month.
+import datetime as _dt, sys as _sys
+if len(_sys.argv) == 3:
+    _start, _end = _dt.date.fromisoformat(_sys.argv[1]), _dt.date.fromisoformat(_sys.argv[2])
+    months = []
+    while _start <= _end:
+        _next = (_start.replace(day=1) + _dt.timedelta(days=32)).replace(day=1)
+        months.append((str(_start), str(min(_next - _dt.timedelta(days=1), _end))))
+        _start = _next
+else:
+    months = [(str(_dt.date.today() - _dt.timedelta(days=30)), str(_dt.date.today()))]
 cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
 total = 0
 for month_start, month_end in months:

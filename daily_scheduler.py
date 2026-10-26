@@ -7,6 +7,10 @@ load_dotenv(dotenv_path=".env")
 
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
+# Meta/Google keep crediting late conversions back to the click date, so re-pull a
+# trailing 30 days every run. rebuild_ad_summaries() deletes/re-inserts the same
+# span (-31 days) for meta_ads/google_ads — keep the two in step.
+AD_REPULL_START = TODAY - timedelta(days=30)
 print(f"=== Monarch Daily Scheduler — {TODAY} ===")
 
 def run_shopify():
@@ -42,7 +46,7 @@ def run_meta():
     print("\n[2/5] Meta Ads...")
     try:
         from ingestion.sources.meta_ads import run_meta_ingestion
-        run_meta_ingestion(start_date=YESTERDAY.isoformat(), end_date=TODAY.isoformat())
+        run_meta_ingestion(start_date=AD_REPULL_START.isoformat(), end_date=TODAY.isoformat())
         print("  ✅ Meta done")
     except Exception as e:
         print(f"  ❌ Meta error: {e}")
@@ -53,7 +57,7 @@ def run_google():
         import subprocess
         result = subprocess.run(
             ["python3", "backfill_google_ads.py"],
-            capture_output=True, text=True, timeout=120
+            capture_output=True, text=True, timeout=600
         )
         print(result.stdout[-500:] if result.stdout else "No output")
         if result.returncode == 0:
@@ -190,9 +194,12 @@ def rebuild_ad_summaries():
     from snowflake_connect import get_connection
     conn = get_connection(schema="ADS")
     cur = conn.cursor()
-    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE()) AND channel IN ('meta_ads','google_ads','pinterest_ads','criteo_ads')")
-    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) WITH base AS (SELECT ingestion_date,SUM(raw_data:spend::FLOAT) AS spend,SUM(raw_data:impressions::INTEGER) AS impressions,SUM(raw_data:clicks::INTEGER) AS clicks FROM MONARCH_RAW.ADS.META_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY ingestion_date),cv AS (SELECT m.ingestion_date,SUM(av.value:value::FLOAT) AS cv FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:action_values,OUTER=>TRUE) av WHERE av.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY m.ingestion_date),cc AS (SELECT m.ingestion_date,SUM(a.value:value::FLOAT) AS cc FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:actions,OUTER=>TRUE) a WHERE a.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) GROUP BY m.ingestion_date) SELECT b.ingestion_date,'meta_ads',b.spend,b.impressions,b.clicks,COALESCE(c.cc,0),COALESCE(v.cv,0),CASE WHEN b.impressions>0 THEN b.clicks/b.impressions ELSE 0 END,CASE WHEN b.clicks>0 THEN b.spend/b.clicks ELSE 0 END,CASE WHEN b.impressions>0 THEN b.spend/b.impressions*1000 ELSE 0 END,CASE WHEN b.spend>0 THEN COALESCE(v.cv,0)/b.spend ELSE 0 END FROM base b LEFT JOIN cc c ON b.ingestion_date=c.ingestion_date LEFT JOIN cv v ON b.ingestion_date=v.ingestion_date""")
-    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) SELECT ingestion_date,'google_ads',SUM(raw_data:spend::FLOAT),SUM(raw_data:impressions::INTEGER),SUM(raw_data:clicks::INTEGER),SUM(raw_data:conversions::FLOAT),SUM(raw_data:conversions_value::FLOAT),AVG(raw_data:ctr::FLOAT),AVG(raw_data:average_cpc::FLOAT),AVG(raw_data:average_cpm::FLOAT),CASE WHEN SUM(raw_data:spend::FLOAT)>0 THEN SUM(raw_data:conversions_value::FLOAT)/SUM(raw_data:spend::FLOAT) ELSE 0 END FROM MONARCH_RAW.ADS.GOOGLE_ADS_RAW WHERE ingestion_date>=DATEADD(day,-3,CURRENT_DATE()) AND raw_data:spend::FLOAT IS NOT NULL GROUP BY ingestion_date""")
+    # Delete scope must match each INSERT's WHERE below: meta/google re-aggregate 31
+    # days (see AD_REPULL_START), pinterest/criteo still 3.
+    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-31,CURRENT_DATE()) AND channel IN ('meta_ads','google_ads')")
+    cur.execute("DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE summary_date >= DATEADD(day,-3,CURRENT_DATE()) AND channel IN ('pinterest_ads','criteo_ads')")
+    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) WITH base AS (SELECT ingestion_date,SUM(raw_data:spend::FLOAT) AS spend,SUM(raw_data:impressions::INTEGER) AS impressions,SUM(raw_data:clicks::INTEGER) AS clicks FROM MONARCH_RAW.ADS.META_ADS_RAW WHERE ingestion_date>=DATEADD(day,-31,CURRENT_DATE()) GROUP BY ingestion_date),cv AS (SELECT m.ingestion_date,SUM(av.value:value::FLOAT) AS cv FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:action_values,OUTER=>TRUE) av WHERE av.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-31,CURRENT_DATE()) GROUP BY m.ingestion_date),cc AS (SELECT m.ingestion_date,SUM(a.value:value::FLOAT) AS cc FROM MONARCH_RAW.ADS.META_ADS_RAW m,LATERAL FLATTEN(input=>m.raw_data:actions,OUTER=>TRUE) a WHERE a.value:action_type::STRING='purchase' AND m.ingestion_date>=DATEADD(day,-31,CURRENT_DATE()) GROUP BY m.ingestion_date) SELECT b.ingestion_date,'meta_ads',b.spend,b.impressions,b.clicks,COALESCE(c.cc,0),COALESCE(v.cv,0),CASE WHEN b.impressions>0 THEN b.clicks/b.impressions ELSE 0 END,CASE WHEN b.clicks>0 THEN b.spend/b.clicks ELSE 0 END,CASE WHEN b.impressions>0 THEN b.spend/b.impressions*1000 ELSE 0 END,CASE WHEN b.spend>0 THEN COALESCE(v.cv,0)/b.spend ELSE 0 END FROM base b LEFT JOIN cc c ON b.ingestion_date=c.ingestion_date LEFT JOIN cv v ON b.ingestion_date=v.ingestion_date""")
+    cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas) SELECT ingestion_date,'google_ads',SUM(raw_data:spend::FLOAT),SUM(raw_data:impressions::INTEGER),SUM(raw_data:clicks::INTEGER),SUM(raw_data:conversions::FLOAT),SUM(raw_data:conversions_value::FLOAT),AVG(raw_data:ctr::FLOAT),AVG(raw_data:average_cpc::FLOAT),AVG(raw_data:average_cpm::FLOAT),CASE WHEN SUM(raw_data:spend::FLOAT)>0 THEN SUM(raw_data:conversions_value::FLOAT)/SUM(raw_data:spend::FLOAT) ELSE 0 END FROM MONARCH_RAW.ADS.GOOGLE_ADS_RAW WHERE ingestion_date>=DATEADD(day,-31,CURRENT_DATE()) AND raw_data:spend::FLOAT IS NOT NULL GROUP BY ingestion_date""")
     cur.execute("""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
 SELECT ingestion_date,'pinterest_ads',
 SUM(raw_data:SPEND_IN_DOLLAR::FLOAT),
@@ -295,8 +302,8 @@ if __name__ == "__main__":
     run_roundel()
     run_pinterest()
     run_amazon()
+    rebuild_ad_summaries()  # before rebuild_summaries(): MONARCH_DAILY_SUMMARY reads DAILY_AD_SUMMARY
     rebuild_summaries()
-    rebuild_ad_summaries()
     rebuild_shopify_products()
     rebuild_target_summaries()
     print("\n✅ Daily scheduler complete!")
