@@ -55,6 +55,10 @@ for month_start, month_end in months:
         records = []
         for row in response:
             records.append({"id": f"{row.ad_group.id}_{row.segments.date}","date": row.segments.date,"campaign_id": str(row.campaign.id),"campaign_name": row.campaign.name,"campaign_status": row.campaign.status.name,"ad_group_id": str(row.ad_group.id),"ad_group_name": row.ad_group.name,"impressions": row.metrics.impressions,"clicks": row.metrics.clicks,"spend": row.metrics.cost_micros / 1_000_000,"conversions": row.metrics.conversions,"conversions_value": row.metrics.conversions_value,"ctr": row.metrics.ctr,"average_cpc": row.metrics.average_cpc / 1_000_000,"average_cpm": row.metrics.average_cpm / 1_000_000})
+        # Performance Max has no ad groups, so the ad_group query never returns it — pull it at campaign level.
+        pmax_query = f"SELECT campaign.id,campaign.name,campaign.status,metrics.impressions,metrics.clicks,metrics.cost_micros,metrics.conversions,metrics.conversions_value,metrics.ctr,metrics.average_cpc,metrics.average_cpm,segments.date FROM campaign WHERE segments.date BETWEEN '{month_start}' AND '{month_end}' AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'"
+        for row in ga_service.search(customer_id=customer_id, query=pmax_query):
+            records.append({"id": f"pmax_{row.campaign.id}_{row.segments.date}","date": row.segments.date,"campaign_id": str(row.campaign.id),"campaign_name": row.campaign.name,"campaign_status": row.campaign.status.name,"campaign_type": "PERFORMANCE_MAX","ad_group_id": None,"ad_group_name": None,"impressions": row.metrics.impressions,"clicks": row.metrics.clicks,"spend": row.metrics.cost_micros / 1_000_000,"conversions": row.metrics.conversions,"conversions_value": row.metrics.conversions_value,"ctr": row.metrics.ctr,"average_cpc": row.metrics.average_cpc / 1_000_000,"average_cpm": row.metrics.average_cpm / 1_000_000})
         if records:
             with open("/tmp/google_ads_month.json", "w") as f:
                 for r in records:
