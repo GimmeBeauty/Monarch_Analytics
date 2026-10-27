@@ -44,7 +44,9 @@ if len(_sys.argv) == 3:
 else:
     months = [(str(_dt.date.today() - _dt.timedelta(days=30)), str(_dt.date.today()))]
 cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
+cur.execute("CREATE TABLE IF NOT EXISTS GOOGLE_ADS_CONV_LAG_RAW (ID VARCHAR NOT NULL, INGESTED_AT TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(), INGESTION_DATE DATE NOT NULL, SOURCE VARCHAR NOT NULL, RAW_DATA VARIANT NOT NULL)")
 total = 0
+lag_total = 0
 for month_start, month_end in months:
     print(f"\nPulling {month_start} to {month_end}...")
     query = f"SELECT campaign.id,campaign.name,campaign.status,ad_group.id,ad_group.name,metrics.impressions,metrics.clicks,metrics.cost_micros,metrics.conversions,metrics.conversions_value,metrics.ctr,metrics.average_cpc,metrics.average_cpm,segments.date FROM ad_group WHERE segments.date BETWEEN '{month_start}' AND '{month_end}' AND metrics.impressions > 0"
@@ -67,6 +69,25 @@ for month_start, month_end in months:
     except Exception as e:
         print(f"  Error: {e}")
         continue
+    # Conversions by category x lag bucket (days from click to conversion) for the attribution-window toggle.
+    # Lag segments can't be combined with clicks/cost, so this is a separate conversions-only pull.
+    lag_query = f"SELECT segments.date,campaign.id,segments.conversion_action_category,segments.conversion_lag_bucket,metrics.conversions,metrics.conversions_value FROM campaign WHERE segments.date BETWEEN '{month_start}' AND '{month_end}'"
+    try:
+        lag_records = []
+        for row in ga_service.search(customer_id=customer_id, query=lag_query):
+            category, lag_bucket = row.segments.conversion_action_category.name, row.segments.conversion_lag_bucket.name
+            lag_records.append({"id": f"{row.campaign.id}_{row.segments.date}_{category}_{lag_bucket}","date": row.segments.date,"campaign_id": str(row.campaign.id),"conversion_action_category": category,"conversion_lag_bucket": lag_bucket,"conversions": row.metrics.conversions,"conversions_value": row.metrics.conversions_value})
+        with open("/tmp/google_ads_conv_lag.json", "w") as f:
+            for r in lag_records:
+                f.write(json.dumps({"ID": r["id"],"INGESTION_DATE": r["date"],"SOURCE": "google_ads","RAW_DATA": json.dumps(r)}) + "\n")
+        cur.execute(f"DELETE FROM GOOGLE_ADS_CONV_LAG_RAW WHERE ingestion_date BETWEEN '{month_start}' AND '{month_end}'")
+        if lag_records:
+            cur.execute("PUT file:///tmp/google_ads_conv_lag.json @monarch_stage AUTO_COMPRESS=TRUE OVERWRITE=TRUE")
+            cur.execute("COPY INTO GOOGLE_ADS_CONV_LAG_RAW (id, ingestion_date, source, raw_data) FROM (SELECT $1:ID::STRING, $1:INGESTION_DATE::DATE, $1:SOURCE::STRING, PARSE_JSON($1:RAW_DATA::STRING) FROM @monarch_stage/google_ads_conv_lag.json.gz) FILE_FORMAT = (TYPE = 'JSON') ON_ERROR = 'CONTINUE'")
+        lag_total += len(lag_records)
+        print(f"  ✅ {len(lag_records)} conversion-lag records (total: {lag_total})")
+    except Exception as e:
+        print(f"  Conversion-lag error: {e}")
 cur.close()
 conn.close()
-print(f"\n✅ Google Ads backfill complete — {total} total records")
+print(f"\n✅ Google Ads backfill complete — {total} total records, {lag_total} conversion-lag records")
