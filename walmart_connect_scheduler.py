@@ -50,9 +50,24 @@ GROUP BY ad_date""")
         print(f"❌ Walmart Display error: {e}")
         return False
 
+def run_attribution_windows():
+    print("Walmart attribution windows...")
+    try:
+        from snowflake_connect import get_connection
+        from ingestion.attribution_windows import fill_walmart
+        conn = get_connection(schema="ADS")
+        fill_walmart(conn.cursor())
+        conn.close()
+        print("✅ Walmart attribution windows done")
+        return True
+    except Exception as e:
+        print(f"❌ Walmart attribution windows error: {e}")
+        return False
+
 if __name__ == "__main__":
     import sys
     ok = [run_walmart_connect(), run_walmart_display()]
+    ok.append(run_attribution_windows())
     # Non-zero exit so a failed step (e.g. the Display 14/30-day key check) fails the workflow run.
     if not all(ok):
         sys.exit(1)
