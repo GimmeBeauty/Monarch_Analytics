@@ -19,8 +19,10 @@ FROM MONARCH_RAW.ADS.WALMART_CONNECT_RAW""")
         conn.commit()
         cur.close(); conn.close()
         print("✅ Walmart Connect done")
+        return True
     except Exception as e:
         print(f"❌ Walmart Connect error: {e}")
+        return False
 
 def run_walmart_display():
     print("Walmart Display Ads...")
@@ -43,9 +45,14 @@ GROUP BY ad_date""")
         conn.commit()
         cur.close(); conn.close()
         print("✅ Walmart Display done")
+        return True
     except Exception as e:
         print(f"❌ Walmart Display error: {e}")
+        return False
 
 if __name__ == "__main__":
-    run_walmart_connect()
-    run_walmart_display()
+    import sys
+    ok = [run_walmart_connect(), run_walmart_display()]
+    # Non-zero exit so a failed step (e.g. the Display 14/30-day key check) fails the workflow run.
+    if not all(ok):
+        sys.exit(1)

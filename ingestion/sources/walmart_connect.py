@@ -36,6 +36,11 @@ def parse_pct(s):
         return float(s) / 100
     except:
         return 0.0
+def parse_opt(r, col, parse):
+    """30-day and order columns exist only in the 2026 export; the 2025 file loads NULL, not 0."""
+    v = r.get(col)
+    return None if v is None else parse(v)
+
 def run_walmart_connect_ingestion():
     print("Pulling Walmart Connect data from S3...")
     s3 = boto3.client('s3',aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],region_name='us-west-2')
@@ -65,6 +70,12 @@ def run_walmart_connect_ingestion():
                 "instore_sales_14d": parse_money(r.get('In-store Advertised Sales  - 14 Days', '')),
                 "conversion_rate_14d": parse_pct(r.get('Conversion Rate - 14 Day', '')),
                 "detail_page_views": parse_num(r.get('Advertised Product Detail Page Views - 14 Day', '')),
+                "orders_14d": parse_opt(r, 'Orders - 14 Day', parse_num),
+                "orders_30d": parse_opt(r, 'Orders - 30 Day', parse_num),
+                "sales_revenue_30d": parse_opt(r, 'Total Sales Rev. - 30 Day', parse_money),
+                "units_sold_30d": parse_opt(r, 'Total Units Sold - 30 Day', parse_num),
+                "ntb_sales_30d": parse_opt(r, 'New-to-Brand Sales - 30 Days', parse_money),
+                "roas_30d": parse_opt(r, 'ROAS - 30 Day', parse_money),
             })
     print(f"  Found {len(all_records)} total rows")
     if not all_records:
@@ -74,13 +85,15 @@ def run_walmart_connect_ingestion():
     cur.execute(f"DELETE FROM MONARCH_RAW.ADS.WALMART_CONNECT_RAW WHERE ad_date BETWEEN '{min_date}' AND '{max_date}'")
     conn.commit()
     insert_sql = """INSERT INTO MONARCH_RAW.ADS.WALMART_CONNECT_RAW
-(ad_date,impressions,clicks,spend,ctr,units_sold_14d,sales_revenue_14d,ntb_sales_14d,roas_14d,instore_sales_14d,conversion_rate_14d,detail_page_views)
-VALUES (%(ad_date)s,%(impressions)s,%(clicks)s,%(spend)s,%(ctr)s,%(units_sold_14d)s,%(sales_revenue_14d)s,%(ntb_sales_14d)s,%(roas_14d)s,%(instore_sales_14d)s,%(conversion_rate_14d)s,%(detail_page_views)s)"""
+(ad_date,impressions,clicks,spend,ctr,units_sold_14d,sales_revenue_14d,ntb_sales_14d,roas_14d,instore_sales_14d,conversion_rate_14d,detail_page_views,
+orders_14d,orders_30d,sales_revenue_30d,units_sold_30d,ntb_sales_30d,roas_30d)
+VALUES (%(ad_date)s,%(impressions)s,%(clicks)s,%(spend)s,%(ctr)s,%(units_sold_14d)s,%(sales_revenue_14d)s,%(ntb_sales_14d)s,%(roas_14d)s,%(instore_sales_14d)s,%(conversion_rate_14d)s,%(detail_page_views)s,
+%(orders_14d)s,%(orders_30d)s,%(sales_revenue_30d)s,%(units_sold_30d)s,%(ntb_sales_30d)s,%(roas_30d)s)"""
     cur.executemany(insert_sql, all_records)
     conn.commit()
-    cur.execute(f"SELECT COUNT(*), SUM(spend), SUM(sales_revenue_14d) FROM MONARCH_RAW.ADS.WALMART_CONNECT_RAW WHERE ad_date BETWEEN '{min_date}' AND '{max_date}'")
+    cur.execute(f"SELECT COUNT(*), SUM(spend), SUM(sales_revenue_14d), SUM(sales_revenue_30d) FROM MONARCH_RAW.ADS.WALMART_CONNECT_RAW WHERE ad_date BETWEEN '{min_date}' AND '{max_date}'")
     row = cur.fetchone()
-    print(f"  ✅ {row[0]:,} rows loaded, ${row[1]:,.2f} spend, ${row[2]:,.2f} revenue")
+    print(f"  ✅ {row[0]:,} rows loaded, ${row[1]:,.2f} spend, ${row[2]:,.2f} revenue (14d), ${row[3] or 0:,.2f} revenue (30d, 2026+)")
     cur.close(); conn.close()
     print("✅ Walmart Connect ingestion complete!")
 
