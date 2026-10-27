@@ -1,4 +1,4 @@
-import requests, json, os, warnings
+import requests, json, os, time, warnings
 import snowflake.connector
 from datetime import date, timedelta
 from dotenv import load_dotenv
@@ -26,6 +26,30 @@ def _get_snowflake_connection(schema=None):
         params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
     return snowflake.connector.connect(**params)
 
+def _get_page(url, params):
+    """Fetch one insights page, retrying 5xx/network errors with backoff.
+    Returns (body, None) on success or (None, "status: Meta error.message") on failure.
+    Never formats the request or exception text: both carry the URL and access token."""
+    error = None
+    for attempt in range(5):
+        if attempt:
+            time.sleep(10 * 2 ** (attempt - 1))  # 10, 20, 40, 80s
+        try:
+            r = requests.get(url, params=params, timeout=120)
+        except requests.RequestException as e:
+            error = f"no response ({type(e).__name__})"
+            continue
+        try:
+            body = r.json()
+        except ValueError:
+            body = {}
+        if r.ok and "error" not in body:
+            return body, None
+        error = f"{r.status_code}: {body.get('error', {}).get('message', 'no error message')}"
+        if r.status_code < 500:
+            break  # 4xx won't succeed on retry
+    return None, error
+
 def run_meta_ingestion(start_date=None, end_date=None):
     token = os.environ["META_ACCESS_TOKEN"]
     account_id = os.environ["META_AD_ACCOUNT_ID"]
@@ -41,12 +65,12 @@ def run_meta_ingestion(start_date=None, end_date=None):
 
     print(f"Pulling Meta Ads {start_date} to {end_date}\n")
 
-    # Pull all insights at ad level
+    # Ad level with four attribution windows is too heavy for one 31-day request (Meta 500s),
+    # so pull 7-day chunks. A chunk is only replaced in Snowflake once all its pages arrived.
     url = f"https://graph.facebook.com/v25.0/act_{account_id}/insights"
     params = {
         "access_token": token,
         "level": "ad",
-        "time_range": json.dumps({"since": start_date, "until": end_date}),
         "fields": (
             "date_start,date_stop,"
             "ad_id,ad_name,"
@@ -68,53 +92,59 @@ def run_meta_ingestion(start_date=None, end_date=None):
         "time_increment": 1,
     }
 
-    records = []
-    next_url = url
-    while next_url:
-        r = requests.get(next_url, params=params if next_url == url else {}, timeout=30)
-        r.raise_for_status()
-        body = r.json()
-        if "error" in body:
-            print(f"Meta API error: {body['error']}")
-            break
-        records.extend(body.get("data", []))
-        next_url = body.get("paging", {}).get("next")
-        params = {}
-
-    print(f"Fetched {len(records)} ad records — writing to file...")
-
-    # Write all records to file first
-    with open("/tmp/meta_ads.json", "w") as f:
-        for record in records:
-            record_id = f"{record.get('ad_id')}_{record.get('date_start')}"
-            f.write(json.dumps({
-                "ID": record_id,
-                "INGESTION_DATE": record.get("date_start"),
-                "SOURCE": "meta_ads",
-                "RAW_DATA": json.dumps(record),
-            }) + "\n")
-
-    # Bulk load into Snowflake
-    print("Uploading to Snowflake...")
     cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
-    cur.execute("PUT file:///tmp/meta_ads.json @monarch_stage AUTO_COMPRESS=TRUE OVERWRITE=TRUE")
+    total, failed = 0, []
+    chunk_start, last = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    while chunk_start <= last:
+        chunk_end = min(chunk_start + timedelta(days=6), last)
+        page_params = {**params, "time_range": json.dumps({"since": str(chunk_start), "until": str(chunk_end)})}
+        records, next_url, error = [], url, None
+        while next_url:
+            body, error = _get_page(next_url, page_params)
+            if error:
+                break
+            records.extend(body.get("data", []))
+            next_url = body.get("paging", {}).get("next")
+            page_params = None  # paging.next already carries every parameter
 
-    cur.execute(f"DELETE FROM META_ADS_RAW WHERE ingestion_date BETWEEN '{start_date}' AND '{end_date}'")
-    cur.execute("""
-        COPY INTO META_ADS_RAW (id, ingestion_date, source, raw_data)
-        FROM (
-            SELECT
-                $1:ID::STRING,
-                $1:INGESTION_DATE::DATE,
-                $1:SOURCE::STRING,
-                PARSE_JSON($1:RAW_DATA::STRING)
-            FROM @monarch_stage/meta_ads.json.gz
-        )
-        FILE_FORMAT = (TYPE = 'JSON')
-        ON_ERROR = 'CONTINUE'
-    """)
+        if error:
+            failed.append(f"{chunk_start}..{chunk_end}")
+            print(f"  ⚠️  WARNING: Meta {chunk_start}..{chunk_end} skipped, existing rows kept — {error}")
+        else:
+            with open("/tmp/meta_ads.json", "w") as f:
+                for record in records:
+                    f.write(json.dumps({
+                        "ID": f"{record.get('ad_id')}_{record.get('date_start')}",
+                        "INGESTION_DATE": record.get("date_start"),
+                        "SOURCE": "meta_ads",
+                        "RAW_DATA": json.dumps(record),
+                    }) + "\n")
+            if records:
+                cur.execute("PUT file:///tmp/meta_ads.json @monarch_stage AUTO_COMPRESS=TRUE OVERWRITE=TRUE")
+            cur.execute("BEGIN")
+            cur.execute(f"DELETE FROM META_ADS_RAW WHERE ingestion_date BETWEEN '{chunk_start}' AND '{chunk_end}'")
+            if records:
+                cur.execute("""
+                    COPY INTO META_ADS_RAW (id, ingestion_date, source, raw_data)
+                    FROM (
+                        SELECT
+                            $1:ID::STRING,
+                            $1:INGESTION_DATE::DATE,
+                            $1:SOURCE::STRING,
+                            PARSE_JSON($1:RAW_DATA::STRING)
+                        FROM @monarch_stage/meta_ads.json.gz
+                    )
+                    FILE_FORMAT = (TYPE = 'JSON')
+                    ON_ERROR = 'CONTINUE'
+                """)
+            cur.execute("COMMIT")
+            total += len(records)
+            print(f"  ✅ {chunk_start}..{chunk_end}: {len(records)} ad records")
+        chunk_start = chunk_end + timedelta(days=1)
 
-    print(f"✅ {len(records)} Meta ad records written to Snowflake")
+    print(f"✅ {total} Meta ad records written to Snowflake")
+    if failed:
+        print(f"⚠️  WARNING: {len(failed)} Meta chunk(s) skipped, existing rows kept: {', '.join(failed)}")
     cur.close()
     conn.close()
 
