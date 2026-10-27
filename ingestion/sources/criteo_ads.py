@@ -29,14 +29,19 @@ def run_criteo_ingestion(start_date=None, end_date=None):
             "reportType": "summary", "startDate": start_date, "endDate": end_date,
             "ids": campaigns, "format": "json"}}})
     report_id = r.json()["data"]["id"]
+    status = None
     for _ in range(20):
         r = requests.get(f"https://api.criteo.com/2026-01/retail-media/reports/{report_id}/status", headers=headers)
         status = r.json().get("data", {}).get("attributes", {}).get("status")
         if status == "success": break
-        elif status == "failed": print("  Report failed"); return
+        elif status == "failed": print("  Report failed:", r.text[:300]); return
         time.sleep(4)
+    if status != "success":
+        print(f"  Report not ready after polling (status={status})"); return
     r = requests.get(f"https://api.criteo.com/2026-01/retail-media/reports/{report_id}/output", headers=headers)
     rows_raw = r.json()
+    if not isinstance(rows_raw, list):
+        print("  Unexpected output response:", str(rows_raw)[:300]); return
     if not rows_raw: print("  No data"); return
     rows = [list(rec.values()) for rec in rows_raw]
     columns = list(rows_raw[0].keys())
