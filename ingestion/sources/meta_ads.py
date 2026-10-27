@@ -42,7 +42,7 @@ def run_meta_ingestion(start_date=None, end_date=None):
     print(f"Pulling Meta Ads {start_date} to {end_date}\n")
 
     # Pull all insights at ad level
-    url = f"https://graph.facebook.com/v19.0/act_{account_id}/insights"
+    url = f"https://graph.facebook.com/v25.0/act_{account_id}/insights"
     params = {
         "access_token": token,
         "level": "ad",
@@ -62,6 +62,8 @@ def run_meta_ingestion(start_date=None, end_date=None):
             "video_p75_watched_actions,"
             "video_p100_watched_actions"
         ),
+        # Per-window breakdowns land alongside the default "value" (7d click + 1d view)
+        "action_attribution_windows": json.dumps(["1d_click", "7d_click", "28d_click", "1d_view"]),
         "limit": 500,
         "time_increment": 1,
     }

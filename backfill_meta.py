@@ -1,4 +1,5 @@
 import requests, json, os, warnings, time
+from datetime import date, timedelta
 import snowflake.connector
 from dotenv import load_dotenv
 from cryptography.hazmat.primitives import serialization
@@ -24,19 +25,25 @@ def _get_snowflake_connection(schema=None):
         params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
     return snowflake.connector.connect(**params)
 
-token = "EAAST61QHyfQBRZAqRdoxcrXD0K2x7qZC2ZB4MD7arMJK9xB4wmhwPO0XtFMxqb47zWIYzdEuNlmg3IcWNgnEZApZBIdOeVZBGlx4JrDyqXl9y9NCPE25xKZCxvhX74n2u3bPHaHXotHM98i9MIXaLrTYRXwI3XOm2JkBHMoLisWQsXrHZBT7Xvh6Ub7MCnS58ZAdOkAZDZD"
-account_id = "10152407382101579"
+token = os.environ["META_ACCESS_TOKEN"]
+account_id = os.environ["META_AD_ACCOUNT_ID"]
 conn = _get_snowflake_connection(schema="ADS")
 cur = conn.cursor()
 print("Connected to Snowflake")
-months = [("2025-02-01","2025-02-28"),("2025-03-01","2025-03-31"),("2025-04-01","2025-04-30"),("2025-05-01","2025-05-31"),("2025-06-01","2025-06-30"),("2025-07-01","2025-07-31"),("2025-08-01","2025-08-31"),("2025-09-01","2025-09-30"),("2025-10-01","2025-10-31"),("2025-11-01","2025-11-30"),("2025-12-01","2025-12-31"),("2026-01-01","2026-01-31"),("2026-02-01","2026-02-28"),("2026-03-01","2026-03-31"),("2026-04-01","2026-04-20")]
+# Full history: month by month from 2025-01-01 through today.
+_start, _end = date(2025, 1, 1), date.today()
+months = []
+while _start <= _end:
+    _next = (_start.replace(day=1) + timedelta(days=32)).replace(day=1)
+    months.append((str(_start), str(min(_next - timedelta(days=1), _end))))
+    _start = _next
 cur.execute("CREATE TEMP STAGE IF NOT EXISTS monarch_stage FILE_FORMAT = (TYPE = 'JSON')")
 total = 0
 for month_start, month_end in months:
     print(f"\nPulling {month_start} to {month_end}...")
-    params = {"access_token": token,"level": "ad","time_range": json.dumps({"since": month_start, "until": month_end}),"fields": "date_start,date_stop,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,reach,frequency,cpc,cpm,ctr,actions,action_values,cost_per_action_type","limit": 500,"time_increment": 1}
+    params = {"access_token": token,"level": "ad","time_range": json.dumps({"since": month_start, "until": month_end}),"fields": "date_start,date_stop,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,reach,frequency,cpc,cpm,ctr,actions,action_values,cost_per_action_type","action_attribution_windows": json.dumps(["1d_click","7d_click","28d_click","1d_view"]),"limit": 500,"time_increment": 1}
     records = []
-    next_url = f"https://graph.facebook.com/v19.0/act_{account_id}/insights"
+    next_url = f"https://graph.facebook.com/v25.0/act_{account_id}/insights"
     first = True
     while next_url:
         for attempt in range(3):
