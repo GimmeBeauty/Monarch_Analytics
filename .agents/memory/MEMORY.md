@@ -17,3 +17,4 @@
 - [Monarch compare-mode toggle disconnected state](monarch-compare-mode-toggle.md) — a UI toggle writing to component-local state instead of shared context looks interactive but never reaches the data layer; check the state's owner, not just its UI.
 - [Item Performance product category mapping](item-performance-category-mapping.md) — categories come only from a user-supplied mastersheet; unmapped SKUs are hidden, never bucketed as "Other".
 - [Team role changes](team-role-changes.md) — owner can promote/demote existing members; authorization changes must apply to sessions already signed in.
+- [Dependency security upgrades](dependency-security-upgrades.md) — clean audits and bundles do not replace integration smoke tests or exported-file round trips after major-version fixes.

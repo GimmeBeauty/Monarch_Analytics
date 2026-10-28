@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import * as XLSX from "xlsx";
+import { createRetailerWorkbook } from "@/lib/retailer-workbook";
+import { toast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
@@ -620,37 +621,17 @@ function downloadCSV(skus: SkuRow[], filename: string) {
   a.click();
 }
 
-function downloadExcel(skus: SkuRow[], filename: string) {
-  const wb = XLSX.utils.book_new();
-  const retailerIds = [...new Set(skus.flatMap(s => s.byRetailer.map(r => r.entityId)))];
-  const sheetOrder  = RETAILER_OPTIONS.map(o => o.value).filter(id => retailerIds.includes(id));
-
-  for (const entityId of sheetOrder) {
-    const opt   = RETAILER_OPTIONS.find(o => o.value === entityId);
-    const label = opt?.label ?? String(entityId);
-    const rSkus = skus.filter(s => s.byRetailer.some(r => r.entityId === entityId));
-    const headers = [
-      "Product Name", "SKU", "UPC",
-      `${label} Revenue`, `${label} Units`, `${label} DPSW`, `${label} Item #`,
-      "Total Revenue (All)", "Total Units (All)", "Avg DPSW (All)", "Data Sources",
-    ];
-    const rows = rSkus.map(s => {
-      const rb = s.byRetailer.find(r => r.entityId === entityId);
-      return [
-        s.productName, s.sku, s.upc,
-        rb?.revenue ?? 0, rb?.units ?? 0,
-        rb?.dpsw != null ? +rb.dpsw.toFixed(4) : "",
-        rb?.itemNumber ?? "",
-        s.totalRevenue, s.totalUnits,
-        +s.avgDpsw.toFixed(4),
-        s.dataSources.join("+"),
-      ];
-    });
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    XLSX.utils.book_append_sheet(wb, ws, label.substring(0, 31));
-  }
-
-  XLSX.writeFile(wb, filename);
+async function downloadExcel(skus: SkuRow[], filename: string) {
+  const wb = createRetailerWorkbook(skus, RETAILER_OPTIONS);
+  const buffer = await wb.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([new Uint8Array(buffer)], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -939,7 +920,13 @@ export default function ItemPerformance() {
                 const opt = RETAILER_OPTIONS.find(o => o.value === retailers[0]);
                 downloadCSV(data.skus, `item-performance-${opt?.label ?? "retailer"}-${ts}.csv`);
               } else {
-                downloadExcel(data.skus, `item-performance-${ts}.xlsx`);
+                void downloadExcel(data.skus, `item-performance-${ts}.xlsx`).catch(() => {
+                  toast({
+                    title: "Excel export failed",
+                    description: "The workbook could not be created. Please try again.",
+                    variant: "destructive",
+                  });
+                });
               }
             }}
             className="ml-auto flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FFBC80]/40 dark:border-[#9BDBF3]/40 bg-white dark:bg-[#FFFFFF] text-sm font-medium text-[#3A3A3A]/70 dark:text-[#003349]/60 hover:border-[#FFBC80]/70 dark:hover:border-[#9BDBF3]/70 hover:text-[#3A3A3A] transition-colors"
