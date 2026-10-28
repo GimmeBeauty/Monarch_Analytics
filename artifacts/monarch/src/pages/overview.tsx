@@ -294,7 +294,7 @@ export default function Overview() {
           revenue: d.revenue,
           spend:   d.adSpend,
           mer:     d.adSpend > 0 ? d.revenue / d.adSpend : 0,
-          roas:    d.spend > 0 && d.adRevenue > 0 ? d.adRevenue / d.spend : 0,
+          roas:    d.adSpend > 0 ? d.adRevenue / d.adSpend : 0,
         }));
 
     // ── Channel Breakdown ─────────────────────────────────────────────────────
