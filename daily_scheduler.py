@@ -252,6 +252,18 @@ GROUP BY ad_date""")
     conn.close()
     print("  ✅ Ad summaries done")
 
+def rebuild_tiktok_ad_summary():
+    # tiktok_ads DAILY_AD_SUMMARY rows — a failure here must never stop the daily job.
+    print("\n[6b1/6] Rebuilding TikTok ad summary...")
+    try:
+        from ingestion.sources.tiktok_ads import rebuild_tiktok_summary
+        conn = get_connection(schema="ADS")
+        # Delete and insert both start here: the same 31 days meta/google re-aggregate.
+        rebuild_tiktok_summary(conn.cursor(), (TODAY - timedelta(days=31)).isoformat())
+        conn.close()
+    except Exception as e:
+        print(f"  ⚠️  WARNING: TikTok ad summary not refreshed (previous rows kept, daily job continues): {type(e).__name__}: {e}")
+
 def rebuild_attribution_windows():
     # Feeds only the Ad Attribution window toggle — a failure here must never stop the daily job.
     print("\n[6b2/6] Rebuilding attribution windows...")
@@ -328,6 +340,7 @@ if __name__ == "__main__":
     run_amazon()
     run_tiktok()  # before rebuild_ad_summaries()
     rebuild_ad_summaries()  # before rebuild_summaries(): MONARCH_DAILY_SUMMARY reads DAILY_AD_SUMMARY
+    rebuild_tiktok_ad_summary()  # after run_tiktok(), before rebuild_summaries()
     rebuild_attribution_windows()  # after rebuild_ad_summaries(): window rows follow its summary dates
     rebuild_summaries()
     rebuild_shopify_products()

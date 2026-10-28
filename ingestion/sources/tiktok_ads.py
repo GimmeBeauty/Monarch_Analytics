@@ -147,8 +147,60 @@ def run_tiktok_ingestion(start_date=None, end_date=None):
     cur.close()
     conn.close()
 
+def rebuild_tiktok_summary(cur, since):
+    """Replace every tiktok_ads DAILY_AD_SUMMARY row from `since` on with figures from both raw tables.
+    The delete covers the whole span, so a day that no longer has spend or orders loses its row.
+      spend            = standard spend + GMV Max cost (not net_cost)
+      conversions      = GMV Max orders only (standard `conversion` counts optimization events)
+      conversion_value = GMV Max gross_revenue (the standard report has no revenue)
+    GMV Max returns a zero-filled campaign x day grid, so only days with spend or orders get a row.
+    Impressions and clicks come only from the standard report, so ctr/cpc/cpm use standard spend."""
+    cur.execute("BEGIN")
+    try:
+        inserted = _replace_summary_rows(cur, since)
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+    cur.execute("COMMIT")
+    print(f"  ✅ tiktok_ads summary rows from {since}: {inserted}")
+
+def _replace_summary_rows(cur, since):
+    cur.execute(f"DELETE FROM MONARCH_RAW.ADS.DAILY_AD_SUMMARY WHERE channel='tiktok_ads' AND summary_date >= '{since}'")
+    cur.execute(f"""INSERT INTO MONARCH_RAW.ADS.DAILY_AD_SUMMARY (summary_date,channel,spend,impressions,clicks,conversions,conversion_value,ctr,cpc,cpm,roas)
+WITH std AS (
+    SELECT ingestion_date,
+           SUM(raw_data:metrics:spend::FLOAT)        AS spend,
+           SUM(raw_data:metrics:impressions::NUMBER) AS impressions,
+           SUM(raw_data:metrics:clicks::NUMBER)      AS clicks
+    FROM MONARCH_RAW.ADS.TIKTOK_ADS_RAW WHERE ingestion_date >= '{since}' GROUP BY ingestion_date
+), gmv AS (
+    SELECT ingestion_date,
+           SUM(raw_data:metrics:cost::FLOAT)          AS cost,
+           SUM(raw_data:metrics:orders::FLOAT)        AS orders,
+           SUM(raw_data:metrics:gross_revenue::FLOAT) AS revenue
+    FROM MONARCH_RAW.ADS.TIKTOK_GMV_MAX_RAW WHERE ingestion_date >= '{since}' GROUP BY ingestion_date
+), day AS (
+    SELECT COALESCE(std.ingestion_date, gmv.ingestion_date) AS d,
+           COALESCE(std.spend, 0) AS std_spend, COALESCE(std.impressions, 0) AS impressions, COALESCE(std.clicks, 0) AS clicks,
+           COALESCE(std.spend, 0) + COALESCE(gmv.cost, 0) AS spend,
+           COALESCE(gmv.orders, 0) AS orders, COALESCE(gmv.revenue, 0) AS revenue
+    FROM std FULL OUTER JOIN gmv ON std.ingestion_date = gmv.ingestion_date
+)
+SELECT d,'tiktok_ads',spend,impressions,clicks,orders,revenue,
+CASE WHEN impressions>0 THEN clicks/impressions ELSE 0 END,
+CASE WHEN clicks>0 THEN std_spend/clicks ELSE 0 END,
+CASE WHEN impressions>0 THEN std_spend/impressions*1000 ELSE 0 END,
+CASE WHEN spend>0 THEN revenue/spend ELSE 0 END
+FROM day WHERE spend > 0 OR orders > 0""")
+    return cur.rowcount
+
 if __name__ == "__main__":
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 3 and sys.argv[1] == "summary":
+        # python3 -m ingestion.sources.tiktok_ads summary 2025-01-01
+        conn = get_connection(schema="ADS")
+        rebuild_tiktok_summary(conn.cursor(), sys.argv[2])
+        conn.close()
+    elif len(sys.argv) == 3:
         run_tiktok_ingestion(start_date=sys.argv[1], end_date=sys.argv[2])
     else:
         run_tiktok_ingestion()

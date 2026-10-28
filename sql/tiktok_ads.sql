@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS MONARCH_RAW.ADS.TIKTOK_GMV_MAX_RAW (
 );
 
 -- One row per day with each report's figures in its own named column, so units never mix.
--- The tiktok_ads row in DAILY_AD_SUMMARY is built from this view:
+-- Not created (MONARCH_ROLE lacks CREATE VIEW on ADS): rebuild_tiktok_summary() in
+-- ingestion/sources/tiktok_ads.py uses the same columns directly. The tiktok_ads row in DAILY_AD_SUMMARY:
 --   spend            = std_spend_usd + gmv_cost_usd
 --   conversions      = gmv_orders            (std_conversion_events stays here only — it counts the
 --                                             campaign's optimization event, not necessarily purchases)
