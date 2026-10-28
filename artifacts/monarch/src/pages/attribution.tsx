@@ -1444,8 +1444,8 @@ export default function Attribution() {
     [selectedChannelIds],
   );
 
-  // Spec default for the page is 14; "Platform default" reproduces the pre-toggle numbers.
-  const [attrWindow, setAttrWindow] = useState<AttrWindow>("14");
+  // Opens on "Platform default", which reproduces the pre-toggle numbers.
+  const [attrWindow, setAttrWindow] = useState<AttrWindow>("default");
 
   // ─── Fetch attribution summary (channel totals) ───────────────────────────
 

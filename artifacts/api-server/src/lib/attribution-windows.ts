@@ -49,9 +49,11 @@ const KEY_LABELS: Record<string, string> = {
   "1d": "1d", "7d": "7d", "14d": "14d", "30d": "30d",
 };
 
-// Channels whose platform window we haven't verified read the same label in every mode.
+// Channels whose platform window we haven't verified read the same label in every mode;
+// "not verified" is said only in the tooltip.
 const UNVERIFIED_CHANNELS = new Set(["tiktok_ads", "amazon_ads"]);
-const UNVERIFIED_LABEL = "Default (unverified)";
+const UNVERIFIED_LABEL = "Default";
+const UNVERIFIED_NOTE = "Attribution window not verified.";
 
 /** Chip text names the window, then the conversion unit. */
 const withUnit = (text: string, unit: string) => `${text} · ${unit}`;
@@ -142,6 +144,7 @@ export function describeWindow(
       ? "Platform default counts units sold; the 14 and 30 windows count orders."
       : d.channel === "google_ads"
       ? "Google's default conversions include begin checkout; the 7/14/30 windows count purchases only."
+      : unverified ? UNVERIFIED_NOTE
       : null;
     return { key: "default", label: defaultLabel, days: d.defaultDays, unit: d.defaultUnit, exact: false, chip, note };
   }
@@ -168,7 +171,8 @@ export function describeWindow(
   const text = unverified ? UNVERIFIED_LABEL : d.defaultDays == null ? "platform default" : `${d.defaultLabel} (fixed)`;
   const chip = exact ? null : withUnit(text, d.defaultUnit);
   return { key: "default", label: defaultLabel, days: d.defaultDays, unit: d.defaultUnit, exact, chip,
-    note: d.defaultDays == null ? "No per-window data for this channel; showing its platform default." : null };
+    note: unverified ? `${UNVERIFIED_NOTE} No per-window data for this channel; showing its platform default.`
+      : d.defaultDays == null ? "No per-window data for this channel; showing its platform default." : null };
 }
 
 /** Mixed when the channels' windows differ. Units are not part of it; the page notes them separately. */

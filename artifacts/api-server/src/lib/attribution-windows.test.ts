@@ -10,8 +10,8 @@ const WSEARCH = def("walmart_connect", "14d", 14, "units", "14d", "14d", "30d");
 const ROUNDEL = def("roundel_target", "14d", 14, "orders", null, null, null);
 const CRITEO  = def("criteo_ads", "30d click", 30, "orders", null, null, null);
 const WDISP   = def("walmart_display", "14d", 14, "transactions", "14d", "14d", "30d");
-const TIKTOK  = def("tiktok_ads", "Default (unverified)", null, "orders", null, null, null);
-const AMAZON  = def("amazon_ads", "Amazon default", null, "conversions", null, null, null);
+const TIKTOK  = def("tiktok_ads", "Default", null, "orders", null, null, null);
+const AMAZON  = def("amazon_ads", "Default", null, "conversions", null, null, null);
 
 describe("parseWindowParam", () => {
   it("treats a missing parameter as default", () => {
@@ -63,11 +63,15 @@ describe("describeWindow", () => {
     expect(describeWindow(CRITEO, "30").exact).toBe(true);
     expect(describeWindow(CRITEO, "7").chip).toBe("30d click (fixed) · orders");
   });
-  it("labels TikTok and Amazon Default (unverified) in every mode", () => {
+  it("labels TikTok and Amazon Default in every mode, saying not verified only in the tooltip", () => {
     for (const w of ["default", "7", "14", "30"] as const) {
-      expect(describeWindow(TIKTOK, w)).toMatchObject({ label: "Default (unverified)", chip: "Default (unverified) · orders" });
-      expect(describeWindow(AMAZON, w)).toMatchObject({ label: "Default (unverified)", chip: "Default (unverified) · conversions" });
+      expect(describeWindow(TIKTOK, w)).toMatchObject({ label: "Default", chip: "Default · orders" });
+      expect(describeWindow(AMAZON, w)).toMatchObject({ label: "Default", chip: "Default · conversions" });
+      expect(describeWindow(TIKTOK, w).note).toMatch(/^Attribution window not verified\./);
+      expect(describeWindow(AMAZON, w).note).toMatch(/^Attribution window not verified\./);
     }
+    // Even if the stored label is older, users see "Default".
+    expect(describeWindow(def("amazon_ads", "Amazon default", null, "conversions", null, null, null), "default").chip).toBe("Default · conversions");
   });
 });
 

@@ -40,7 +40,7 @@ INSERT INTO MONARCH_RAW.ADS.AD_ATTRIBUTION_DEFAULTS VALUES
   ('roundel_target',   '14d',                             14,   'orders',       NULL,       NULL,       NULL,        'Fixed 14-day window'),
   ('criteo_ads',       '30d click',                       30,   'orders',       NULL,       NULL,       NULL,        'Fixed 30-day click window'),
   ('pinterest_ads',    'Pinterest default',               NULL, 'conversions',  NULL,       NULL,       NULL,        'No per-window data'),
-  ('tiktok_ads',       'Default (unverified)',            NULL, 'orders',       NULL,       NULL,       NULL,        'GMV Max orders; attribution window not verified'),
-  ('amazon_ads',       'Amazon default',                  NULL, 'conversions',  NULL,       NULL,       NULL,        'No per-window data'),
+  ('tiktok_ads',       'Default',                         NULL, 'orders',       NULL,       NULL,       NULL,        'GMV Max orders; attribution window not verified'),
+  ('amazon_ads',       'Default',                         NULL, 'conversions',  NULL,       NULL,       NULL,        'No per-window data'),
   ('ctv_programmatic', 'Partner default',                 NULL, 'conversions',  NULL,       NULL,       NULL,        'No per-window data'),
   ('display_ads',      'Partner default',                 NULL, 'conversions',  NULL,       NULL,       NULL,        'No per-window data');
