@@ -130,6 +130,16 @@ def run_pinterest():
     except Exception as e:
         print(f"  ❌ Pinterest error: {e}")
 
+def run_tiktok():
+    # Raw tables only (standard + GMV Max). A failure here must never stop the daily job.
+    print("\n[5f/6] TikTok Ads...")
+    try:
+        from ingestion.sources.tiktok_ads import run_tiktok_ingestion
+        run_tiktok_ingestion(start_date=AD_REPULL_START.isoformat(), end_date=TODAY.isoformat())
+        print("  ✅ TikTok done")
+    except Exception as e:
+        print(f"  ⚠️  WARNING: TikTok Ads not refreshed (existing rows kept, daily job continues): {type(e).__name__}: {e}")
+
 def run_target_inventory():
     print("\n[5b/5] Target Inventory...")
     try:
@@ -316,6 +326,7 @@ if __name__ == "__main__":
     run_roundel()
     run_pinterest()
     run_amazon()
+    run_tiktok()  # before rebuild_ad_summaries()
     rebuild_ad_summaries()  # before rebuild_summaries(): MONARCH_DAILY_SUMMARY reads DAILY_AD_SUMMARY
     rebuild_attribution_windows()  # after rebuild_ad_summaries(): window rows follow its summary dates
     rebuild_summaries()
