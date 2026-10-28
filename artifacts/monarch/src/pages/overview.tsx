@@ -292,7 +292,7 @@ export default function Overview() {
           date:    d.date,
           label:   fmtAxisDate(d.date),
           revenue: d.revenue,
-          spend:   d.spend,
+          spend:   d.adSpend,
           mer:     d.adSpend > 0 ? d.revenue / d.adSpend : 0,
           roas:    d.spend > 0 && d.adRevenue > 0 ? d.adRevenue / d.spend : 0,
         }));

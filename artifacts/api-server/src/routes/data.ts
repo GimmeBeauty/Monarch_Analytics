@@ -616,6 +616,7 @@ router.get("/overview", authenticate, async (req, res) => {
   const isWalmartSelected = storeIds.length === 0 || storeIds.includes("walmart");
   const isUltaSelected    = storeIds.length === 0 || storeIds.includes("ulta");
   const isAmazonSelected  = storeIds.length === 0 || storeIds.includes("amazon");
+  const isTikTokShopSelected = storeIds.length === 0 || storeIds.includes("tiktok_shop");
   const isWholesaleMode   = isWholesaleRaw === "true";
 
   const activeChannels: string[] = [];
@@ -624,6 +625,7 @@ router.get("/overview", authenticate, async (req, res) => {
   if (includesTarget)                    activeChannels.push("roundel_target");
   if (isWalmartSelected)                 activeChannels.push("walmart_connect", "walmart_display");
   if (isAmazonSelected)                  activeChannels.push("amazon_ads");
+  if (isTikTokShopSelected)              activeChannels.push("tiktok_ads");
   if (includesTarget || isAmazonSelected) activeChannels.push("ctv_programmatic", "display_ads");
   const channelFilter = activeChannels.map(c => `'${c}'`).join(", ");
 
