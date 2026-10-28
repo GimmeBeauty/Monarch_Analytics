@@ -145,6 +145,7 @@ const CHANNEL_META: Record<string, { channelId: string; channelLabel: string; co
   meta_ads:      { channelId: "meta-ads",      channelLabel: "Meta Ads",      color: "#1877F2", channelFamily: "core", storeIds: ["shopify"] },
   google_ads:    { channelId: "google-ads",    channelLabel: "Google Ads",    color: "#34A853", channelFamily: "core", storeIds: ["shopify"] },
   pinterest_ads: { channelId: "pinterest-ads", channelLabel: "Pinterest Ads", color: "#E60023", channelFamily: "core", storeIds: ["shopify"] },
+  tiktok_ads:    { channelId: "tiktok-ads",    channelLabel: "TikTok Ads",    color: "#69C9D0", channelFamily: "core", storeIds: ["tiktok_shop"] },
   criteo_ads:     { channelId: "criteo-ads",     channelLabel: "Criteo (Ulta)",    color: "#FF6900", channelFamily: "rmn",  storeIds: ["ulta"] },
   roundel_target: { channelId: "roundel-target", channelLabel: "Roundel (Target)", color: "#CC0000", channelFamily: "rmn",  storeIds: ["target"] },
   walmart_connect: { channelId: "walmart-connect", channelLabel: "Walmart Search", color: "#0071CE", channelFamily: "rmn", storeIds: ["walmart"] },

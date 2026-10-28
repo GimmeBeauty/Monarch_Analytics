@@ -1,6 +1,6 @@
 // ─── Store Definitions ────────────────────────────────────────────────────────
 
-export type StoreGroup = "dtc" | "marketplace" | "retail";
+export type StoreGroup = "dtc" | "marketplace" | "retail" | "social";
 
 export interface StoreDefinition {
   id: string;
@@ -86,12 +86,23 @@ export const STORES: StoreDefinition[] = [
     color: "#009A44",
     integrationIds: [],
   },
+  {
+    // Weight 0: TikTok Shop's sales already sit inside Shopify's orders, so it
+    // takes no share of the mock-data split across the other stores.
+    id: "tiktok_shop",
+    label: "TikTok Shop",
+    group: "social",
+    weight: 0,
+    color: "#FE2C55",
+    integrationIds: ["tiktok_shop", "tiktok_ads"],
+  },
 ];
 
 export const STORE_GROUPS: { id: StoreGroup; label: string }[] = [
   { id: "dtc",         label: "DTC"         },
   { id: "marketplace", label: "Marketplace" },
   { id: "retail",      label: "Retail"      },
+  { id: "social",      label: "TikTok Shop" },
 ];
 
 export function storeById(id: string): StoreDefinition | undefined {

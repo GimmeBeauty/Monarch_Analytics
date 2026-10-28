@@ -63,7 +63,7 @@ export const CHANNEL_STORE_MAPPINGS: ChannelMapping[] = [
   {
     channelId: "tiktok-ads",
     channelLabel: "TikTok Ads",
-    storeIds: ["shopify"],
+    storeIds: ["tiktok_shop"],
     dailySpendBaseline: 3100,
     baseRoas: 2.9,
     color: "#69C9D0",
