@@ -27,6 +27,53 @@ function fmtCurrency(v: number): string {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
+// ─── Attribution window toggle ────────────────────────────────────────────────
+// Mirrors /api/data/attribution?window=… (api-server/src/lib/attribution-windows.ts).
+
+type AttrWindow = "7" | "14" | "30" | "default";
+const ATTR_WINDOW_OPTIONS: Array<{ value: AttrWindow; label: string }> = [
+  { value: "7", label: "7" }, { value: "14", label: "14" }, { value: "30", label: "30" }, { value: "default", label: "Platform default" },
+];
+
+interface WindowUsed { key: string; label: string; days: number | null; unit: string; exact: boolean; chip: string | null; note: string | null; }
+
+/** Mixed when the selected channels' windows differ. Units are noted separately (see the units note). */
+function isMixedWindows(used: WindowUsed[], window: AttrWindow): boolean {
+  if (used.length <= 1) return false;
+  const windowOf = (u: WindowUsed) => window === "default" || u.days == null ? `label:${u.label}` : `days:${u.days}`;
+  return new Set(used.map(windowOf)).size > 1;
+}
+
+function AttributionWindowPill({ value, onChange }: { value: AttrWindow; onChange: (w: AttrWindow) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider">Attribution Window</span>
+      <div role="radiogroup" aria-label="Attribution window" className="inline-flex rounded-full border border-[#FFBC80]/30 dark:border-[#9BDBF3]/30 p-0.5">
+        {ATTR_WINDOW_OPTIONS.map(o => (
+          <button
+            key={o.value}
+            role="radio"
+            aria-checked={value === o.value}
+            onClick={() => onChange(o.value)}
+            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
+              value === o.value
+                ? "bg-[#FFBC80]/25 dark:bg-[#EFBAE1]/25 text-[#3A3A3A] dark:text-[#003349]"
+                : "text-[#3A3A3A]/50 dark:text-[#003349]/40 hover:text-[#3A3A3A]/80 dark:hover:text-[#003349]/70"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function windowTooltip(w: WindowUsed): string {
+  const head = w.key === "default" ? `Platform default: ${w.label}` : `Window: ${w.label}`;
+  return [`${head}. Conversions are counted as ${w.unit}.`, w.note].filter(Boolean).join(" ");
+}
+
 function fmtNumber(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
@@ -188,7 +235,7 @@ function ChannelSelector({ allChannels, selected, onToggle, onSelectAll, onClear
 
 // ─── Blended Metric Card ──────────────────────────────────────────────────────
 
-function BlendedMetricCard({ m }: { m: BlendedMetric }) {
+function BlendedMetricCard({ m }: { m: BlendedMetric & { badge?: string; badgeNote?: string } }) {
   const { theme } = useTheme();
   const isGood    = m.positiveIsUp ? m.change > 0 : m.change < 0;
   const isNeutral = m.change === 0;
@@ -205,6 +252,11 @@ function BlendedMetricCard({ m }: { m: BlendedMetric }) {
       <p className="flex items-center gap-1 text-[10px] font-semibold text-[#3A3A3A]/45 dark:text-[#003349]/35 uppercase tracking-wider mb-1.5">
         {m.label}
         <MetricTooltip content={m.description} />
+        {m.badge && (
+          <span title={m.badgeNote} className="ml-auto normal-case tracking-normal text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-700 dark:text-amber-700">
+            {m.badge}
+          </span>
+        )}
       </p>
       <p className="text-xl font-black tabular-nums text-[#3A3A3A] dark:text-[#003349] mb-2 leading-none">
         {m.formatted}
@@ -953,11 +1005,12 @@ interface ChannelRow {
   spend: number;
   revenue: number;
   roas: number;
-  conversions: number;
+  conversions: number | null;
   impressions: number;
   ctr: number;
   cpc: number;
   dataStatus?: "connected" | "stale" | "needs_reconnect";
+  windowUsed?: WindowUsed;
 }
 
 // ─── Expandable Channel Table ─────────────────────────────────────────────────
@@ -989,7 +1042,7 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
               <th className={thRCls}><span className="flex items-center justify-end gap-1">Spend <MetricTooltip content="Total ad spend across all campaigns for this channel in the selected period." /></span></th>
               <th className={thRCls}><span className="flex items-center justify-end gap-1">Revenue <MetricTooltip content="Total attributed revenue driven by this channel's advertising." /></span></th>
               <th className={thRCls}><span className="flex items-center justify-end gap-1">ROAS <MetricTooltip content="Return On Ad Spend — Revenue ÷ Spend. Higher is better; ≥3x is generally strong." /></span></th>
-              <th className={thRCls}><span className="flex items-center justify-end gap-1">Purchases <MetricTooltip content="Total purchase conversions attributed to this channel." /></span></th>
+              <th className={thRCls}><span className="flex items-center justify-end gap-1">Purchases <MetricTooltip content="Conversions attributed to this channel. The unit varies by channel (purchases, orders, transactions or units) — hover a value to see it." /></span></th>
               <th className={thRCls}><span className="flex items-center justify-end gap-1">Impressions <MetricTooltip content="Total number of times ads from this channel were shown to users." /></span></th>
               <th className={thRCls}><span className="flex items-center justify-end gap-1">CTR <MetricTooltip content="Click-Through Rate — Clicks ÷ Impressions. Measures how compelling the ad creative is." /></span></th>
               <th className={thRCls}><span className="flex items-center justify-end gap-1">CPC <MetricTooltip content="Cost Per Click — Spend ÷ Clicks. Lower means you're paying less for each visit." /></span></th>
@@ -1021,6 +1074,14 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
                         <span className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-[#FFBC80]/12 dark:bg-[#EFBAE1]/12 text-[#3A3A3A]/40 dark:text-[#003349]/30 uppercase tracking-wide">
                           {row.channelFamily}
                         </span>
+                        {row.windowUsed?.chip && (
+                          <span
+                            title={windowTooltip(row.windowUsed)}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-700 dark:text-sky-800 whitespace-nowrap cursor-help"
+                          >
+                            {row.windowUsed.chip}
+                          </span>
+                        )}
                         {row.dataStatus === "needs_reconnect" && (
                           <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/12 text-red-600 dark:text-red-700 uppercase tracking-wide">
                             <AlertTriangle size={9} /> Needs reconnect
@@ -1045,8 +1106,12 @@ function ChannelTable({ rows, start, end }: { rows: ChannelRow[]; start: string;
                         {row.roas.toFixed(2)}x
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap">
-                      {fmtNumber(row.conversions)}
+                    <td
+                      className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap"
+                      title={row.windowUsed ? windowTooltip(row.windowUsed) : undefined}
+                    >
+                      {row.conversions == null ? "—" : fmtNumber(row.conversions)}
+                      {row.windowUsed && <span className="ml-1 text-[9px] text-[#3A3A3A]/35 dark:text-[#003349]/30">{row.windowUsed.unit}</span>}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-[#3A3A3A]/65 dark:text-[#003349]/55 whitespace-nowrap">
                       {fmtNumber(row.impressions)}
@@ -1379,26 +1444,32 @@ export default function Attribution() {
     [selectedChannelIds],
   );
 
+  // Spec default for the page is 14; "Platform default" reproduces the pre-toggle numbers.
+  const [attrWindow, setAttrWindow] = useState<AttrWindow>("14");
+
   // ─── Fetch attribution summary (channel totals) ───────────────────────────
 
   interface AttrApiChannel {
     channelId: string; channelLabel: string; color: string; channelFamily: string; storeIds: string[];
-    spend: number; impressions: number; clicks: number; conversions: number; revenue: number;
-    dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number; revenue: number }>;
+    spend: number; impressions: number; clicks: number; conversions: number | null; revenue: number;
+    dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number | null; revenue: number }>;
     dataStatus?: "connected" | "stale" | "needs_reconnect";
+    windowUsed?: WindowUsed;
   }
   interface AttrApiResponse {
     channels: AttrApiChannel[];
     isEmpty: boolean;
     priorChannels?: Array<{ channelId: string; spend: number; revenue: number; impressions: number; clicks: number }>;
     hasPrior?: boolean;
+    requestedWindow?: AttrWindow;
+    mixedWindows?: boolean;
   }
 
   const { data: attrApiData, isLoading: attrLoading, error: attrError, refetch: refetchAttr, isRefetching: attrRefetching } = useQuery<AttrApiResponse>({
-    queryKey: ["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(","), dateRange.compareStart, dateRange.compareEnd],
+    queryKey: ["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(","), dateRange.compareStart, dateRange.compareEnd, attrWindow],
     queryFn: async () => {
       const res = await fetch(
-        `${API_BASE}/api/data/attribution?start=${dateRange.startDate}&end=${dateRange.endDate}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}`,
+        `${API_BASE}/api/data/attribution?start=${dateRange.startDate}&end=${dateRange.endDate}&priorStart=${dateRange.compareStart}&priorEnd=${dateRange.compareEnd}&window=${attrWindow}`,
         { credentials: "include" },
       );
       if (!res.ok) {
@@ -1407,6 +1478,12 @@ export default function Attribution() {
       }
       return res.json() as Promise<AttrApiResponse>;
     },
+    // Keep the page (and the pill) on screen while only the window changes; any other key change
+    // (dates, stores) shows the loading state as before.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && JSON.stringify(prevQuery.queryKey.slice(0, -1)) ===
+        JSON.stringify(["attribution-data", dateRange.startDate, dateRange.endDate, storeIds.join(","), dateRange.compareStart, dateRange.compareEnd])
+        ? prev : undefined,
     staleTime: 1000 * 60 * 15,
     retry: false,
     enabled: hasStoreSelection,
@@ -1528,7 +1605,7 @@ export default function Attribution() {
     return `$${v.toFixed(2)}`;
   }
 
-  const { blendedMetrics, channelRows, signals, funnels, advanced } = useMemo(() => {
+  const { blendedMetrics, unitsNote, channelRows, signals, funnels, advanced } = useMemo(() => {
     const raw = (attrApiData?.channels ?? [])
       .filter(c => filterChannelIds.includes(c.channelId));
 
@@ -1549,6 +1626,7 @@ export default function Attribution() {
         ctr,
         cpc,
         dataStatus:    c.dataStatus,
+        windowUsed:    c.windowUsed,
       };
     }).sort((a, b) => b.revenue - a.revenue);
 
@@ -1579,10 +1657,28 @@ export default function Attribution() {
     const pCpm  = prior.impressions > 0 ? (prior.spend / prior.impressions) * 1000 : 0;
     const pCpc  = prior.clicks > 0 ? prior.spend / prior.clicks : 0;
 
-    const blendedMetrics: BlendedMetric[] = [
+    // Badge Blended ROAS / Total Ad Revenue when the selected channels' windows differ.
+    const used = channelRows.map(c => c.windowUsed).filter((w): w is WindowUsed => !!w);
+    const mixed = isMixedWindows(used, attrWindow);
+    const mixedNote = mixed
+      ? `Channels use different windows: ${[...new Set(used.map(u => u.label))].join(", ")}.`
+      : undefined;
+    const mixedBadge = mixed ? { badge: "mixed windows", badgeNote: mixedNote } : {};
+
+    // Units are reported apart from the badge: one small note listing each unit's channels.
+    const channelsByUnit = new Map<string, string[]>();
+    for (const c of channelRows) {
+      if (!c.windowUsed) continue;
+      channelsByUnit.set(c.windowUsed.unit, [...(channelsByUnit.get(c.windowUsed.unit) ?? []), c.channelLabel]);
+    }
+    const unitsNote = channelsByUnit.size > 1
+      ? `Conversions are counted as ${[...channelsByUnit].map(([unit, chs]) => `${unit} (${chs.join(", ")})`).join(" · ")}.`
+      : null;
+
+    const blendedMetrics: Array<BlendedMetric & { badge?: string; badgeNote?: string }> = [
       { id: "spend",       label: "Total Ad Spend",    value: tSpend,  formatted: fmtC(tSpend),            change: hasPrior ? pct(tSpend, prior.spend) : 0, positiveIsUp: false, description: "Aggregate ad spend across all channels" },
-      { id: "revenue",     label: "Total Ad Revenue",  value: tRev,    formatted: fmtC(tRev),              change: hasPrior ? pct(tRev, prior.revenue) : 0, positiveIsUp: true,  description: "Attributed revenue across all channels" },
-      { id: "roas",        label: "Blended ROAS",      value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: hasPrior ? pct(blRoas, pRoas) : 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend" },
+      { id: "revenue",     label: "Total Ad Revenue",  value: tRev,    formatted: fmtC(tRev),              change: hasPrior ? pct(tRev, prior.revenue) : 0, positiveIsUp: true,  description: "Attributed revenue across all channels", ...mixedBadge },
+      { id: "roas",        label: "Blended ROAS",      value: blRoas,  formatted: `${blRoas.toFixed(2)}x`, change: hasPrior ? pct(blRoas, pRoas) : 0, positiveIsUp: true,  description: "Total attributed revenue ÷ total spend", ...mixedBadge },
       { id: "mer",         label: "MER",               value: blMer,   formatted: `${blMer.toFixed(2)}x`,  change: hasPrior ? pct(blMer, pMer) : 0, positiveIsUp: true,  description: "Total Company Revenue ÷ Total Ad Spend" },
       { id: "ctr",         label: "Blended CTR",       value: blCtr,   formatted: `${blCtr.toFixed(2)}%`,  change: hasPrior ? pct(blCtr, pCtr) : 0, positiveIsUp: true,  description: "Clicks ÷ Impressions" },
       { id: "impressions", label: "Impressions",       value: tImpr,   formatted: tImpr >= 1e6 ? `${(tImpr/1e6).toFixed(1)}M` : tImpr >= 1e3 ? `${(tImpr/1e3).toFixed(1)}K` : tImpr.toLocaleString(), change: hasPrior ? pct(tImpr, prior.impressions) : 0, positiveIsUp: true, description: "Total impressions" },
@@ -1623,7 +1719,7 @@ export default function Attribution() {
     const funnels: ChannelFunnel[] = channelRows.map(ch => {
       const impr   = ch.impressions;
       const clicks = ch.ctr / 100 * ch.impressions;
-      const convs  = ch.conversions;
+      const convs  = ch.conversions ?? 0;
       const maxVal = impr;
       const stages = [
         { name: "Impressions", value: impr,   formatted: impr   >= 1e6 ? `${(impr/1e6).toFixed(1)}M`     : `${Math.round(impr/1e3)}K`,                         rate: null,                             dropOff: 0,                                           relativeWidth: 100,                          isLargestDropOff: false },
@@ -1657,8 +1753,8 @@ export default function Attribution() {
       };
     });
 
-    return { blendedMetrics, channelRows, signals, funnels, advanced };
-  }, [attrApiData, filterChannelIds, totalCompanyRevenue, priorTotalCompanyRevenue]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { blendedMetrics, unitsNote, channelRows, signals, funnels, advanced };
+  }, [attrApiData, filterChannelIds, totalCompanyRevenue, priorTotalCompanyRevenue, attrWindow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [funnelChannelId, setFunnelChannelId] = useState<string>("");
   const effectiveFunnelId = funnelChannelId || channelRows[0]?.channelId || "";
@@ -1723,13 +1819,19 @@ export default function Attribution() {
             <>
               {/* Blended KPI cards */}
               <section>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mb-3">
                   <h2 className="text-sm font-bold text-[#3A3A3A] dark:text-[#003349]">Blended Ad Metrics</h2>
                   <span className="text-[10px] text-[#3A3A3A]/40 dark:text-[#003349]/30">vs prior period</span>
+                  <div className="sm:ml-auto">
+                    <AttributionWindowPill value={attrWindow} onChange={setAttrWindow} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {blendedMetrics.map(m => <BlendedMetricCard key={m.id} m={m} />)}
                 </div>
+                {unitsNote && (
+                  <p className="mt-2 text-[10px] text-[#3A3A3A]/45 dark:text-[#003349]/35">{unitsNote}</p>
+                )}
               </section>
 
               {/* Expandable channel table */}
