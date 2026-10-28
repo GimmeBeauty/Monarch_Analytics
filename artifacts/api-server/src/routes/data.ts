@@ -6,6 +6,10 @@ import { querySnowflake } from "../lib/snowflake.js";
 import { buildSeasonalTrendModel, isoWeek, isoWeekStart, type ForecastObservation } from "../lib/forecast-model.js";
 import { GIMME_ASSORTMENT_SKU_SQL_FILTER } from "../lib/sku-filter.js";
 import { getTikTokShopChannelData } from "../lib/tiktokShopSync.js";
+import {
+  parseWindowParam, loadAttributionDefaults, loadWindowData, sumWindow, describeWindow, isMixed,
+  type AttributionDefault, type WindowUsed,
+} from "../lib/attribution-windows.js";
 
 const router = Router();
 
@@ -1159,6 +1163,9 @@ router.get("/attribution", authenticate, async (req, res) => {
   let start: string, end: string;
   try { start = requireDate(_startRaw, "start"); end = requireDate(_endRaw, "end"); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); return; }
+  // window=default|7|14|30 — missing means default, which is exactly the DAILY_AD_SUMMARY figures.
+  const requestedWindow = parseWindowParam((req.query as Record<string, unknown>).window);
+  if (!requestedWindow) { res.status(400).json({ error: "window must be one of: default, 7, 14, 30" }); return; }
   const priorStart = DATE_RE.test(priorStartRaw ?? "") ? priorStartRaw! : "";
   const priorEnd   = DATE_RE.test(priorEndRaw   ?? "") ? priorEndRaw!   : "";
   const hasPrior   = !!(priorStart && priorEnd);
@@ -1289,7 +1296,66 @@ router.get("/attribution", authenticate, async (req, res) => {
       }
     }
 
-    res.json({ channels, isEmpty: channels.length === 0, priorChannels, hasPrior });
+    // ── Attribution window ──────────────────────────────────────────────────
+    // Default mode leaves every number above untouched and only labels each channel's window.
+    // For 7/14/30, mapped channels swap conversions/revenue (current and prior) for their window
+    // figures; spend, impressions and clicks always stay DAILY_AD_SUMMARY's.
+    let defaults: Record<string, AttributionDefault> | null = null;
+    try {
+      defaults = await loadAttributionDefaults(DB_NAME);
+    } catch (e) {
+      if (requestedWindow !== "default") throw e;
+      req.log.warn({ err: e }, "[data/attribution] attribution defaults unavailable; omitting window labels");
+    }
+
+    type OutChannel = Omit<typeof channels[number], "conversions" | "dailySeries"> & {
+      conversions: number | null;
+      dailySeries: Array<{ date: string; spend: number; impressions: number; clicks: number; conversions: number | null; revenue: number }>;
+      windowUsed?: WindowUsed;
+    };
+    let outChannels: OutChannel[] = channels;
+    let mixedWindows = false;
+
+    if (defaults) {
+      const summaryChannelOf = (channelId: string) =>
+        channelId === TIKTOK_SHOP_META.channelId ? "tiktok_shop"
+          : Object.keys(CHANNEL_META).find(k => CHANNEL_META[k].channelId === channelId) ?? "";
+
+      if (requestedWindow === "default") {
+        outChannels = channels.map(c => ({ ...c, windowUsed: describeWindow(defaults![summaryChannelOf(c.channelId)], "default") }));
+      } else {
+        const [curWin, priorWin] = await Promise.all([
+          loadWindowData(DB_NAME, start, end, requestedWindow, defaults, toDateStr),
+          hasPrior ? loadWindowData(DB_NAME, priorStart, priorEnd, requestedWindow, defaults, toDateStr) : Promise.resolve({}),
+        ]);
+        outChannels = channels.map(c => {
+          const ch  = summaryChannelOf(c.channelId);
+          const def = defaults![ch];
+          const wd  = def?.windowKeys[requestedWindow] ? curWin[ch] : undefined;
+          if (!wd) return { ...c, windowUsed: describeWindow(def, requestedWindow) };
+          const t = sumWindow(wd.daily);
+          const byDate = new Map(wd.daily.map(d => [d.date, d]));
+          return {
+            ...c,
+            conversions: t.conversions,
+            revenue:     t.revenue,
+            dailySeries: c.dailySeries.map(d => {
+              const w = byDate.get(d.date);
+              return { ...d, conversions: w?.conversions ?? null, revenue: w?.revenue ?? 0 };
+            }),
+            windowUsed: describeWindow(def, requestedWindow, { ...wd, nullConversionDays: t.nullConversionDays, nullRevenueDays: t.nullRevenueDays }),
+          };
+        });
+        priorChannels = priorChannels.map(p => {
+          const ch = summaryChannelOf(p.channelId);
+          const wd = defaults![ch]?.windowKeys[requestedWindow] ? (priorWin as Record<string, { daily: Array<{ date: string; conversions: number | null; revenue: number | null }> }>)[ch] : undefined;
+          return wd ? { ...p, revenue: sumWindow(wd.daily).revenue } : p;
+        });
+      }
+      mixedWindows = isMixed(outChannels.map(c => c.windowUsed!).filter(Boolean), requestedWindow);
+    }
+
+    res.json({ channels: outChannels, isEmpty: channels.length === 0, priorChannels, hasPrior, requestedWindow, mixedWindows });
   } catch (e) {
     req.log.error({ err: e }, "[data/attribution] Error:");
     res.status(500).json({ error: "Failed to query attribution data" });
